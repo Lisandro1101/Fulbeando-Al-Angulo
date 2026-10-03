@@ -82,15 +82,40 @@ export const Screen3PlayerOnboarding = () => {
   const navigate = useNavigate();
   const [pos, setPos] = useState('DEL');
 
-  // Si usamos Google, podríamos inyectar estos datos iniciales usando "useSesion()" o props
-  // Aquí usamos un mock con datos iniciales para el ejemplo:
   const [formData, setFormData] = useState({
-    nombre: 'Lionel Andrés', // Auto-completado de Google (Ejemplo)
-    apellido: 'Messi',      // Auto-completado de Google (Ejemplo)
+    nombre: 'Lionel Andrés', 
+    apellido: 'Messi',      
     telefono: '',
     fechaNacimiento: '',
     apodo: 'Lio'
   });
+
+  // --- ZONAS Y LOCALIDADES PARA ESCALAR ---
+  const ZONAS_OPERATIVAS: Record<string, string[]> = {
+    "GBA Zona Sur": [
+      'Alejandro Korn', 'Adrogué', 'Avellaneda', 'Banfield', 'Burzaco', 
+      'Canning', 'Ezeiza', 'Glew', 'Guernica', 'Lanús', 'Llavallol', 
+      'Lomas de Zamora', 'Longchamps', 'Luis Guillón', 'Monte Grande', 
+      'San Vicente', 'Temperley'
+    ],
+    "CABA (Próximamente)": [
+      'Caballito', 'Palermo', 'Villa Crespo'
+    ],
+    "GBA Oeste (Próximamente)": [
+      'Ramos Mejía', 'Morón', 'Castelar'
+    ]
+  };
+
+  const [zonaSeleccionada, setZonaSeleccionada] = useState("GBA Zona Sur");
+  const [localidadQuery, setLocalidadQuery] = useState('');
+  const [localidadElegida, setLocalidadElegida] = useState('Guernica');
+  const [mostrarBuscador, setMostrarBuscador] = useState(false);
+
+  // Filtrado reactivo de localidades según zona y texto ingresado
+  const localidadesDisponibles = ZONAS_OPERATIVAS[zonaSeleccionada] || [];
+  const localidadesFiltradas = localidadesDisponibles.filter(loc => 
+    loc.toLowerCase().includes(localidadQuery.toLowerCase())
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -130,35 +155,68 @@ export const Screen3PlayerOnboarding = () => {
           <input name="apodo" value={formData.apodo} onChange={handleChange} type="text" placeholder="Ej: El Rústico" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-lg text-amber-500" />
         </div>
         
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Localidad Base (Zona Sur)</label>
-          <select 
-            className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-lg text-white appearance-none"
-            defaultValue="Guernica"
-          >
-            {/* Lista exhaustiva de Zona Sur, con foco en el corredor de la Ruta 210 / Ferrocarril Roca */}
-            {[
-              'Guernica',
-              'Glew',
-              'San Vicente',
-              'Alejandro Korn',
-              'Longchamps',
-              'Burzaco',
-              'Adrogué',
-              'Lomas de Zamora',
-              'Banfield',
-              'Lanús',
-              'Avellaneda',
-              'Temperley',
-              'Ezeiza',
-              'Canning',
-              'Monte Grande',
-              'Luis Guillón',
-              'Llavallol'
-            ].sort().map(loc => (
-              <option key={loc} value={loc} className="bg-zinc-900 text-base py-2">{loc}</option>
-            ))}
-          </select>
+        {/* SELECTOR ZONA + BUSCADOR DE LOCALIDADES */}
+        <div className="grid grid-cols-2 gap-4 relative z-10">
+          <div>
+            <label className="text-xs font-bold text-zinc-500 uppercase">Región</label>
+            <select 
+              value={zonaSeleccionada}
+              onChange={(e) => { 
+                setZonaSeleccionada(e.target.value); 
+                setLocalidadElegida(''); // Resetear localidad al cambiar de zona
+              }}
+              className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-sm text-white appearance-none"
+            >
+              {Object.keys(ZONAS_OPERATIVAS).map(zona => (
+                <option key={zona} value={zona} className="bg-zinc-900">{zona}</option>
+              ))}
+            </select>
+          </div>
+          <div className="relative">
+            <label className="text-xs font-bold text-zinc-500 uppercase">Barrio / Localidad</label>
+            <div 
+              className="w-full border-b border-zinc-700 py-2 font-bold text-sm text-white cursor-pointer flex justify-between items-center"
+              onClick={() => { setMostrarBuscador(true); setLocalidadQuery(''); }}
+            >
+              <span>{localidadElegida || 'Buscar...'}</span>
+              <Search className="w-4 h-4 text-zinc-500" />
+            </div>
+
+            {/* Modal/Dropdown Buscador */}
+            {mostrarBuscador && (
+              <div className="absolute top-14 left-0 w-[200%] sm:w-[150%] -translate-x-1/2 sm:translate-x-0 bg-zinc-900 border border-zinc-800 shadow-2xl rounded-xl p-3 z-50">
+                <input 
+                  autoFocus
+                  type="text" 
+                  placeholder="Escribí tu barrio..." 
+                  value={localidadQuery}
+                  onChange={(e) => setLocalidadQuery(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500 mb-2"
+                />
+                <div className="max-h-48 overflow-y-auto no-scrollbar">
+                  {localidadesFiltradas.length > 0 ? (
+                    localidadesFiltradas.map(loc => (
+                      <div 
+                        key={loc} 
+                        onClick={() => { setLocalidadElegida(loc); setMostrarBuscador(false); }}
+                        className="py-2 px-2 text-sm text-zinc-300 hover:bg-zinc-800 rounded-lg cursor-pointer"
+                      >
+                        {loc}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-zinc-500 p-2 text-center">No se encontraron localidades</div>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setMostrarBuscador(false)} 
+                  className="w-full mt-2 py-1 text-xs text-zinc-500 font-bold hover:text-white"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div>
@@ -222,42 +280,83 @@ export const Screen4WelcomeCard = () => {
   );
 };
 
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+
+// Icono personalizado para jugador libre
+const iconoJugadorLibre = L.divIcon({
+  className: 'marcador-jugador-libre',
+  html: `<div style="width: 22px; height: 22px; border-radius: 50%; background: #3B82F6; border: 3px solid #18181b; box-shadow: 0 0 12px #3B82F6; display: flex; align-items: center; justify-content: center; font-size: 10px;">🏃</div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11]
+});
+
+// Icono para cancha/predio
+const iconoCancha = L.divIcon({
+  className: 'marcador-cancha',
+  html: `<div style="width: 26px; height: 26px; border-radius: 50%; background: #10B981; border: 3px solid #18181b; box-shadow: 0 0 15px #10B981; display: flex; align-items: center; justify-content: center; font-size: 12px;">🏟️</div>`,
+  iconSize: [26, 26],
+  iconAnchor: [13, 13]
+});
+
 // ==========================================
 // PANTALLA 5: El Radar Interactivo
 // ==========================================
 export const Screen5Radar = () => {
   const navigate = useNavigate();
-  const [selectedPin, setSelectedPin] = useState<'player' | 'venue' | null>('player');
+  const [selectedPin, setSelectedPin] = useState<'player' | 'venue' | null>(null);
+
+  // Coordenadas base (Lomas de Zamora / Guernica)
+  const mapCenter = { lat: -34.9221, lng: -58.3842 }; 
+  const playerMockLocation = { lat: -34.9201, lng: -58.3800 };
+  const venueMockLocation = { lat: -34.9251, lng: -58.3900 };
 
   return (
     <div className="h-screen bg-zinc-900 relative font-sans overflow-hidden">
-      {/* MAPA MOCK */}
-      <div className="absolute inset-0 bg-zinc-950 flex items-center justify-center opacity-80" style={{ backgroundImage: 'radial-gradient(circle, #27272a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-        {/* Pin Agente Libre */}
-        <div onClick={() => setSelectedPin('player')} className="absolute top-1/3 left-1/3 text-blue-500 cursor-pointer hover:scale-125 transition">
-          <MapPinned className="w-8 h-8 fill-blue-500/20" />
-        </div>
-        {/* Pin Cancha */}
-        <div onClick={() => setSelectedPin('venue')} className="absolute bottom-1/3 right-1/4 text-emerald-500 cursor-pointer hover:scale-125 transition">
-          <Building className="w-10 h-10 fill-emerald-500/20" />
-        </div>
+      
+      {/* MAPA REAL: Usando Leaflet como en Fulbeando */}
+      <div className="absolute inset-0 z-0">
+        <MapContainer
+          center={[mapCenter.lat, mapCenter.lng]}
+          zoom={14}
+          className="h-full w-full"
+          zoomControl={false}
+        >
+          <TileLayer 
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          />
+
+          <Marker 
+            position={[playerMockLocation.lat, playerMockLocation.lng]} 
+            icon={iconoJugadorLibre}
+            eventHandlers={{ click: () => setSelectedPin('player') }}
+          />
+
+          <Marker 
+            position={[venueMockLocation.lat, venueMockLocation.lng]} 
+            icon={iconoCancha}
+            eventHandlers={{ click: () => setSelectedPin('venue') }}
+          />
+        </MapContainer>
       </div>
 
       {/* FILTROS TOP */}
-      <div className="absolute top-safe pt-4 px-4 w-full flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="absolute top-safe pt-4 px-4 w-full flex gap-2 overflow-x-auto no-scrollbar z-10">
         <button className="px-4 py-2 rounded-full bg-amber-500 text-amber-950 font-bold text-xs whitespace-nowrap shadow-lg">🔥 Desafíos</button>
         <button className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-xs whitespace-nowrap shadow-lg">👤 Jugadores Libres</button>
         <button className="px-4 py-2 rounded-full bg-emerald-500 text-emerald-950 font-bold text-xs whitespace-nowrap shadow-lg">🏟️ Canchas</button>
       </div>
 
       {/* FAB - Lanzar Desafío */}
-      <button onClick={() => navigate('/radar/challenge')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)]">
+      <button onClick={() => navigate('/radar/challenge')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10">
         <Search className="w-6 h-6" />
       </button>
 
       {/* BOTTOM SHEET (Si toca un pin) */}
       {selectedPin === 'player' && (
-        <div className="absolute bottom-0 w-full bg-zinc-900 rounded-t-3xl border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-2xl">
+        <div className="absolute bottom-0 w-full bg-zinc-900 rounded-t-3xl border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
+          <button onClick={() => setSelectedPin(null)} className="absolute top-4 right-4 text-zinc-500">✕</button>
           <div className="flex items-center gap-4 mb-6">
             <div className="w-14 h-14 bg-zinc-800 rounded-full border-2 border-blue-500 flex items-center justify-center text-xl">🏃</div>
             <div>
@@ -269,9 +368,23 @@ export const Screen5Radar = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <button className="bg-zinc-800 text-white py-3 rounded-xl font-semibold border border-zinc-700">Invitar a Hoy</button>
-            <button className="bg-blue-600 text-white py-3 rounded-xl font-bold">Fichar Jugador</button>
+            <button className="bg-zinc-800 text-white py-3 rounded-xl font-semibold border border-zinc-700 active:bg-zinc-700">Invitar a Hoy</button>
+            <button className="bg-blue-600 text-white py-3 rounded-xl font-bold shadow-[0_0_15px_rgba(37,99,235,0.4)] active:scale-95 transition">Fichar Jugador</button>
           </div>
+        </div>
+      )}
+
+      {selectedPin === 'venue' && (
+        <div className="absolute bottom-0 w-full bg-zinc-900 rounded-t-3xl border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
+          <button onClick={() => setSelectedPin(null)} className="absolute top-4 right-4 text-zinc-500">✕</button>
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 bg-zinc-800 rounded-full border-2 border-emerald-500 flex items-center justify-center text-xl">🏟️</div>
+            <div>
+              <h3 className="text-white font-black text-lg">El Templo F5</h3>
+              <p className="text-xs text-zinc-400 mt-1">Guernica Centro • Sintético</p>
+            </div>
+          </div>
+          <button className="w-full bg-emerald-500 text-zinc-950 py-3 rounded-xl font-bold shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 transition">Ver Canchas y Turnos</button>
         </div>
       )}
     </div>
