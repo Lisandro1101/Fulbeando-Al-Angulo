@@ -87,8 +87,11 @@ async function seedData() {
       }
 
       // Crear documento en Firestore (Perfil de Jugador)
-      await db.collection('users').doc(u.uid).set({
-        id: u.uid,
+      await db.collection('usuarios').doc(u.uid).set({
+        uid: u.uid,
+        rol: 'jugador',
+        estado: 'activo',
+        deletedAt: null,
         displayName: u.displayName,
         email: u.email,
         photoURL: u.photoURL || null,
@@ -125,13 +128,17 @@ async function seedData() {
     console.log(`   ✔️  Equipo creado: ${teamData.name} con ${teamData.members.length} jugadores`);
 
     // ==========================================
-    // 3. CANCHAS / COMPLEJOS (Venues)
+    // 3. CANCHAS / COMPLEJOS (Predios)
     // ==========================================
     console.log('\n🏟️  Creando Complejos y Canchas...');
     const venueId = 'venue-lanus-01';
     const venueData = {
       id: venueId,
       name: 'El Templo del Fútbol (Lanús)',
+      duenoUid: 'user-dibu-1', // Set owner to a user so rules pass
+      verificado: true,
+      estado: 'activo',
+      deletedAt: null,
       location: {
         address: 'Av. Hipólito Yrigoyen 4500, Lanús',
         lat: -34.7042,
@@ -149,7 +156,7 @@ async function seedData() {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
-    await db.collection('venues').doc(venueId).set(venueData);
+    await db.collection('predios').doc(venueId).set(venueData);
     console.log(`   ✔️  Complejo creado: ${venueData.name} (${venueData.fields.length} canchas)`);
 
     // ==========================================

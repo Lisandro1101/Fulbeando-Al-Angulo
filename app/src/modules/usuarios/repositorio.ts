@@ -60,7 +60,7 @@ export const obtenerUsuario = async (uid: string): Promise<Usuario | null> => {
 export const asegurarUsuario = async (
   uid: string,
   perfil: { nombre: string; apellido: string; email: string },
-  rolPorDefecto: Rol = 'invitado',
+  rolPorDefecto: Rol = 'jugador',
 ): Promise<void> => {
   const snap = await getDoc(ref(uid))
   if (snap.exists()) return

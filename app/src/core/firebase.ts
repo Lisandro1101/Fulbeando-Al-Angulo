@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
 
 // Configuración de Firebase (asegurate de tener tus variables de entorno configuradas)
 const firebaseConfig = {
@@ -17,9 +18,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Inicializar servicios
-const auth = getAuth(app);
-const db = getFirestore(app);
-const rtdb = getDatabase(app);
+export const auth = () => getAuth(app);
+export const db = () => getFirestore(app);
+export const rtdb = () => getDatabase(app);
+export const storage = () => getStorage(app);
 
 // Conectar a la suite de emuladores locales en entorno de desarrollo
 if (import.meta.env.DEV) {
@@ -28,13 +30,16 @@ if (import.meta.env.DEV) {
   console.info("🔌 Conectando a Firebase Local Emulator Suite...");
   
   // Conectar Auth (puerto 9099, deshabilitando warnings duplicados)
-  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectAuthEmulator(auth(), `http://${emulatorHost}:9099`, { disableWarnings: true });
   
   // Conectar Firestore (puerto 8080)
-  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectFirestoreEmulator(db(), emulatorHost, 8080);
   
   // Conectar Realtime Database para el chat (puerto 9000)
-  connectDatabaseEmulator(rtdb, emulatorHost, 9000);
+  connectDatabaseEmulator(rtdb(), emulatorHost, 9000);
+
+  // Conectar Storage (puerto 9199 por defecto en emuladores)
+  connectStorageEmulator(storage(), emulatorHost, 9199);
 }
 
-export { app, auth, db, rtdb };
+export { app };

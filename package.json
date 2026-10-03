@@ -1,0 +1,15 @@
+{
+  "name": "fulbeando-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:all": "concurrently -c \"cyan,magenta,yellow,green\" -n \"FUNCTIONS,EMULATORS,SEED,VITE\" \"npm run dev:functions\" \"npm run dev:emulators\" \"npm run seed:wait\" \"npm run dev:app\"",
+    "dev:functions": "npm run build:watch --prefix \"AL ANGULO/firebase/functions\"",
+    "dev:emulators": "firebase emulators:start",
+    "seed:wait": "wait-on tcp:127.0.0.1:8080 && tsx scripts/seed-emuladores.ts",
+    "dev:app": "npm run dev --prefix app"
+  },
+  "devDependencies": {
+    "firebase-admin": "^11.8.0"
+  }
+}
