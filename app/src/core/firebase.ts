@@ -1,48 +1,40 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore'
-import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage'
-import { appEnv, faltaConfigFirebase } from './config'
+import { initializeApp } from "firebase/app";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getDatabase, connectDatabaseEmulator } from "firebase/database";
 
-let cache: {
-  app: FirebaseApp
-  auth: Auth
-  db: Firestore
-  storage: FirebaseStorage
-} | null = null
+// Configuración de Firebase (asegurate de tener tus variables de entorno configuradas)
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "demo-api-key",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "demo-project.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "demo-project",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "demo-project.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "000000000000",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:000000000000:web:0000000000000000000000",
+};
 
-/**
- * Unica instancia de los servicios de Firebase. Si faltan variables de entorno
- * tira un error explicito en vez de fallar en silencio al primer query.
- */
-export function firebase() {
-  if (cache) return cache
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
 
-  const env = appEnv()
-  const faltantes = faltaConfigFirebase()
-  if (faltantes.length > 0) {
-    throw new Error(
-      `Falta configuracion de Firebase en .env: ${faltantes.join(', ')}. ` +
-        'Copiá .env.example a .env.local y completalo.',
-    )
-  }
+// Inicializar servicios
+const auth = getAuth(app);
+const db = getFirestore(app);
+const rtdb = getDatabase(app);
 
-  const app = initializeApp(env.firebase)
-  const auth = getAuth(app)
-  const db = getFirestore(app)
-  const storage = getStorage(app)
-
-  if (env.useEmulators) {
-    const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : '127.0.0.1'
-    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true })
-    connectFirestoreEmulator(db, host, 8080)
-    connectStorageEmulator(storage, host, 9199)
-  }
-
-  cache = { app, auth, db, storage }
-  return cache
+// Conectar a la suite de emuladores locales en entorno de desarrollo
+if (import.meta.env.DEV) {
+  const emulatorHost = "localhost";
+  
+  console.info("🔌 Conectando a Firebase Local Emulator Suite...");
+  
+  // Conectar Auth (puerto 9099, deshabilitando warnings duplicados)
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  
+  // Conectar Firestore (puerto 8080)
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  
+  // Conectar Realtime Database para el chat (puerto 9000)
+  connectDatabaseEmulator(rtdb, emulatorHost, 9000);
 }
 
-export const db = (): Firestore => firebase().db
-export const auth = (): Auth => firebase().auth
-export const storage = (): FirebaseStorage => firebase().storage
+export { app, auth, db, rtdb };
