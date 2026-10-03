@@ -65,7 +65,56 @@ async function seedData() {
       },
       { uid: 'user-dibu-1', email: 'dibu@alangulo.com', password: 'password123', displayName: 'Dibu Martinez', stats: { goles: 0, partidos: 75, fairPlayScore: 7.0 } },
       { uid: 'user-fideo-11', email: 'fideo@alangulo.com', password: 'password123', displayName: 'Angel Di Maria', stats: { goles: 85, partidos: 90, fairPlayScore: 9.0 } },
-      { uid: 'user-cuti-13', email: 'cuti@alangulo.com', password: 'password123', displayName: 'Cuti Romero', stats: { goles: 5, partidos: 60, fairPlayScore: 5.5 } }
+      { uid: 'user-cuti-13', email: 'cuti@alangulo.com', password: 'password123', displayName: 'Cuti Romero', stats: { goles: 5, partidos: 60, fairPlayScore: 5.5 } },
+      
+      // ==========================================
+      // AGENTES LIBRES (Para probar el Radar)
+      // ==========================================
+      {
+        uid: 'user-libre-1',
+        email: 'rustico@fulbeando.com',
+        password: 'password123',
+        displayName: 'Matias "El Rústico"',
+        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Rustico',
+        position: 'DFC',
+        isAvailable: true,
+        stats: { partidosJugados: 120, goles: 5, fairPlayScore: 3.5 },
+        geo: {
+          prefijos: ['69y7', '69y7q', '69y7qk'],
+          lat: -34.7612, // Lomas de Zamora
+          lng: -58.4001,
+        }
+      },
+      {
+        uid: 'user-libre-2',
+        email: 'distinto@fulbeando.com',
+        password: 'password123',
+        displayName: 'Nico "El Distinto"',
+        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Nico',
+        position: 'MCO',
+        isAvailable: true,
+        stats: { partidosJugados: 45, goles: 22, fairPlayScore: 4.9 },
+        geo: {
+          prefijos: ['69y7', '69y7w', '69y7wm'],
+          lat: -34.7042, // Lanús
+          lng: -58.3965,
+        }
+      },
+      {
+        uid: 'user-libre-3',
+        email: 'muralla@fulbeando.com',
+        password: 'password123',
+        displayName: 'Juampi "Muralla"',
+        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Juampi',
+        position: 'ARQ',
+        isAvailable: true,
+        stats: { partidosJugados: 80, goles: 1, fairPlayScore: 4.8 },
+        geo: {
+          prefijos: ['69y7', '69y7m', '69y7mw'],
+          lat: -34.7820, // Banfield
+          lng: -58.3970,
+        }
+      }
     ];
 
     for (const u of usersData) {
@@ -86,6 +135,14 @@ async function seedData() {
         }
       }
 
+      // TTL para los que están disponibles (24hs)
+      let availableUntil = null;
+      if (u.isAvailable) {
+        const expiration = new Date();
+        expiration.setHours(expiration.getHours() + 24);
+        availableUntil = admin.firestore.Timestamp.fromDate(expiration);
+      }
+
       // Crear documento en Firestore (Perfil de Jugador)
       await db.collection('usuarios').doc(u.uid).set({
         uid: u.uid,
@@ -96,10 +153,13 @@ async function seedData() {
         email: u.email,
         photoURL: u.photoURL || null,
         stats: u.stats,
-        position: 'DEL',
+        position: u.position || 'DEL',
+        isAvailable: u.isAvailable || false,
+        availableUntil: availableUntil,
+        geo: u.geo || null,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      console.log(`   ✔️  Usuario creado: ${u.displayName}`);
+      console.log(`   ✔️  Usuario creado: ${u.displayName} ${u.isAvailable ? '(🔥 AGENTE LIBRE)' : ''}`);
     }
 
     // ==========================================

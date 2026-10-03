@@ -318,12 +318,12 @@ service cloud.firestore {
       allow create: if request.auth != null 
                     && isPayloadSizeValid()
                     && request.resource.data.captainId == request.auth.uid
-                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() >= 1 // Empieza con el capitan
                     && request.resource.data.members.size() <= 22;
       allow update: if request.auth != null 
                     && resource.data.captainId == request.auth.uid
                     && request.resource.data.captainId == resource.data.captainId
-                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() >= 1
                     && request.resource.data.members.size() <= 22;
       allow delete: if false; 
     }
