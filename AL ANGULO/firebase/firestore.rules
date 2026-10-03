@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // -------------------------------------------------------------------------
+    // FUNCIONES COMUNES
+    // Fomentan la reusabilidad, seguridad estricta y bajo costo operativo
+    // -------------------------------------------------------------------------
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Valida que el payload entrante tenga un tamaño razonable para evitar ataques de inyección masiva
+    function isPayloadSizeValid() {
+      // 10KB es un tamaño muy generoso para cualquier documento de este sistema
+      return request.resource.size < 10000; 
+    }
+
+    // -------------------------------------------------------------------------
+    // USERS (Ficha de jugador)
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      // Lectura pública permitida para la Ficha/Carta, pero controlada.
+      // Los datos altamente sensibles (ej: email, teléfono, dirección) no deben estar aquí,
+      // deben estar en una subcolección o colección separada como /user_private/{userId}
+      allow read: if isAuthenticated(); 
+      
+      allow create, update: if isOwner(userId) 
+                            && isPayloadSizeValid()
+                            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['stats', 'rating']); // Protegemos las estadisticas para que no las auto-editen
+      allow delete: if false; // Solo administrable vía admin SDK / Functions
+
+      // Subcolección para datos verdaderamente privados
+      match /private_data/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // TEAMS
+    // -------------------------------------------------------------------------
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      
+      // Creación: El creador es el capitán y debe incluir entre 5 y 22 miembros en el array
+      allow create: if isAuthenticated() 
+                    && isPayloadSizeValid()
+                    && request.resource.data.captainId == request.auth.uid
+                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() <= 22;
+                    
+      // Actualización: Solo el capitán actual puede editar, y no puede transferir la capitanía directamente (evita fraudes)
+      allow update: if isAuthenticated() 
+                    && resource.data.captainId == request.auth.uid
+                    && request.resource.data.captainId == resource.data.captainId
+                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() <= 22;
+                    
+      allow delete: if false; 
+    }
+
+    // -------------------------------------------------------------------------
+    // CHALLENGES (El Radar)
+    // -------------------------------------------------------------------------
+    match /challenges/{challengeId} {
+      // Todos pueden ver los desafíos en el radar
+      allow read: if isAuthenticated();
+      
+      // Solo se puede crear un desafío a nombre propio (como capitán).
+      // En una arquitectura sin costo N+1, asumimos que se guarda `creatorId` (que debe coincidir con uid del capitan del equipo)
+      allow create: if isAuthenticated()
+                    && isPayloadSizeValid()
+                    && request.resource.data.creatorId == request.auth.uid;
+                    
+      // Solo el creador original lo modifica (ej: cancelar, cambiar hora)
+      allow update: if isAuthenticated()
+                    && resource.data.creatorId == request.auth.uid;
+                    
+      allow delete: if isAuthenticated()
+                    && resource.data.creatorId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // MATCHES (Partidos y validación antifraude)
+    // -------------------------------------------------------------------------
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      
+      // Creación: Alguien (uno de los dos capitanes) lo crea al concretar el desafío
+      allow create: if isAuthenticated()
+                    && isPayloadSizeValid()
+                    && (request.resource.data.localCaptainId == request.auth.uid || request.resource.data.visitorCaptainId == request.auth.uid);
+                    
+      // Actualización: Los resultados son cargados por un capitán.
+      // EXTREMO AHORRO/SEGURIDAD: Prohibido modificar 'playerStats' desde el cliente.
+      // El cliente solo carga el payload { localScore, visitorScore, status: 'PENDING_VALIDATION' }.
+      // Una Cloud Function o un proceso backend validará y procesará las estadísticas definitivas 
+      // cuando el rival apruebe o pasen las 24hs, actualizando las fichas de los jugadores de a 1 sola vez.
+      allow update: if isAuthenticated()
+                    && (resource.data.localCaptainId == request.auth.uid || resource.data.visitorCaptainId == request.auth.uid)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playerStats', 'matchConfirmedAt']); 
+                    
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // VENUES (Complejos y Canchas B2B)
+    // -------------------------------------------------------------------------
+    match /venues/{venueId} {
+      // Todo jugador puede leer la información pública de las canchas (para el radar)
+      allow read: if isAuthenticated();
+      
+      // Escritura bloqueada para jugadores normales.
+      // Solo se administra mediante Custom Claims de admin, o bien un dashboard externo B2B.
+      allow write: if isAuthenticated() 
+                   && (request.auth.token.admin == true || request.auth.token.venueOwnerId == venueId); 
+    }
+
+    // -------------------------------------------------------------------------
+    // REVIEWS (Sistema de Reputación Cruzada)
+    // -------------------------------------------------------------------------
+    match /reviews/{reviewId} {
+      // Lectura bajo demanda (paginada desde el cliente con limit)
+      allow read: if isAuthenticated();
+      
+      // REGLA ANTIFRAUDE ESTRICTA:
+      // 1. Quien sube la reseña debe ser él mismo.
+      // 2. IDEMPOTENCIA: El ID del documento DEBE ser la concatenación del matchId y el userId 
+      //    (garantiza matemáticamente que nadie califique dos veces el mismo partido).
+      // 3. Validación Cruzada: Leemos el doc de Matches para asegurar que el estado sea 'confirmed'.
+      allow create: if isAuthenticated()
+                    && isPayloadSizeValid()
+                    && request.resource.data.reviewerUserId == request.auth.uid
+                    && reviewId == request.resource.data.matchId + '_' + request.auth.uid
+                    && get(/databases/$(database)/documents/matches/$(request.resource.data.matchId)).data.status == 'confirmed';
+                    
+      // Las calificaciones son inmutables para los usuarios comunes (solo el B2B Admin puede borrarlas en caso de disputas)
+      allow update, delete: if false; 
+    }
+
+    // -------------------------------------------------------------------------
+    // SUPER ADMIN / DASHBOARD (Métricas y Moderación)
+    // -------------------------------------------------------------------------
+    match /system_metrics/{docId} {
+      // Bloqueo total a usuarios normales. 
+      // Solo el equipo fundador (Admin Custom Claim) puede leer estas métricas estratégicas.
+      allow read, write: if isAuthenticated() && request.auth.token.admin == true;
+    }
+  }
+}

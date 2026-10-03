@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "match_chats": {
+      "$matchId": {
+        // LECTURA: Solo pueden leer los capitanes involucrados (inscriptos en metadata)
+        ".read": "auth != null && data.child('meta/participants/' + auth.uid).val() == true",
+        
+        // ESCRITURA: Solo capitanes y únicamente si el estado de la sala sigue "OPEN"
+        ".write": "auth != null && data.child('meta/participants/' + auth.uid).val() == true && data.child('meta/status').val() == 'OPEN'",
+        
+        "meta": {
+           // Los metadatos (quién participa, estado) solo los crea/modifica el backend, no el cliente.
+           ".write": "false" 
+        },
+
+        "messages": {
+           "$messageId": {
+             // REGLAS ESTRICTAS DE VALIDACIÓN:
+             // 1. !data.exists(): Prohíbe sobreescribir/modificar mensajes pasados (Idempotencia)
+             // 2. senderId debe ser idéntico al usuario autenticado (Previene Spoofing)
+             // 3. El texto es obligatorio, string, y tiene un CAP MÁXIMO de 500 caracteres para cuidar la base.
+             ".validate": "!data.exists() && newData.hasChildren(['senderId', 'senderName', 'text', 'timestamp']) && newData.child('senderId').val() == auth.uid && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('timestamp').isNumber()"
+           }
+        }
+      }
+    }
+  }
+}

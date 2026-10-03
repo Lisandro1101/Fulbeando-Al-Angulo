@@ -1,0 +1,366 @@
+rules_version = '2';
+
+/**
+ * Fulbeando - reglas de Firestore.
+ *
+ * Decisiones que vienen del PRD y no se negocian:
+ * - El comprobante NO es legible por el publico: vive en `comprobantes/{turnoId}`
+ *   y el turno solo expone `comprobantePendiente`.
+ * - No existe borrado fisico: `delete` esta prohibido en todas las colecciones
+ *   de negocio; la baja es logica (`deletedAt` / `estado: 'inactivo'`).
+ * - Los turnos se crean solo desde la grilla que carga el dueno del predio, por
+ *   lo que un jugador jamas puede inventar una franja.
+ * - La pertenencia a un predio se resuelve leyendo `predios/{id}.duenoUid`.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function miUid() {
+      return request.auth.uid;
+    }
+
+    function existeUsuario() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function miDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function esSuperadmin() {
+      return existeUsuario() && miDoc().rol == 'superadmin';
+    }
+
+    /** Dueno del predio indicado (o superadmin). */
+    function esDuenoDe(predioId) {
+      return request.auth != null
+        && (
+          esSuperadmin()
+          || (
+            exists(/databases/$(database)/documents/predios/$(predioId))
+            && get(/databases/$(database)/documents/predios/$(predioId)).data.duenoUid == request.auth.uid
+          )
+        );
+    }
+
+    function esPredioRecursoPublico() {
+      return resource.data.verificado == true
+        && resource.data.estado == 'activo';
+    }
+
+    function esPredioDocPublico(predioId) {
+      return exists(/databases/$(database)/documents/predios/$(predioId))
+        && get(/databases/$(database)/documents/predios/$(predioId)).data.verificado == true
+        && get(/databases/$(database)/documents/predios/$(predioId)).data.estado == 'activo'
+        && get(/databases/$(database)/documents/predios/$(predioId)).data.deletedAt == null;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Usuarios                                                          //
+    // ------------------------------------------------------------------ //
+    match /usuarios/{uid} {
+      allow read: if request.auth != null;
+
+      // Creacion propia desde Auth: rol jugador, sin baja, sin vertices.
+      allow create: if miUid() == uid
+        && request.resource.data.rol == 'jugador'
+        && request.resource.data.estado == 'activo'
+        && request.resource.data.deletedAt == null;
+
+      // Rol y estado los resuelve el superadmin. El usuario no puede auto-cambiarse el rol.
+      allow update: if request.auth != null
+        && (
+          request.auth.uid != uid
+          || (
+            request.resource.data.rol == resource.data.rol
+            && request.resource.data.estado == resource.data.estado
+            && request.resource.data.deletedAt == resource.data.deletedAt
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Solicitudes de dueno (autodesdeclaracion con verificacion)         //
+    // ------------------------------------------------------------------ //
+    match /solicitudes/{uid} {
+      allow read: if request.auth != null;
+
+      allow create: if miUid() == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.revisadoPor == null
+        && request.resource.data.motivoRechazo == null;
+
+      // El usuario solo puede corregir o reenviar su solicitud: jamas decidirla.
+      allow update: if esSuperadmin()
+        || (
+          miUid() == uid
+          && request.resource.data.estado == 'pendiente'
+          && resource.data.estado != 'aprobada'
+        );
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Predios y canchas                                                  //
+    // ------------------------------------------------------------------ //
+    match /predios/{predioId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.resource.data.duenoUid == request.auth.uid
+        && request.resource.data.verificado == false
+        && request.resource.data.estado == 'activo'
+        && request.resource.data.deletedAt == null;
+
+      // El dueno edita su predio pero no puede auto-verificarse ni auto-reactivar.
+      allow update: if esSuperadmin()
+        || (existeUsuario()
+          && miDoc().rol == 'dueno_predio'
+          && resource.data.duenoUid == request.auth.uid
+          && request.resource.data.verificado == resource.data.verificado
+          && request.resource.data.duenoUid == resource.data.duenoUid);
+
+      allow delete: if false;
+
+      match /canchas/{canchaId} {
+        allow read: if true;
+
+        allow create, update: if esDuenoDe(predioId)
+          && request.resource.data.predioId == predioId;
+
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Turnos                                                            //
+    // ------------------------------------------------------------------ //
+    match /turnos/{turnoId} {
+      // Disponibilidad: lectura publica, sin datos de comprobante ni de organizador
+      // fuera de lo indispensable para el flujo.
+      allow get, list: if true;
+
+      // Alta de grilla: solo el dueno del predio, siempre en `disponible`.
+      allow create: if esDuenoDe(request.resource.data.predioId)
+        && request.resource.data.estado == 'disponible'
+        && request.resource.data.deletedAt == null;
+
+      // Regla 6.1: reclamar un turno libre pasa a `bloqueado_temporal` con el
+      // bloqueo de 15 min y el comprobante pendiente. Ojo: el permiso se evalua
+      // sobre el documento ANTERIOR, donde `organizadorUid` todavia es null,
+      // por eso se valida que el NUEVO doc se apropie del turno.
+      allow update: if esDuenoDe(resource.data.predioId)
+        || (
+          request.auth != null
+          && (
+            (
+              resource.data.estado == 'disponible'
+              && resource.data.organizadorUid == null
+              && request.resource.data.organizadorUid == request.auth.uid
+              && request.resource.data.estado == 'bloqueado_temporal'
+              && request.resource.data.bloqueadoHasta != null
+              && request.resource.data.comprobantePendiente == true
+            )
+            || (
+              resource.data.estado == 'confirmado'
+              && resource.data.organizadorUid == request.auth.uid
+              && request.resource.data.estado == 'cancelado'
+            )
+            // El organizador libera su propia solicitud antes de la validacion.
+            || (
+              resource.data.estado == 'bloqueado_temporal'
+              && resource.data.organizadorUid == request.auth.uid
+              && request.resource.data.estado == 'cancelado'
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Comprobantes: organizador del turno, dueno del predio y superadmin //
+    // ------------------------------------------------------------------ //
+    match /comprobantes/{turnoId} {
+      function turnoDelDocumento() {
+        return get(/databases/$(database)/documents/turnos/$(turnoId)).data;
+      }
+
+      allow read: if esSuperadmin()
+        || (request.auth != null && resource.data.organizerUid == request.auth.uid)
+        || esDuenoDe(turnoDelDocumento().predioId);
+
+      // Se escribe en la misma transaccion que el turno, asi que NO puede validar
+      // el turno: las rules leen el estado previo (organizadorUid == null).
+      // El resguardo real es que el turno solo queda reservado si su update pasa.
+      allow create: if request.auth != null
+        && request.resource.data.turnoId == turnoId
+        && request.resource.data.organizerUid == request.auth.uid
+        && request.resource.data.verificado == false
+        && request.resource.data.revisadoPor == null
+        && exists(/databases/$(database)/documents/turnos/$(turnoId));
+
+      allow update: if esDuenoDe(turnoDelDocumento().predioId);
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Alertas "Falta 1" y postulaciones                                 //
+    // ------------------------------------------------------------------ //
+    match /alertas/{alertaId} {
+      // En `create` el turno todavia no esta en `resource`: se resuelve con el
+      // turnoId que trae la propia peticion.
+      function turnoDeAlerta() {
+        return get(/databases/$(database)/documents/turnos/$(request.resource.data.turnoId)).data;
+      }
+
+      allow read: if request.auth != null;
+
+      // Regla 6.2: solo el organizador con turno confirmado o el dueno del predio.
+      allow create: if request.auth != null
+        && request.resource.data.creadoPorUid == request.auth.uid
+        && request.resource.data.estado == 'activa'
+        && request.resource.data.confirmados == 0
+        && (
+          turnoDeAlerta().estado == 'confirmado'
+            && (
+              turnoDeAlerta().organizadorUid == request.auth.uid
+              || esDuenoDe(request.resource.data.predioId)
+            )
+        );
+
+      // El creador confirma postulantes; los parametros del partido son inmutables.
+      // El geo se compara campo por campo: `==` no funciona con mapas en rules,
+      // y una comparacion de mapas denies la escritura siempre.
+      allow update: if esSuperadmin()
+        || (
+          request.auth != null
+          && resource.data.creadoPorUid == request.auth.uid
+          && request.resource.data.confirmados >= resource.data.confirmados
+          && request.resource.data.turnoId == resource.data.turnoId
+          && request.resource.data.fecha == resource.data.fecha
+          && request.resource.data.horaInicio == resource.data.horaInicio
+          && request.resource.data.cantidadRequeridos == resource.data.cantidadRequeridos
+          && request.resource.data.geo.prefijo == resource.data.geo.prefijo
+          && request.resource.data.geo.lat == resource.data.geo.lat
+          && request.resource.data.geo.lng == resource.data.geo.lng
+        );
+
+      allow delete: if false;
+
+      match /postulaciones/{uid} {
+        allow read: if request.auth != null;
+
+        allow create: if miUid() == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.estado == 'postulado';
+
+        // El jugador se retira o vuelve a postularse; confirmar lo hace el
+        // creador del radar. Un suplente ya confirmado no puede degradarse a
+        // "postulado" para inflar el contador.
+        allow update: if esSuperadmin()
+          || (
+            miUid() == uid
+            && resource.data.uid == uid
+            && resource.data.estado != 'confirmado'
+            && (
+              request.resource.data.estado == 'retirado'
+              || request.resource.data.estado == 'postulado'
+            )
+            && request.resource.data.uid == resource.data.uid
+            && request.resource.data.nombre == resource.data.nombre
+          )
+          || (
+            request.auth != null
+            && get(/databases/$(database)/documents/alertas/$(alertaId)).data.creadoPorUid == request.auth.uid
+            && request.resource.data.uid == resource.data.uid
+          );
+
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Reportes (moderacion del superadmin)                              //
+    // ------------------------------------------------------------------ //
+    match /reportes/{reporteId} {
+      allow create: if request.auth != null
+        && request.resource.data.reportanteUid == request.auth.uid
+        && request.resource.data.estado == 'abierto'
+        && request.resource.data.resueltoPor == null;
+
+      allow read: if esSuperadmin()
+        || (request.auth != null && resource.data.reportanteUid == request.auth.uid);
+
+      allow update: if esSuperadmin();
+
+      allow delete: if false;
+    }
+
+    // ================================================================== //
+    // INTEGRACIÓN "AL ÁNGULO" (Módulos Sociales y Gamificación)
+    // ================================================================== //
+    
+    // Función auxiliar anti-inyección de la rama social
+    function isPayloadSizeValid() {
+      return request.resource.size < 10000; 
+    }
+
+    // TEAMS (Equipos del Radar)
+    match /teams/{teamId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null 
+                    && isPayloadSizeValid()
+                    && request.resource.data.captainId == request.auth.uid
+                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() <= 22;
+      allow update: if request.auth != null 
+                    && resource.data.captainId == request.auth.uid
+                    && request.resource.data.captainId == resource.data.captainId
+                    && request.resource.data.members.size() >= 5
+                    && request.resource.data.members.size() <= 22;
+      allow delete: if false; 
+    }
+
+    // CHALLENGES (Desafíos entre equipos)
+    match /challenges/{challengeId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isPayloadSizeValid() && request.resource.data.creatorId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.creatorId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.creatorId == request.auth.uid;
+    }
+
+    // MATCHES (Partidos de Gamificación)
+    match /matches/{matchId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isPayloadSizeValid() 
+                    && (request.resource.data.localCaptainId == request.auth.uid || request.resource.data.visitorCaptainId == request.auth.uid);
+      allow update: if request.auth != null 
+                    && (resource.data.localCaptainId == request.auth.uid || resource.data.visitorCaptainId == request.auth.uid)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playerStats', 'matchConfirmedAt']); 
+      allow delete: if false;
+    }
+
+    // REVIEWS (Reputación B2B / Jugadores)
+    match /reviews/{reviewId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && isPayloadSizeValid()
+                    && request.resource.data.reviewerUserId == request.auth.uid
+                    && reviewId == request.resource.data.matchId + '_' + request.auth.uid
+                    && get(/databases/$(database)/documents/matches/$(request.resource.data.matchId)).data.status == 'confirmed';
+      allow update, delete: if false; 
+    }
+
+    // SYSTEM METRICS (Dashboard SuperAdmin)
+    match /system_metrics/{docId} {
+      allow read, write: if esSuperadmin();
+    }
+  }
+}

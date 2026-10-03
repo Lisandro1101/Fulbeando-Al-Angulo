@@ -1,0 +1,153 @@
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-canvas text-ink;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* Superficie estandar del PRD: "Slate Card" #1E293B */
+  .surface {
+    @apply rounded-card bg-canvas-raised p-4 shadow-lg shadow-black/20;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-pitch text-canvas hover:bg-pitch-muted focus-visible:outline-pitch;
+  }
+
+  .btn-urgent {
+    @apply btn bg-urgent text-canvas hover:bg-urgent-muted focus-visible:outline-urgent;
+  }
+
+  .btn-danger {
+    @apply btn bg-occupied text-ink hover:bg-occupied-muted focus-visible:outline-occupied;
+  }
+
+  .btn-ghost {
+    @apply btn border border-ink-faint/40 text-ink hover:bg-canvas-raised focus-visible:outline-ink-muted;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-ink-faint/30 bg-canvas px-3 py-3 text-base text-ink placeholder:text-ink-faint focus:border-pitch focus:outline-none;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}
+
+@layer utilities {
+  /* Estados de la grilla del dueno de predio (semaforo del PRD) */
+  .slot-libre {
+    @apply bg-pitch-faint/60 text-pitch;
+  }
+
+  .slot-pendiente {
+    @apply bg-urgent-faint/70 text-urgent;
+  }
+
+  .slot-ocupado {
+    @apply bg-occupied-faint/70 text-occupied;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Leaflet en "Noche de Sintetico": slate-800 sobre slate-900        */
+/* ---------------------------------------------------------------- */
+@layer components {
+  .leaflet-container {
+    background-color: theme('colors.canvas.DEFAULT');
+    font-family: theme('fontFamily.sans');
+  }
+
+  .leaflet-control-attribution,
+  .leaflet-control-attribution a {
+    background-color: rgb(15 23 42 / 0.85) !important;
+    color: #94a3b8 !important;
+    font-size: 10px;
+  }
+
+  .leaflet-bar a {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border-bottom-color: #334155;
+  }
+
+  .leaflet-bar a:hover {
+    background-color: #334155;
+  }
+
+  .leaflet-popup-content-wrapper,
+  .leaflet-popup-tip {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.8);
+  }
+
+  .leaflet-popup-content-wrapper {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .leaflet-popup-content {
+    margin: 0;
+    width: auto !important;
+  }
+
+  .popup-predio__titulo {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+
+  .popup-predio__linea {
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+
+  .popup-predio__cancha {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: #22c55e;
+  }
+
+  .marcador-predio__punto {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background-color: #22c55e;
+    border: 3px solid #0f172a;
+    box-shadow: 0 0 0 1px #22c55e;
+  }
+
+  .marcador-predio__punto.es-activo {
+    background-color: #f59e0b;
+    box-shadow: 0 0 0 2px #f59e0b;
+    transform: scale(1.2);
+  }
+}

@@ -1,0 +1,43 @@
+rules_version = '2';
+
+/**
+ * Fulbeando - reglas de Storage.
+ * Solo se suben imagenes de comprobante de transferencia (regla 6.5).
+ * Se leen el organizador que subio el archivo, el dueno del predio del turno
+ * y el superadmin. Cualquier otra imagen del bucket queda prohibida.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function esSuperadmin() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data.rol == 'superadmin';
+    }
+
+    function turnoDelTurnoId(turnoId) {
+      return firestore.get(/databases/(default)/documents/turnos/$(turnoId)).data;
+    }
+
+    /** El turno queda embebido en el path: comprobantes/{uid}/{turnoId}/{archivo} */
+    match /comprobantes/{uid}/{turnoId}/{archivo} {
+      allow read: if esSuperadmin()
+        || request.auth.uid == uid
+        || (request.auth != null
+          && turnoDelTurnoId(turnoId).organizadorUid == request.auth.uid
+          && firestore.get(/databases/(default)/documents/predios/$(turnoDelTurnoId(turnoId).predioId)).data.duenoUid == request.auth.uid);
+
+      // Solo imagenes, hasta 5 MB, y solo a su propio espacio de nombres.
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow delete: if false;
+    }
+
+    // Fotos de perfil, predios y canchas se resuelven en el paso siguiente.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
