@@ -4,7 +4,7 @@ import { COLECCIONES } from '@/core/config'
 import { db } from '@/core/firebase'
 import { ts } from '@/core/firestore'
 
-const col = () => collection(db(), COLECCIONES.reportes)
+const col = () => collection(db, COLECCIONES.reportes)
 
 export const reportarUsuario = async (
   reportanteUid: string,

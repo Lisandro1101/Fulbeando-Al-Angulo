@@ -5,9 +5,9 @@ import { db } from '@/core/firebase'
 import { ts } from '@/core/firestore'
 import { sincronizarResumenCanchas } from '@/modules/predios/repositorio'
 
-const sub = (predioId: string) => collection(db(), COLECCIONES.predios, predioId, COLECCIONES.canchas)
+const sub = (predioId: string) => collection(db, COLECCIONES.predios, predioId, COLECCIONES.canchas)
 const ref = (predioId: string, canchaId: string) =>
-  doc(db(), COLECCIONES.predios, predioId, COLECCIONES.canchas, canchaId)
+  doc(db, COLECCIONES.predios, predioId, COLECCIONES.canchas, canchaId)
 
 export interface AltaCancha {
   nombre: string

@@ -20,7 +20,7 @@ export const fetchFreeAgentsNearMe = async (
 
   // 2. Ejecutamos la consulta acotada a Firestore
   const q = query(
-    collection(db(), COLECCIONES.usuarios),
+    collection(db, COLECCIONES.usuarios),
     where('geo.prefijos', 'array-contains-any', prefijos),
     where('isAvailable', '==', true),
     where('estado', '==', 'activo'),

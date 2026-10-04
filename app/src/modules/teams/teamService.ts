@@ -26,8 +26,8 @@ export const createTeam = async (
   captainProfile: PlayerProfile, 
   teamData: Omit<Team, 'id' | 'members' | 'createdAt' | 'captainId'>
 ): Promise<string> => {
-  const teamRef = doc(collection(getDb(), 'teams'));
-  const userRef = doc(getDb(), 'users', captainId);
+  const teamRef = doc(collection(getdb, 'teams'));
+  const userRef = doc(getdb, 'users', captainId);
 
   // Inicializar al capitán como primer miembro incrustado
   const initialMember: TeamMemberSnapshot = {
@@ -47,7 +47,7 @@ export const createTeam = async (
     createdAt: Date.now()
   };
 
-  const batch = writeBatch(getDb());
+  const batch = writeBatch(getdb);
 
   // 1. Setear el equipo nuevo
   batch.set(teamRef, newTeam);
@@ -78,11 +78,11 @@ export const addTeamMember = async (
   dorsal: number,
   isDT: boolean = false
 ): Promise<void> => {
-  const teamRef = doc(getDb(), 'teams', teamId);
-  const userRef = doc(getDb(), 'users', newMemberProfile.id);
+  const teamRef = doc(getdb, 'teams', teamId);
+  const userRef = doc(getdb, 'users', newMemberProfile.id);
 
   try {
-    await runTransaction(getDb(), async (transaction: any) => {
+    await runTransaction(getdb, async (transaction: any) => {
       const teamSnap = await transaction.get(teamRef);
       
       if (!teamSnap.exists()) {
@@ -138,7 +138,7 @@ export const addTeamMember = async (
  * con un solo documento servido en caché.
  */
 export const getTeamProfile = async (teamId: string): Promise<Team> => {
-  const teamRef = doc(getDb(), 'teams', teamId);
+  const teamRef = doc(getdb, 'teams', teamId);
   const teamSnap = await getDoc(teamRef);
 
   if (!teamSnap.exists()) {

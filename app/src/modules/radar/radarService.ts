@@ -31,7 +31,7 @@ export const fetchNearbyChallenges = async (
   const bounds = geofire.geohashQueryBounds(center, radiusInM);
   
   const promises = [];
-  const challengesCol = collection(getDb(), 'challenges');
+  const challengesCol = collection(getdb, 'challenges');
 
   // Por diseño, geohashQueryBounds puede devolver entre 1 y ~5 rangos según la geometría
   for (const b of bounds) {

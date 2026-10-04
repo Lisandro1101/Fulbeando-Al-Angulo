@@ -16,7 +16,7 @@ export interface OnboardingData {
  * Se actualiza en el doc principal del usuario para evitar lecturas N+1 al renderizar.
  */
 export const completarOnboardingJugador = async (uid: string, data: OnboardingData) => {
-  const userRef = doc(db(), COLECCIONES.usuarios, uid);
+  const userRef = doc(db, COLECCIONES.usuarios, uid);
   
   await updateDoc(userRef, {
     displayName: data.apodo,
@@ -41,7 +41,7 @@ export const completarOnboardingJugador = async (uid: string, data: OnboardingDa
  * Establece un TTL de 24 hs usando Timestamp.
  */
 export const toggleDisponibilidadAgenteLibre = async (uid: string, isAvailable: boolean) => {
-  const userRef = doc(db(), COLECCIONES.usuarios, uid);
+  const userRef = doc(db, COLECCIONES.usuarios, uid);
   
   if (isAvailable) {
     // 24 hs a partir de ahora

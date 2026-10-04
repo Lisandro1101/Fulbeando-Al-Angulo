@@ -16,8 +16,8 @@ import { auditoriaInicial, auditoriaUpdate, ts, type Escritura } from '@/core/fi
 import { aGeoIndex } from '@/core/geo'
 import type { Punto } from '@/core/geo/geohash'
 
-const col = () => collection(db(), COLECCIONES.predios)
-export const ref = (id: string) => doc(db(), COLECCIONES.predios, id)
+const col = () => collection(db, COLECCIONES.predios)
+export const ref = (id: string) => doc(db, COLECCIONES.predios, id)
 
 export const normalizarBarrio = (texto: string): string =>
   texto
@@ -98,7 +98,7 @@ export const verificarPredio = async (id: string, verificado: boolean): Promise<
 export const darDeBajaPredio = async (id: string): Promise<void> => {
   const canchas = await getDocs(collection(ref(id), COLECCIONES.canchas))
   const baja = ts(new Date())
-  const batch = writeBatch(db())
+  const batch = writeBatch(db)
   batch.update(ref(id), { estado: 'inactivo', deletedAt: baja, ...auditoriaUpdate() })
   for (const cancha of canchas.docs) {
     batch.update(cancha.ref, { activa: false, updatedAt: baja })

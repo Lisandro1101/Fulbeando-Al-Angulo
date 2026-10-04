@@ -17,8 +17,8 @@ import { prefijosQueCubren, type Punto } from '@/core/geo/geohash'
 import { haversineKm } from '@/core/geo/geohash'
 import { aGeoIndex } from '@/core/geo'
 
-const col = () => collection(db(), COLECCIONES.usuarios)
-const ref = (uid: string) => doc(db(), COLECCIONES.usuarios, uid)
+const col = () => collection(db, COLECCIONES.usuarios)
+const ref = (uid: string) => doc(db, COLECCIONES.usuarios, uid)
 
 export interface AltaUsuario {
   uid: string
@@ -65,7 +65,7 @@ export const asegurarUsuario = async (
   const snap = await getDoc(ref(uid))
   if (snap.exists()) return
 
-  const batch = writeBatch(db())
+  const batch = writeBatch(db)
   batch.set(ref(uid), {
     ...perfil,
     rol: rolPorDefecto,

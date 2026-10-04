@@ -6,7 +6,7 @@ import { COLECCIONES } from '@/core/config'
 import { db, storage } from '@/core/firebase'
 import { ts } from '@/core/firestore'
 
-const refDoc = (turnoId: string) => doc(db(), COLECCIONES.comprobantes, turnoId)
+const refDoc = (turnoId: string) => doc(db, COLECCIONES.comprobantes, turnoId)
 
 export class ComprobanteInvalidoError extends Error {
   constructor(motivo: string) {
@@ -49,7 +49,7 @@ export const subirImagenComprobante = async (
 
   const nombre = `${Date.now()}-${params.archivo.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
   const path = storagePathComprobante(params.turnoId, params.organizadorUid, nombre)
-  const referencia = storageRef(storage(), path)
+  const referencia = storageRef(storage, path)
 
   await uploadBytes(referencia, params.archivo, {
     contentType: params.archivo.type,
@@ -74,7 +74,7 @@ export const obtenerComprobante = async (turnoId: string): Promise<Comprobante |
  * en vez de guardarla: el token de la URL caduca y no debe persistirse.
  */
 export const obtenerUrlComprobante = async (storagePath: string): Promise<string> =>
-  getDownloadURL(storageRef(storage(), storagePath))
+  getDownloadURL(storageRef(storage, storagePath))
 
 export const marcarRevisado = async (
   turnoId: string,

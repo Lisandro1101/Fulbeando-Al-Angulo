@@ -16,9 +16,9 @@ import { db } from '@/core/firebase'
 import { aMillis, auditoriaInicial, auditoriaUpdate, ts } from '@/core/firestore'
 import { TransaccionInvalidaError } from '@/modules/turnos/repositorio'
 
-const col = () => collection(db(), COLECCIONES.solicitudes)
-const ref = (uid: string) => doc(db(), COLECCIONES.solicitudes, uid)
-const refUsuario = (uid: string) => doc(db(), COLECCIONES.usuarios, uid)
+const col = () => collection(db, COLECCIONES.solicitudes)
+const ref = (uid: string) => doc(db, COLECCIONES.solicitudes, uid)
+const refUsuario = (uid: string) => doc(db, COLECCIONES.usuarios, uid)
 
 export interface AltaSolicitudDueno {
   nombre: string
@@ -81,7 +81,7 @@ export const listarSolicitudes = async (estado?: EstadoSolicitud): Promise<Solic
  * aprobada ni una solicitud aprobada sin permisos reales.
  */
 export const aprobarSolicitud = async (uid: string, revisadoPor: string): Promise<void> => {
-  await runTransaction(db(), async (tx) => {
+  await runTransaction(db, async (tx) => {
     const snapSolicitud = await tx.get(ref(uid))
     if (!snapSolicitud.exists()) throw new TransaccionInvalidaError('La solicitud no existe.')
     if ((snapSolicitud.data() as SolicitudDueno).estado !== 'pendiente') {

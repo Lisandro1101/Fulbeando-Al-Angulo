@@ -20,11 +20,11 @@ import { prefijosQueCubren, type Punto } from '@/core/geo/geohash'
 import { haversineKm } from '@/core/geo/geohash'
 import { desdeFechaHora, aFechaISO } from '@/core/tiempo'
 
-const col = () => collection(db(), COLECCIONES.alertas)
-export const ref = (id: string) => doc(db(), COLECCIONES.alertas, id)
-const refPostulaciones = (alertaId: string) => collection(db(), COLECCIONES.alertas, alertaId, COLECCIONES.postulaciones)
+const col = () => collection(db, COLECCIONES.alertas)
+export const ref = (id: string) => doc(db, COLECCIONES.alertas, id)
+const refPostulaciones = (alertaId: string) => collection(db, COLECCIONES.alertas, alertaId, COLECCIONES.postulaciones)
 const refPostulacion = (alertaId: string, uid: string) =>
-  doc(db(), COLECCIONES.alertas, alertaId, COLECCIONES.postulaciones, uid)
+  doc(db, COLECCIONES.alertas, alertaId, COLECCIONES.postulaciones, uid)
 
 export class RadarNoPermitidoError extends Error {
   constructor() {
@@ -165,7 +165,7 @@ export const listarPostulaciones = async (alertaId: string): Promise<Postulacion
 
 /** Confirmar un suplente incrementa `confirmados` y cierra el radar si se completa. */
 export const confirmarSuplente = async (alertaId: string, uid: string): Promise<void> => {
-  await runTransaction(db(), async (tx) => {
+  await runTransaction(db, async (tx) => {
     const alertaSnap = await tx.get(ref(alertaId))
     const postulacionSnap = await tx.get(refPostulacion(alertaId, uid))
     if (!alertaSnap.exists() || !postulacionSnap.exists()) {
@@ -207,7 +207,7 @@ export const expirarAlertasVencidas = async (): Promise<string[]> => {
     })
 
   if (vencidas.length === 0) return []
-  const batch = writeBatch(db())
+  const batch = writeBatch(db)
   for (const alerta of vencidas) batch.update(ref(alerta.id), { estado: 'expirada', ...auditoriaUpdate() })
   await batch.commit()
   return vencidas.map((a) => a.id)

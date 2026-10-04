@@ -18,10 +18,10 @@ export const createTeamAsCaptain = async (
   teamData: TeamCreationData
 ): Promise<string> => {
   const teamId = `team-${Date.now()}-${uid.slice(0,5)}`;
-  const teamRef = doc(db(), 'teams', teamId);
-  const userRef = doc(db(), COLECCIONES.usuarios, uid);
+  const teamRef = doc(db, 'teams', teamId);
+  const userRef = doc(db, COLECCIONES.usuarios, uid);
 
-  await runTransaction(db(), async (transaction) => {
+  await runTransaction(db, async (transaction) => {
     // 1. Verificamos que el usuario exista
     const userSnap = await transaction.get(userRef);
     if (!userSnap.exists()) {

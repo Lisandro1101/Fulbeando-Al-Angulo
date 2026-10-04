@@ -17,29 +17,34 @@ const firebaseConfig = {
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inicializar servicios
-export const auth = () => getAuth(app);
-export const db = () => getFirestore(app);
-export const rtdb = () => getDatabase(app);
-export const storage = () => getStorage(app);
+// Inicializar servicios como instancias consistentes
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const rtdb = getDatabase(app);
+export const storage = getStorage(app);
 
 // Conectar a la suite de emuladores locales en entorno de desarrollo
 if (import.meta.env.DEV) {
   const emulatorHost = "localhost";
   
-  console.info("🔌 Conectando a Firebase Local Emulator Suite...");
-  
-  // Conectar Auth (puerto 9099, deshabilitando warnings duplicados)
-  connectAuthEmulator(auth(), `http://${emulatorHost}:9099`, { disableWarnings: true });
-  
-  // Conectar Firestore (puerto 8080)
-  connectFirestoreEmulator(db(), emulatorHost, 8080);
-  
-  // Conectar Realtime Database para el chat (puerto 9000)
-  connectDatabaseEmulator(rtdb(), emulatorHost, 9000);
+  // Guard para evitar reconexiones múltiples en HMR de Vite
+  if (!(globalThis as any)._firebaseEmulatorsConnected) {
+    console.info("🔌 Conectando a Firebase Local Emulator Suite...");
+    
+    // Conectar Auth (puerto 9099, deshabilitando warnings duplicados)
+    connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+    
+    // Conectar Firestore (puerto 8080)
+    connectFirestoreEmulator(db, emulatorHost, 8080);
+    
+    // Conectar Realtime Database para el chat (puerto 9000)
+    connectDatabaseEmulator(rtdb, emulatorHost, 9000);
 
-  // Conectar Storage (puerto 9199 por defecto en emuladores)
-  connectStorageEmulator(storage(), emulatorHost, 9199);
+    // Conectar Storage (puerto 9199 por defecto en emuladores)
+    connectStorageEmulator(storage, emulatorHost, 9199);
+    
+    (globalThis as any)._firebaseEmulatorsConnected = true;
+  }
 }
 
 export { app };

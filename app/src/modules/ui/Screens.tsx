@@ -314,7 +314,7 @@ export const Screen3PlayerOnboarding = () => {
         </div>
       </div>
 
-      <button onClick={() => navigate('/welcome')} className="w-full bg-white text-zinc-950 font-black py-4 rounded-xl mt-6 active:scale-95 transition">
+      <button onClick={() => navigate('/perfil')} className="w-full bg-white text-zinc-950 font-black py-4 rounded-xl mt-6 active:scale-95 transition">
         GENERAR MI CARTA
       </button>
     </div>
@@ -351,7 +351,7 @@ export const Screen4WelcomeCard = () => {
         </div>
 
         <div className="w-full max-w-sm mt-8 space-y-3 shrink-0">
-          <button onClick={() => navigate('/my-team')} className="w-full flex items-center justify-center gap-2 bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-lg">
+          <button onClick={() => navigate('/equipo')} className="w-full flex items-center justify-center gap-2 bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-lg">
             <Users className="w-5 h-5" /> Crear mi Equipo
           </button>
           <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">

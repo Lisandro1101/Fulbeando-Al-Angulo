@@ -28,10 +28,10 @@ import { aMillis, auditoriaInicial, auditoriaUpdate, ts, type Escritura } from '
 import { aGeoIndex } from '@/core/geo'
 import type { Actor } from '@/domain/turno.reglas'
 
-const col = () => collection(db(), COLECCIONES.turnos)
-export const ref = (id: string) => doc(db(), COLECCIONES.turnos, id)
+const col = () => collection(db, COLECCIONES.turnos)
+export const ref = (id: string) => doc(db, COLECCIONES.turnos, id)
 const refComprobante = (turnoDocId: string) =>
-  doc(db(), COLECCIONES.comprobantes, turnoDocId)
+  doc(db, COLECCIONES.comprobantes, turnoDocId)
 
 export class TurnoNoDisponibleError extends Error {
   constructor(turnoDocId: string) {
@@ -173,7 +173,7 @@ export const generarGrillaDelDia = async (
     )
   }
 
-  const batch = writeBatch(db())
+  const batch = writeBatch(db)
   for (const { cancha, slot } of faltantes) {
     const id = turnoId({
       predioId: predio.id,
@@ -226,12 +226,12 @@ export const generarGrillaMasiva = async (
   const geo = aGeoIndex({ lat: predio.geo.lat, lng: predio.geo.lng })
   let totalCreados = 0
 
-  let batch = writeBatch(db())
+  let batch = writeBatch(db)
   let operacionesEnBatch = 0
   const procesarBatch = async () => {
     if (operacionesEnBatch > 0) {
       await batch.commit()
-      batch = writeBatch(db())
+      batch = writeBatch(db)
       operacionesEnBatch = 0
     }
   }
@@ -348,7 +348,7 @@ export const solicitarTurno = async (params: SolicitarTurnoParams): Promise<stri
   const id = turnoId(params)
   const limite = ts(new Date(Date.now() + MINUTOS_A_MS(MINUTOS_BLOQUEO_TEMPORAL)))
 
-  await runTransaction(db(), async (tx) => {
+  await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref(id))
     if (snap.exists()) {
       const actual = snap.data() as Turno
@@ -402,7 +402,7 @@ export const solicitarTurno = async (params: SolicitarTurnoParams): Promise<stri
 
 /** Aprobacion con un clic del dueno de predio (criterio de exito del MVP). */
 export const aprobarTurno = async (turnoDocId: string, actor: Actor): Promise<void> => {
-  await runTransaction(db(), async (tx) => {
+  await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref(turnoDocId))
     if (!snap.exists()) throw new TransaccionInvalidaError('El turno no existe.')
     const turno = snap.data() as Turno
@@ -430,7 +430,7 @@ export const rechazarTurno = async (
   actor: Actor,
   motivo: string,
 ): Promise<void> => {
-  await runTransaction(db(), async (tx) => {
+  await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref(turnoDocId))
     if (!snap.exists()) throw new TransaccionInvalidaError('El turno no existe.')
     const turno = snap.data() as Turno
@@ -510,7 +510,7 @@ export const liberarBloqueosVencidos = async (): Promise<string[]> => {
 
   if (vencidos.length === 0) return []
 
-  const batch = writeBatch(db())
+  const batch = writeBatch(db)
   for (const turno of vencidos) {
     batch.update(ref(turno.id), {
       estado: 'disponible',

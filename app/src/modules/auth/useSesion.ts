@@ -29,7 +29,7 @@ export function useSesion(): EstadoSesion {
     const alCambiar = async (user: User | null) => {
       // Intentamos capturar posibles errores de la redirección de Google
       try {
-        const redirectResult = await getRedirectResult(auth());
+        const redirectResult = await getRedirectResult(auth);
         if (redirectResult) {
           console.log("Resultado de redirección:", redirectResult.user);
         }

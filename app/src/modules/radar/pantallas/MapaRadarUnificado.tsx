@@ -241,7 +241,7 @@ export const MapaRadarUnificado: React.FC = () => {
 
       {/* FAB - Lanzar Desafío (Sólo visible si no hay nada seleccionado para no molestar) */}
       {!seleccionado && (
-        <button onClick={() => navigate('/radar/challenge')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
+        <button onClick={() => navigate('/partidos')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
           <Search className="w-6 h-6" />
         </button>
       )}
