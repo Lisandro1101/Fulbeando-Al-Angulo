@@ -2,12 +2,5 @@ WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
 WARNING: sun.misc.Unsafe::objectFieldOffset has been called by akka.util.Unsafe (file:/C:/Users/Dell%20PC/.cache/firebase/emulators/firebase-database-emulator-v4.11.2.jar)
 WARNING: Please consider reporting this to the maintainers of class akka.util.Unsafe
 WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
-16:56:23.471 [NamespaceSystem-akka.actor.default-dispatcher-6] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
-16:56:24.010 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
-16:56:39.325 [NamespaceSystem-akka.actor.default-dispatcher-6] INFO com.firebase.core.namespace.NamespaceActor - undefined-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 323ms, init: 0ms
-16:56:39.589 [NamespaceSystem-blocking-namespace-operation-dispatcher-8] INFO com.firebase.core.namespace.StateManager - Namespace undefined-default-rtdb status Active to Active
-16:57:19.603 [FirebaseWorkerPool-1-3] WARN com.firebase.core.persistence.backend.dummy.EmulatorMetadataPersistence - Multiple projectIds are not recommended in single project mode. Requested 
-namespace demo-no-project, but the emulator is configured for undefined-default-rtdb. To 
-opt-out of single project mode add/set the singleProjectMode: false property in 
-the firebase.json emulators config. 
-16:57:19.653 [NamespaceSystem-akka.actor.default-dispatcher-11] INFO com.firebase.core.namespace.NamespaceActor - demo-no-project successfully activated FBKV (SurveyIdle(0)) wait: 40ms, init: 0ms
+19:06:21.176 [NamespaceSystem-akka.actor.default-dispatcher-4] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+19:06:21.760 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000

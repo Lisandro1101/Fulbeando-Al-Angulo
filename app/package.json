@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "firebase": "^11.0.2",
+    "geofire-common": "^6.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",

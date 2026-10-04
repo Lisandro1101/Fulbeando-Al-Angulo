@@ -1,7 +1,36 @@
 {
   "firestore": {
     "rules": "app/firestore.rules",
-    "indexes": "AL ANGULO/firebase/firestore.indexes.json"
+    "indexes": "app/firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "app/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "unsafe-none"
+          },
+          {
+            "key": "Cross-Origin-Embedder-Policy",
+            "value": "unsafe-none"
+          }
+        ]
+      }
+    ]
   },
   "database": {
     "rules": "AL ANGULO/firebase/database.rules.json"

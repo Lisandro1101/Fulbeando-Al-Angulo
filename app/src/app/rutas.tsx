@@ -7,13 +7,15 @@ import {
   Screen2RoleSelector,
   Screen3PlayerOnboarding,
   Screen4WelcomeCard,
-  Screen5Radar,
   Screen6LaunchChallenge,
   Screen7MyTeam,
   Screen8VenueRegistration,
   Screen9VenueSubscription,
   Screen10VenueDashboard
 } from '@/modules/ui/Screens';
+
+// Nuevo Radar Unificado
+import { MapaRadarUnificado } from '@/modules/radar/pantallas/MapaRadarUnificado';
 
 /** 
  * Guarda de Autenticación 
@@ -43,7 +45,7 @@ export const rutas: RouteObject[] = [
   // Flujo 2: Jugador / Capitán
   { path: '/onboarding-player', element: <ProtectedRoute allowedRoles={['jugador']}><Screen3PlayerOnboarding /></ProtectedRoute> },
   { path: '/welcome', element: <ProtectedRoute allowedRoles={['jugador']}><Screen4WelcomeCard /></ProtectedRoute> },
-  { path: '/radar', element: <ProtectedRoute allowedRoles={['jugador']}><Screen5Radar /></ProtectedRoute> },
+  { path: '/radar', element: <ProtectedRoute allowedRoles={['jugador']}><MapaRadarUnificado /></ProtectedRoute> },
   { path: '/radar/challenge', element: <ProtectedRoute allowedRoles={['jugador']}><Screen6LaunchChallenge /></ProtectedRoute> },
   { path: '/my-team', element: <ProtectedRoute allowedRoles={['jugador']}><Screen7MyTeam /></ProtectedRoute> },
 

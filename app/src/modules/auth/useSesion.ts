@@ -3,6 +3,8 @@ import type { User } from 'firebase/auth'
 import type { Actor, Usuario } from '@/domain'
 import { asegurarUsuario, obtenerUsuario } from '@/modules/usuarios/repositorio'
 import { idsDePredios } from '@/modules/predios/repositorio'
+import { getRedirectResult } from 'firebase/auth'
+import { auth } from '@/core/firebase'
 import { observarSesion } from './servicio'
 
 export interface EstadoSesion {
@@ -25,6 +27,16 @@ export function useSesion(): EstadoSesion {
 
   useEffect(() => {
     const alCambiar = async (user: User | null) => {
+      // Intentamos capturar posibles errores de la redirección de Google
+      try {
+        const redirectResult = await getRedirectResult(auth());
+        if (redirectResult) {
+          console.log("Resultado de redirección:", redirectResult.user);
+        }
+      } catch (err) {
+        console.error("Error capturado tras la redirección:", err);
+      }
+
       if (!user) {
         setEstado({ ...INICIAL, cargando: false })
         return

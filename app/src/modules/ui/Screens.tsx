@@ -1,12 +1,77 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Building, Share2, UploadCloud, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight } from 'lucide-react';
+import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
+import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
+import { useSesion } from '@/modules/auth/useSesion';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
 // ==========================================
 export const Screen1Login = () => {
   const navigate = useNavigate();
+  const sesion = useSesion();
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+
+  React.useEffect(() => {
+    if (sesion.usuario && !sesion.cargando) {
+      navigate('/radar');
+    }
+  }, [sesion.usuario, sesion.cargando, navigate]);
+
+  const handleGoogleLogin = async () => {
+    try {
+      setCargando(true);
+      setError(null);
+      await ingresoConGoogle();
+      // Con signInWithRedirect, la app navegará a la página de Google y volverá.
+      // No hacemos navigate() manual acá.
+    } catch (err) {
+      console.error('Error al iniciar con Google:', err);
+      setError('Hubo un error al iniciar sesión. Intentá de nuevo.');
+      setCargando(false);
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError('Por favor completá email y contraseña.');
+      return;
+    }
+    if (isRegister && (!nombre || !apellido)) {
+      setError('Por favor completá tu nombre y apellido.');
+      return;
+    }
+
+    setCargando(true);
+    setError(null);
+
+    try {
+      if (isRegister) {
+        await registroConEmail(nombre, apellido, email, password);
+      } else {
+        await ingresoConEmail(email, password);
+      }
+      navigate('/radar');
+    } catch (err: any) {
+      console.error('Error en autenticación por email:', err);
+      let msj = 'Hubo un error al autenticar.';
+      if (err.code === 'auth/email-already-in-use') msj = 'El correo ya está registrado. Ingresá en lugar de registrarte.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') msj = 'Correo o contraseña incorrectos.';
+      if (err.code === 'auth/weak-password') msj = 'La contraseña es muy débil (mínimo 6 caracteres).';
+      setError(msj);
+    } finally {
+      setCargando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col justify-center items-center p-6 text-white font-sans">
       <div className="w-full max-w-sm space-y-8">
@@ -15,14 +80,28 @@ export const Screen1Login = () => {
           <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mt-2">El Potrero Digital</p>
         </div>
         
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); navigate('/role-selector'); }}>
-          <input type="email" placeholder="Email" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
-          <input type="password" placeholder="Contraseña" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+        {error && <div className="text-red-500 text-sm text-center font-bold bg-red-500/10 py-2 rounded-lg">{error}</div>}
+
+        <form className="space-y-4" onSubmit={handleEmailAuth}>
+          {isRegister && (
+            <div className="flex gap-2">
+              <input type="text" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+              <input type="text" placeholder="Apellido" value={apellido} onChange={e => setApellido(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+            </div>
+          )}
+          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+          <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
           
-          <button type="submit" className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition">
-            INGRESAR
+          <button type="submit" disabled={cargando} className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition disabled:opacity-50">
+            {cargando ? 'PROCESANDO...' : (isRegister ? 'REGISTRARME' : 'INGRESAR')}
           </button>
         </form>
+        
+        <div className="text-center">
+          <button type="button" onClick={() => { setIsRegister(!isRegister); setError(null); }} className="text-sm text-zinc-400 font-semibold hover:text-white transition">
+            {isRegister ? '¿Ya tenés cuenta? Ingresá acá' : '¿No tenés cuenta? Registrate gratis'}
+          </button>
+        </div>
         
         <div className="relative flex items-center py-2">
           <div className="flex-grow border-t border-zinc-800"></div>
@@ -30,9 +109,13 @@ export const Screen1Login = () => {
           <div className="flex-grow border-t border-zinc-800"></div>
         </div>
 
-        <button onClick={() => navigate('/role-selector')} className="w-full bg-white text-zinc-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition">
+        <button 
+          onClick={handleGoogleLogin} 
+          disabled={cargando}
+          className="w-full bg-white text-zinc-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition disabled:opacity-50"
+        >
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
-          Continuar con Google
+          {cargando ? 'Conectando...' : 'Continuar con Google'}
         </button>
       </div>
     </div>
@@ -244,152 +327,48 @@ export const Screen3PlayerOnboarding = () => {
 export const Screen4WelcomeCard = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col items-center justify-center font-sans">
-      <div className="relative w-64 h-96 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 rounded-3xl p-1 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
-        <div className="relative h-full w-full bg-zinc-900 rounded-[22px] flex flex-col items-center p-6 text-white border-4 border-amber-400/30">
-          <div className="absolute top-4 left-4 text-3xl font-black text-amber-400">50</div>
-          <div className="absolute top-12 left-5 text-sm font-bold text-zinc-400">DEL</div>
-          <div className="mt-8 mb-4 w-32 h-32 rounded-full bg-zinc-800 border-4 border-amber-400 flex items-center justify-center text-4xl">⚽</div>
-          <h2 className="text-2xl font-black uppercase">EL RÚSTICO</h2>
-          
-          <div className="w-full border-t border-zinc-800 mt-auto pt-4 grid grid-cols-2 gap-4 text-center">
-            <div>
-              <div className="text-xl font-black text-amber-400">0</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Partidos</div>
-            </div>
-            <div>
-              <div className="text-xl font-black text-amber-400">0</div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Goles</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="w-full max-w-sm mt-8 space-y-3">
-        <button onClick={() => navigate('/my-team')} className="w-full flex items-center justify-center gap-2 bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-lg">
-          <Users className="w-5 h-5" /> Crear mi Equipo
-        </button>
-        <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">
-          <MapPinned className="w-5 h-5" /> Explorar Radar
-        </button>
-        <button className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl">
-          <Share2 className="w-4 h-4" /> Compartir en WA
-        </button>
-      </div>
-    </div>
-  );
-};
-
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
-
-// Icono personalizado para jugador libre
-const iconoJugadorLibre = L.divIcon({
-  className: 'marcador-jugador-libre',
-  html: `<div style="width: 22px; height: 22px; border-radius: 50%; background: #3B82F6; border: 3px solid #18181b; box-shadow: 0 0 12px #3B82F6; display: flex; align-items: center; justify-content: center; font-size: 10px;">🏃</div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11]
-});
-
-// Icono para cancha/predio
-const iconoCancha = L.divIcon({
-  className: 'marcador-cancha',
-  html: `<div style="width: 26px; height: 26px; border-radius: 50%; background: #10B981; border: 3px solid #18181b; box-shadow: 0 0 15px #10B981; display: flex; align-items: center; justify-content: center; font-size: 12px;">🏟️</div>`,
-  iconSize: [26, 26],
-  iconAnchor: [13, 13]
-});
-
-// ==========================================
-// PANTALLA 5: El Radar Interactivo
-// ==========================================
-export const Screen5Radar = () => {
-  const navigate = useNavigate();
-  const [selectedPin, setSelectedPin] = useState<'player' | 'venue' | null>(null);
-
-  // Coordenadas base (Lomas de Zamora / Guernica)
-  const mapCenter = { lat: -34.9221, lng: -58.3842 }; 
-  const playerMockLocation = { lat: -34.9201, lng: -58.3800 };
-  const venueMockLocation = { lat: -34.9251, lng: -58.3900 };
-
-  return (
-    <div className="h-screen bg-zinc-900 relative font-sans overflow-hidden">
+    <div className="min-h-screen bg-zinc-950 px-6 pt-6 pb-28 flex flex-col items-center font-sans overflow-y-auto">
       
-      {/* MAPA REAL: Usando Leaflet como en Fulbeando */}
-      <div className="absolute inset-0 z-0">
-        <MapContainer
-          center={[mapCenter.lat, mapCenter.lng]}
-          zoom={14}
-          className="h-full w-full"
-          zoomControl={false}
-        >
-          <TileLayer 
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          />
-
-          <Marker 
-            position={[playerMockLocation.lat, playerMockLocation.lng]} 
-            icon={iconoJugadorLibre}
-            eventHandlers={{ click: () => setSelectedPin('player') }}
-          />
-
-          <Marker 
-            position={[venueMockLocation.lat, venueMockLocation.lng]} 
-            icon={iconoCancha}
-            eventHandlers={{ click: () => setSelectedPin('venue') }}
-          />
-        </MapContainer>
-      </div>
-
-      {/* FILTROS TOP */}
-      <div className="absolute top-safe pt-4 px-4 w-full flex gap-2 overflow-x-auto no-scrollbar z-10">
-        <button className="px-4 py-2 rounded-full bg-amber-500 text-amber-950 font-bold text-xs whitespace-nowrap shadow-lg">🔥 Desafíos</button>
-        <button className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-xs whitespace-nowrap shadow-lg">👤 Jugadores Libres</button>
-        <button className="px-4 py-2 rounded-full bg-emerald-500 text-emerald-950 font-bold text-xs whitespace-nowrap shadow-lg">🏟️ Canchas</button>
-      </div>
-
-      {/* FAB - Lanzar Desafío */}
-      <button onClick={() => navigate('/radar/challenge')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10">
-        <Search className="w-6 h-6" />
-      </button>
-
-      {/* BOTTOM SHEET (Si toca un pin) */}
-      {selectedPin === 'player' && (
-        <div className="absolute bottom-0 w-full bg-zinc-900 rounded-t-3xl border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
-          <button onClick={() => setSelectedPin(null)} className="absolute top-4 right-4 text-zinc-500">✕</button>
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 bg-zinc-800 rounded-full border-2 border-blue-500 flex items-center justify-center text-xl">🏃</div>
-            <div>
-              <h3 className="text-white font-black text-lg">Matias "El Rústico"</h3>
-              <div className="flex gap-2 text-xs font-bold mt-1">
-                <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">DEF</span>
-                <span className="bg-amber-400/20 text-amber-500 px-2 py-0.5 rounded">⭐ 3.5 FP</span>
+      <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min">
+        <div className="relative w-64 h-96 shrink-0 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 rounded-3xl p-1 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
+          <div className="relative h-full w-full bg-zinc-900 rounded-[22px] flex flex-col items-center p-6 text-white border-4 border-amber-400/30">
+            <div className="absolute top-4 left-4 text-3xl font-black text-amber-400">50</div>
+            <div className="absolute top-12 left-5 text-sm font-bold text-zinc-400">DEL</div>
+            <div className="mt-8 mb-4 w-32 h-32 rounded-full bg-zinc-800 border-4 border-amber-400 flex items-center justify-center text-4xl shrink-0">⚽</div>
+            <h2 className="text-2xl font-black uppercase">EL RÚSTICO</h2>
+            
+            <div className="w-full border-t border-zinc-800 mt-auto pt-4 grid grid-cols-2 gap-4 text-center">
+              <div>
+                <div className="text-xl font-black text-amber-400">0</div>
+                <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Partidos</div>
+              </div>
+              <div>
+                <div className="text-xl font-black text-amber-400">0</div>
+                <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Goles</div>
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button className="bg-zinc-800 text-white py-3 rounded-xl font-semibold border border-zinc-700 active:bg-zinc-700">Invitar a Hoy</button>
-            <button className="bg-blue-600 text-white py-3 rounded-xl font-bold shadow-[0_0_15px_rgba(37,99,235,0.4)] active:scale-95 transition">Fichar Jugador</button>
-          </div>
         </div>
-      )}
 
-      {selectedPin === 'venue' && (
-        <div className="absolute bottom-0 w-full bg-zinc-900 rounded-t-3xl border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
-          <button onClick={() => setSelectedPin(null)} className="absolute top-4 right-4 text-zinc-500">✕</button>
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 bg-zinc-800 rounded-full border-2 border-emerald-500 flex items-center justify-center text-xl">🏟️</div>
-            <div>
-              <h3 className="text-white font-black text-lg">El Templo F5</h3>
-              <p className="text-xs text-zinc-400 mt-1">Guernica Centro • Sintético</p>
-            </div>
-          </div>
-          <button className="w-full bg-emerald-500 text-zinc-950 py-3 rounded-xl font-bold shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 transition">Ver Canchas y Turnos</button>
+        <div className="w-full max-w-sm mt-8 space-y-3 shrink-0">
+          <button onClick={() => navigate('/my-team')} className="w-full flex items-center justify-center gap-2 bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-lg">
+            <Users className="w-5 h-5" /> Crear mi Equipo
+          </button>
+          <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">
+            <MapPinned className="w-5 h-5" /> Explorar Radar
+          </button>
+          <button className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl">
+            <Share2 className="w-4 h-4" /> Compartir en WA
+          </button>
         </div>
-      )}
+      </div>
+
+      <MenuNavegacion />
     </div>
   );
 };
+
+// Screen5Radar ha sido reemplazado por MapaRadarUnificado en src/modules/radar/pantallas/MapaRadarUnificado.tsx
 
 // ==========================================
 // PANTALLA 6: Lanzar Desafío
@@ -428,6 +407,8 @@ export const Screen6LaunchChallenge = () => {
       <button className="w-full bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.3)] mt-8">
         PUBLICAR EN RADAR
       </button>
+
+      <MenuNavegacion />
     </div>
   );
 };
@@ -470,6 +451,8 @@ export const Screen7MyTeam = () => {
           ))}
         </div>
       </div>
+
+      <MenuNavegacion />
     </div>
   );
 };
