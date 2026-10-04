@@ -107,6 +107,8 @@ export const MapaRadarUnificado: React.FC = () => {
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
 
+  const [toastMessage, setToastMessage] = useState('');
+
   const mapCenter = { lat: -34.9221, lng: -58.3842 }; 
 
   // CARGA DE DATOS
@@ -185,6 +187,13 @@ export const MapaRadarUnificado: React.FC = () => {
   return (
     <div className="h-screen w-full bg-zinc-950 relative font-sans overflow-hidden">
       
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
+          {toastMessage}
+        </div>
+      )}
+
       {/* MAPA BASE */}
       <div className="absolute inset-0 z-0">
         <MapContainer
@@ -322,8 +331,14 @@ export const MapaRadarUnificado: React.FC = () => {
                 <button className="bg-zinc-800 text-white py-3.5 rounded-xl font-bold border border-zinc-700 flex justify-center items-center gap-2 hover:border-blue-500 hover:text-blue-500 active:bg-zinc-700 transition">
                   <MessageCircle className="w-4 h-4" /> Invitar a Hoy
                 </button>
-                <button className="bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(37,99,235,0.3)] flex justify-center items-center gap-2 active:scale-95 transition">
-                  <UserPlus className="w-4 h-4" /> Fichar
+                <button 
+                  onClick={() => {
+                    setToastMessage(`¡Invitación al equipo enviada a ${seleccionado.apodo}!`);
+                    setTimeout(() => setToastMessage(''), 3000);
+                  }} 
+                  className="bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(37,99,235,0.3)] flex justify-center items-center gap-2 active:scale-95 transition"
+                >
+                  <UserPlus className="w-4 h-4" /> Invitar al Equipo
                 </button>
               </div>
             </div>

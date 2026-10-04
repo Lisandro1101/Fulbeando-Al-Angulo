@@ -27,7 +27,7 @@ export const MenuNavegacion: React.FC = () => {
         className={`flex flex-col items-center gap-1 transition ${location.pathname.startsWith('/equipo') ? 'text-emerald-500 scale-110' : 'text-zinc-500 hover:text-zinc-300'}`}
       >
         <Shield className="w-6 h-6" />
-        <span className="text-[10px] font-bold">Mi Equipo</span>
+        <span className="text-[10px] font-bold">Mis Equipos</span>
       </button>
       <button 
         onClick={() => navigate('/perfil')}

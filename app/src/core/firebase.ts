@@ -3,6 +3,7 @@ import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { getMessaging } from "firebase/messaging";
 
 // Configuración de Firebase (asegurate de tener tus variables de entorno configuradas)
 const firebaseConfig = {
@@ -22,6 +23,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
 export const storage = getStorage(app);
+export const messaging = typeof window !== 'undefined' && 'serviceWorker' in navigator ? getMessaging(app) : null;
 
 // Conectar a la suite de emuladores locales en entorno de desarrollo
 if (import.meta.env.DEV) {

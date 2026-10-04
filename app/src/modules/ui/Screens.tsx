@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Building, Share2, UploadCloud, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight } from 'lucide-react';
+import { User, Building, Share2, UploadCloud, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, Bell } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
+import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { requestNotificationPermission } from '@/modules/notifications/pushService';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -326,16 +328,44 @@ export const Screen3PlayerOnboarding = () => {
 // ==========================================
 export const Screen4WelcomeCard = () => {
   const navigate = useNavigate();
+  const sesion = useSesion();
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [apodo, setApodo] = useState('EL RÚSTICO');
+  const [username, setUsername] = useState('el_rustico');
+  const [emojiFoto, setEmojiFoto] = useState('⚽');
+  
+  const { isInstallable, promptInstall } = useInstallPrompt();
+
   return (
-    <div className="min-h-screen bg-zinc-950 px-6 pt-6 pb-28 flex flex-col items-center font-sans overflow-y-auto">
-      
-      <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min">
+    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
+        
+        <div className="absolute top-6 right-6 flex gap-2 z-10">
+          <button onClick={() => {
+            if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid)
+          }} className="flex items-center gap-1 bg-blue-500 text-white px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
+            <Bell className="w-4 h-4" /> Alertas
+          </button>
+          {isInstallable && (
+            <button onClick={promptInstall} className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
+              <Download className="w-4 h-4" /> Instalar
+            </button>
+          )}
+          <button onClick={() => setMostrarConfig(true)} className="text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-900 p-2 rounded-full">
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min mt-8">
         <div className="relative w-64 h-96 shrink-0 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 rounded-3xl p-1 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
           <div className="relative h-full w-full bg-zinc-900 rounded-[22px] flex flex-col items-center p-6 text-white border-4 border-amber-400/30">
             <div className="absolute top-4 left-4 text-3xl font-black text-amber-400">50</div>
             <div className="absolute top-12 left-5 text-sm font-bold text-zinc-400">DEL</div>
-            <div className="mt-8 mb-4 w-32 h-32 rounded-full bg-zinc-800 border-4 border-amber-400 flex items-center justify-center text-4xl shrink-0">⚽</div>
-            <h2 className="text-2xl font-black uppercase">EL RÚSTICO</h2>
+            <div className="mt-8 mb-4 w-32 h-32 rounded-full bg-zinc-800 border-4 border-amber-400 flex items-center justify-center text-5xl shrink-0 overflow-hidden">
+              {emojiFoto}
+            </div>
+            <h2 className="text-2xl font-black uppercase text-center line-clamp-2 w-full leading-tight">{apodo}</h2>
+            <div className="text-amber-400/80 font-bold text-sm mt-1 mb-2 tracking-wide">@{username}</div>
             
             <div className="w-full border-t border-zinc-800 mt-auto pt-4 grid grid-cols-2 gap-4 text-center">
               <div>
@@ -357,10 +387,68 @@ export const Screen4WelcomeCard = () => {
           <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">
             <MapPinned className="w-5 h-5" /> Explorar Radar
           </button>
-          <button className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl">
-            <Share2 className="w-4 h-4" /> Compartir en WA
+          <button 
+            onClick={async () => {
+              if (navigator.share) {
+                try {
+                  await navigator.share({
+                    title: '¡Mirá mi carta en Fulbeando!',
+                    text: '¡Esta es mi carta de jugador en Fulbeando! Entrá a ver mis estadísticas y armemos un equipo.',
+                    url: window.location.href,
+                  });
+                } catch (err) {
+                  console.error('Error sharing:', err);
+                }
+              } else {
+                navigator.clipboard.writeText(window.location.href);
+                alert('¡Enlace a tu perfil copiado al portapapeles!');
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl active:scale-95 transition-transform"
+          >
+            <Share2 className="w-4 h-4" /> Compartir mi racha
           </button>
         </div>
+      </div>
+
+      {/* Modal Configuración */}
+      {mostrarConfig && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <h3 className="text-xl font-black mb-6">Configurar Perfil</h3>
+             
+             <label className="text-xs font-bold text-zinc-500 uppercase">Apodo</label>
+             <input 
+               type="text" 
+               value={apodo}
+               onChange={(e) => setApodo(e.target.value)}
+               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 mt-2 mb-4 text-white font-black uppercase outline-none focus:border-amber-500"
+             />
+
+             <label className="text-xs font-bold text-zinc-500 uppercase">Nombre de Usuario (@)</label>
+             <div className="flex items-center w-full bg-zinc-950 border border-zinc-800 rounded-xl mt-2 mb-6 focus-within:border-amber-500 transition-colors overflow-hidden">
+               <span className="pl-4 text-zinc-500 font-black">@</span>
+               <input 
+                 type="text" 
+                 value={username}
+                 onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                 className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
+                 placeholder="tu_usuario"
+               />
+             </div>
+
+             <label className="text-xs font-bold text-zinc-500 uppercase">Foto (Emoji temporal)</label>
+             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
+               {['⚽', '🏃‍♂️', '🔥', '🧤', '🏆'].map(emoji => (
+                 <button key={emoji} onClick={() => setEmojiFoto(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${emojiFoto === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
+               ))}
+             </div>
+
+             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
+          </div>
+        </div>
+      )}
+
       </div>
 
       <MenuNavegacion />
@@ -371,42 +459,136 @@ export const Screen4WelcomeCard = () => {
 // Screen5Radar ha sido reemplazado por MapaRadarUnificado en src/modules/radar/pantallas/MapaRadarUnificado.tsx
 
 // ==========================================
-// PANTALLA 6: Lanzar Desafío
+// PANTALLA 6: Partidos y Desafíos
 // ==========================================
 export const Screen6LaunchChallenge = () => {
   const navigate = useNavigate();
-  return (
-    <div className="min-h-screen bg-zinc-950 p-6 font-sans text-white">
-      <button onClick={() => navigate(-1)} className="text-zinc-500 text-sm font-bold mb-6">← Cancelar</button>
-      <h2 className="text-2xl font-black text-amber-500 mb-6">Lanzar Desafío al Radar</h2>
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [modalidad, setModalidad] = useState('F5');
+  const [diaHora, setDiaHora] = useState('');
+  const [cancha, setCancha] = useState('Sí, ya la alquilamos');
+  
+  const [partidos, setPartidos] = useState([
+    { id: 1, modalidad: 'F5', diaHora: 'Jueves 21:00hs', cancha: 'Sí, ya la alquilamos', estado: 'Confirmado', rival: 'Los Pibes' },
+    { id: 2, modalidad: 'F7', diaHora: 'Sábado 18:00hs', cancha: 'No, buscamos cancha a medias', estado: 'En Radar', rival: null }
+  ]);
 
-      <div className="space-y-6">
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Modalidad</label>
-          <div className="flex gap-2 mt-2">
-            {['F5', 'F7', 'F11'].map((m) => (
-              <button key={m} className={`flex-1 py-3 rounded-xl font-black ${m === 'F5' ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400'}`}>{m}</button>
+  const [toastMessage, setToastMessage] = useState('');
+
+  const handlePublicar = () => {
+    if (!diaHora) return;
+    const nuevoPartido = {
+      id: Date.now(),
+      modalidad,
+      diaHora: new Date(diaHora).toLocaleString('es-AR', { weekday: 'long', hour: '2-digit', minute:'2-digit' }),
+      cancha,
+      estado: 'En Radar',
+      rival: null
+    };
+    setPartidos([nuevoPartido, ...partidos]);
+    setMostrarFormulario(false);
+    setToastMessage('Partido publicado en el Radar');
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto p-6 pb-28">
+        {toastMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm z-[9999] animate-bounce shadow-xl border-2 border-zinc-950">
+            {toastMessage}
+          </div>
+        )}
+
+      {!mostrarFormulario ? (
+        <>
+          <div className="flex justify-between items-center mb-6 mt-4">
+            <h2 className="text-2xl font-black text-amber-500">Mis Partidos</h2>
+            <button 
+              onClick={() => setMostrarFormulario(true)}
+              className="bg-amber-500/10 text-amber-500 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-colors"
+            >
+              + Lanzar Desafío
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {partidos.length === 0 && (
+              <div className="text-center py-8 text-zinc-500 font-bold border border-zinc-800 rounded-2xl border-dashed">
+                Aún no tenés partidos ni desafíos activos.
+              </div>
+            )}
+            {partidos.map(p => (
+              <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-xs font-black">{p.modalidad}</span>
+                    <h3 className="font-bold">{p.rival ? `vs ${p.rival}` : 'Buscando rival...'}</h3>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${p.estado === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500 animate-pulse'}`}>
+                    {p.estado}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-400 font-bold mt-2">{p.diaHora}</p>
+                <p className="text-xs text-zinc-500 mt-1">{p.cancha}</p>
+              </div>
             ))}
           </div>
-        </div>
-        
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Día y Hora</label>
-          <input type="datetime-local" className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none" />
-        </div>
+        </>
+      ) : (
+        <>
+          <button onClick={() => setMostrarFormulario(false)} className="text-zinc-500 text-sm font-bold mb-6">← Volver</button>
+          <h2 className="text-2xl font-black text-amber-500 mb-6">Lanzar Desafío al Radar</h2>
 
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">¿Tienen Cancha?</label>
-          <select className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none">
-            <option>Sí, ya la alquilamos</option>
-            <option>No, buscamos cancha a medias</option>
-          </select>
-        </div>
+          <div className="space-y-6">
+            <div>
+              <label className="text-xs font-bold text-zinc-500 uppercase">Modalidad</label>
+              <div className="flex gap-2 mt-2">
+                {['F5', 'F7', 'F11'].map((m) => (
+                  <button 
+                    key={m} 
+                    onClick={() => setModalidad(m)}
+                    className={`flex-1 py-3 rounded-xl font-black transition-colors ${m === modalidad ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400'}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-xs font-bold text-zinc-500 uppercase">Día y Hora</label>
+              <input 
+                type="datetime-local" 
+                value={diaHora}
+                onChange={(e) => setDiaHora(e.target.value)}
+                className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none" 
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-zinc-500 uppercase">¿Tienen Cancha?</label>
+              <select 
+                value={cancha}
+                onChange={(e) => setCancha(e.target.value)}
+                className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none"
+              >
+                <option>Sí, ya la alquilamos</option>
+                <option>No, buscamos cancha a medias</option>
+              </select>
+            </div>
+          </div>
+
+          <button 
+            onClick={handlePublicar}
+            disabled={!diaHora}
+            className={`w-full font-black py-4 rounded-xl mt-8 transition-all ${diaHora ? 'bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)] active:scale-95' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+          >
+            PUBLICAR EN RADAR
+          </button>
+        </>
+      )}
       </div>
-
-      <button className="w-full bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.3)] mt-8">
-        PUBLICAR EN RADAR
-      </button>
 
       <MenuNavegacion />
     </div>
@@ -417,39 +599,454 @@ export const Screen6LaunchChallenge = () => {
 // PANTALLA 7: Pestaña Mi Equipo
 // ==========================================
 export const Screen7MyTeam = () => {
+  const [equipoActivo, setEquipoActivo] = useState(0);
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [mostrarInvitar, setMostrarInvitar] = useState(false);
+  const [mostrarModalConvocatoria, setMostrarModalConvocatoria] = useState(false);
+  const [convFecha, setConvFecha] = useState('Jueves 21:00hs');
+  const [inviteUsername, setInviteUsername] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+
+  // Mock list of users
+  const mockUsuarios = [
+    { username: 'el_rustico', apodo: 'El Rústico', emoji: '⚽' },
+    { username: 'mati_goleador', apodo: 'Matias', emoji: '🔥' },
+    { username: 'juan_perez', apodo: 'Juan Pérez', emoji: '🏃‍♂️' },
+    { username: 'lio_messi', apodo: 'Lio', emoji: '⭐' }
+  ];
+
+  const buscarUsuario = (username: string) => {
+    return mockUsuarios.filter(u => u.username.includes(username) || u.apodo.toLowerCase().includes(username));
+  };
+
+  const [usuariosBuscados, setUsuariosBuscados] = useState(mockUsuarios.slice(0,0));
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<{username:string, apodo:string, emoji:string} | null>(null);
+  
+
+  // State for config
+  const [formato, setFormato] = useState('F5');
+  const [genero, setGenero] = useState('Masculino');
+
+  const currentUser = 'mi_usuario';
+
+  const [equipos, setEquipos] = useState([
+    { 
+      id: 1, nombre: 'La Scaloneta F5', capitan: 'mi_usuario', w: 45, d: 10, l: 5, emoji: '🛡️', isCapitan: true,
+      plantel: [
+        { id: 101, username: 'mi_usuario', apodo: 'Yo', emoji: '👑', isCapitan: true },
+        { id: 102, username: 'juan_perez', apodo: 'Juan Pérez', emoji: '🏃‍♂️', isCapitan: false },
+        { id: 103, username: 'mati_goleador', apodo: 'Matias', emoji: '🔥', isCapitan: false },
+      ],
+      convocatoria: null as { fecha: string, confirmados: number[], bajas: number[] } | null
+    },
+    { 
+      id: 2, nombre: 'Los Galácticos F7', capitan: 'Cristiano', w: 20, d: 2, l: 1, emoji: '⚡', isCapitan: false,
+      plantel: [
+        { id: 201, username: 'cristiano', apodo: 'Cristiano', emoji: '⚡', isCapitan: true },
+        { id: 101, username: 'mi_usuario', apodo: 'Yo', emoji: '🏃‍♂️', isCapitan: false },
+        { id: 202, username: 'el_rustico', apodo: 'El Rústico', emoji: '⚽', isCapitan: false },
+      ],
+      convocatoria: { fecha: 'Jueves 21:00hs', confirmados: [201], bajas: [202] }
+    },
+  ]);
+
+  const equipo = equipos[equipoActivo];
+
+  const handleUpdateEmoji = (newEmoji: string) => {
+    const nuevosEquipos = [...equipos];
+    nuevosEquipos[equipoActivo].emoji = newEmoji;
+    setEquipos(nuevosEquipos);
+  };
+
+  const handleRemovePlayer = (teamId: number, playerId: number, isSelf: boolean) => {
+    if(window.confirm(isSelf ? '¿Estás seguro que querés salir del equipo?' : '¿Estás seguro que querés liberar a este jugador?')) {
+      const nuevosEquipos = equipos.map(eq => {
+        if(eq.id === teamId) {
+           return { ...eq, plantel: eq.plantel.filter(p => p.id !== playerId) };
+        }
+        return eq;
+      });
+      setEquipos(nuevosEquipos);
+      setToastMessage(isSelf ? 'Saliste del equipo' : 'Jugador liberado del equipo');
+      setTimeout(() => setToastMessage(''), 3000);
+    }
+  };
+
+  const handleDelegateCaptain = (teamId: number, playerId: number) => {
+    if(window.confirm('¿Estás seguro que querés cederle la capitanía a este jugador? Vos pasarás a ser un jugador normal.')) {
+      const nuevosEquipos = equipos.map(eq => {
+        if(eq.id === teamId) {
+           const newPlantel = eq.plantel.map(p => {
+             if(p.id === playerId) return { ...p, isCapitan: true, emoji: '👑' };
+             if(p.username === currentUser) return { ...p, isCapitan: false, emoji: '🏃‍♂️' };
+             return p;
+           });
+           const newCapitan = newPlantel.find(p => p.id === playerId)?.username || eq.capitan;
+           return { ...eq, isCapitan: false, capitan: newCapitan, plantel: newPlantel };
+        }
+        return eq;
+      });
+      setEquipos(nuevosEquipos);
+      setToastMessage('Has delegado la capitanía');
+      setTimeout(() => setToastMessage(''), 3000);
+    }
+  };
+
+  const handleCreateConvocatoria = () => {
+    const nuevosEquipos = [...equipos];
+    nuevosEquipos[equipoActivo].convocatoria = {
+      fecha: convFecha,
+      confirmados: [],
+      bajas: []
+    };
+    setEquipos(nuevosEquipos);
+    setMostrarModalConvocatoria(false);
+    setToastMessage('Convocatoria creada');
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  const handleResponderConvocatoria = (teamId: number, status: 'voy' | 'bajo') => {
+    const nuevosEquipos = equipos.map(eq => {
+      if(eq.id === teamId && eq.convocatoria) {
+         const myPlayerId = eq.plantel.find(p => p.username === currentUser)?.id;
+         if(!myPlayerId) return eq;
+         
+         const newConf = eq.convocatoria.confirmados.filter(id => id !== myPlayerId);
+         const newBajas = eq.convocatoria.bajas.filter(id => id !== myPlayerId);
+         
+         if(status === 'voy') newConf.push(myPlayerId);
+         if(status === 'bajo') newBajas.push(myPlayerId);
+
+         return { ...eq, convocatoria: { ...eq.convocatoria, confirmados: newConf, bajas: newBajas } };
+      }
+      return eq;
+    });
+    setEquipos(nuevosEquipos);
+  };
+
+  const handleShareLink = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '¡Unite a mi equipo en Fulbeando!',
+          text: `¡Sumate a ${equipo.nombre} y rompela con nosotros!`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.error('Error sharing:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('¡Enlace copiado al portapapeles!');
+    }
+  };
+
+  const handleSendInvite = () => {
+    if (!usuarioSeleccionado) return;
+    setToastMessage(`¡Invitación enviada a @${usuarioSeleccionado.username}!`);
+    setTimeout(() => setToastMessage(''), 3000);
+    setInviteUsername('');
+    setUsuarioSeleccionado(null);
+    setUsuariosBuscados([]);
+    setMostrarInvitar(false);
+  };
+
+  if (!equipo) return <div className="h-screen bg-zinc-950 flex justify-center items-center text-white">Cargando...</div>;
+
   return (
-    <div className="min-h-screen bg-zinc-950 font-sans text-white pb-20">
+    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto pb-28">
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
+            {toastMessage}
+          </div>
+        )}
+
+      {/* Selector de equipos (Tabs) */}
+      <div className="flex bg-zinc-900 border-b border-zinc-800 pt-8">
+        {equipos.map((eq, i) => (
+          <button 
+            key={eq.id} 
+            onClick={() => setEquipoActivo(i)}
+            className={`flex-1 py-4 text-sm font-bold uppercase transition ${equipoActivo === i ? 'text-amber-500 border-b-2 border-amber-500' : 'text-zinc-500'}`}
+          >
+            {eq.nombre}
+          </button>
+        ))}
+      </div>
+
       {/* Header Equipo */}
       <div className="bg-zinc-900 p-6 pt-12 rounded-b-[40px] text-center relative border-b border-zinc-800">
-        <div className="w-24 h-24 bg-zinc-800 mx-auto rounded-full border-4 border-amber-500 flex items-center justify-center text-3xl mb-4">🛡️</div>
-        <h2 className="text-2xl font-black uppercase">La Scaloneta F5</h2>
-        <p className="text-zinc-400 text-sm mt-1">Capitán: Lio Messi</p>
+        <button onClick={() => setMostrarConfig(true)} className="absolute top-8 right-6 text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-800 p-3 rounded-full">
+          <Settings className="w-5 h-5" />
+        </button>
+        <div className="w-24 h-24 bg-zinc-800 mx-auto rounded-full border-4 border-amber-500 flex items-center justify-center text-4xl mb-4 overflow-hidden">{equipo.emoji}</div>
+        <h2 className="text-2xl font-black uppercase">{equipo.nombre}</h2>
+        <p className="text-zinc-400 text-sm mt-1">Capitán: {equipo.capitan}</p>
         <div className="flex justify-center gap-4 mt-4 text-sm font-bold">
-          <div className="text-emerald-500">45 W</div>
-          <div className="text-zinc-500">10 D</div>
-          <div className="text-red-500">5 L</div>
+          <div className="text-emerald-500">{equipo.w} PG</div>
+          <div className="text-zinc-500">{equipo.d} PE</div>
+          <div className="text-red-500">{equipo.l} PP</div>
         </div>
+      </div>
+
+      {/* Convocatoria Section */}
+      <div className="px-6 pt-6">
+        {equipo.convocatoria ? (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-black text-lg text-amber-500">Próximo Partido</h3>
+                <p className="text-sm text-zinc-400 font-bold">{equipo.convocatoria.fecha}</p>
+              </div>
+              {equipo.isCapitan && (
+                <button className="text-xs font-black bg-blue-600 text-white px-3 py-1.5 rounded-lg active:scale-95 transition-transform">
+                  Al Radar
+                </button>
+              )}
+            </div>
+            
+            <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-3">
+              <div className="text-center flex-1">
+                <div className="text-xl font-black text-emerald-500">{equipo.convocatoria.confirmados.length}</div>
+                <div className="text-[10px] uppercase font-bold text-zinc-500">Confirmados</div>
+              </div>
+              <div className="w-px h-8 bg-zinc-800"></div>
+              <div className="text-center flex-1">
+                <div className="text-xl font-black text-red-500">{equipo.convocatoria.bajas.length}</div>
+                <div className="text-[10px] uppercase font-bold text-zinc-500">Bajas</div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              {(() => {
+                const myId = equipo.plantel.find(p => p.username === currentUser)?.id;
+                const confirmó = myId && equipo.convocatoria.confirmados.includes(myId);
+                const seBajó = myId && equipo.convocatoria.bajas.includes(myId);
+                return (
+                  <>
+                    <button 
+                      onClick={() => handleResponderConvocatoria(equipo.id, 'voy')}
+                      className={`flex-1 py-2 rounded-xl font-black text-sm transition-colors ${confirmó ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
+                    >
+                      ✓ Voy
+                    </button>
+                    <button 
+                      onClick={() => handleResponderConvocatoria(equipo.id, 'bajo')}
+                      className={`flex-1 py-2 rounded-xl font-black text-sm transition-colors ${seBajó ? 'bg-red-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
+                    >
+                      ✕ Me bajo
+                    </button>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        ) : (
+          equipo.isCapitan ? (
+            <button 
+              onClick={() => setMostrarModalConvocatoria(true)}
+              className="w-full bg-zinc-900 border border-dashed border-zinc-700 text-zinc-400 font-bold py-4 rounded-2xl active:scale-95 transition-transform"
+            >
+              + Armar Convocatoria
+            </button>
+          ) : (
+            <div className="text-center py-4 text-zinc-600 font-bold text-sm bg-zinc-900 rounded-2xl border border-zinc-800">
+              No hay próximo partido programado
+            </div>
+          )
+        )}
       </div>
 
       {/* Lista de Jugadores */}
       <div className="p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-sm font-bold text-zinc-500 uppercase">Plantel (5/10)</h3>
-          <button className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full">+ Invitar</button>
+          <button onClick={() => setMostrarInvitar(true)} className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform">+ Invitar</button>
         </div>
         
         <div className="space-y-3">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-              <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center font-bold text-amber-500">{i}</div>
-              <div className="flex-1">
-                <h4 className="font-bold text-sm">Jugador {i}</h4>
-                <p className="text-xs text-zinc-500 font-semibold">{i === 1 ? 'CAPITÁN' : 'JUGADOR'} • DEL</p>
+          {equipo.plantel.map((jugador) => {
+            const isMe = jugador.username === currentUser;
+            const canRemove = equipo.isCapitan && !isMe;
+            const canLeave = isMe && !equipo.isCapitan;
+
+            return (
+              <div key={jugador.id} className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
+                <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center font-bold text-amber-500">{jugador.emoji}</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-sm">{jugador.apodo}</h4>
+                  <p className="text-xs text-zinc-500 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : 'JUGADOR'}</p>
+                </div>
+                {canRemove && (
+                  <div className="flex flex-col gap-1">
+                    <button 
+                      onClick={() => handleDelegateCaptain(equipo.id, jugador.id)}
+                      className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors"
+                    >
+                      Hacer Capitán
+                    </button>
+                    <button 
+                      onClick={() => handleRemovePlayer(equipo.id, jugador.id, false)}
+                      className="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors"
+                    >
+                      Liberar
+                    </button>
+                  </div>
+                )}
+                {canLeave && (
+                  <button 
+                    onClick={() => handleRemovePlayer(equipo.id, jugador.id, true)}
+                    className="bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors"
+                  >
+                    Salir
+                  </button>
+                )}
               </div>
-              <div className="bg-zinc-950 px-2 py-1 rounded font-black text-amber-400 text-sm border border-zinc-800">50</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      </div>
+
+      {/* Modal Configuración */}
+      {mostrarConfig && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <h3 className="text-xl font-black mb-2">Configurar Equipo</h3>
+             <p className="text-sm text-zinc-400 mb-6">Ajustá cómo querés que {equipo.nombre} aparezca en el radar.</p>
+             
+             <label className="text-xs font-bold text-zinc-500 uppercase">Formato de Juego</label>
+             <div className="flex flex-wrap gap-2 mt-2 mb-6">
+               {['F5', 'F7', 'F11', 'Todos'].map(f => (
+                 <button key={f} onClick={() => setFormato(f)} className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${formato === f ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>{f}</button>
+               ))}
+             </div>
+
+             <label className="text-xs font-bold text-zinc-500 uppercase">Categoría</label>
+             <div className="flex gap-2 mt-2 mb-6">
+               {['Masculino', 'Femenino', 'Mixto'].map(g => (
+                 <button key={g} onClick={() => setGenero(g)} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-colors ${genero === g ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}>{g}</button>
+               ))}
+             </div>
+
+             <label className="text-xs font-bold text-zinc-500 uppercase">Escudo (Emoji temporal)</label>
+             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
+               {['🛡️', '⚔️', '🦅', '🦁', '⭐'].map(emoji => (
+                 <button key={emoji} onClick={() => handleUpdateEmoji(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${equipo.emoji === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
+               ))}
+             </div>
+
+             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Invitar */}
+      {mostrarInvitar && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+          {/* ... (el resto del modal invitar queda igual pero omito el contenido completo aca y lo dejo como estaba) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <button onClick={() => setMostrarInvitar(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+             <h3 className="text-xl font-black mb-2">Invitar Jugador</h3>
+             <p className="text-sm text-zinc-400 mb-6">Sumá un nuevo talento a {equipo.nombre}.</p>
+             
+             <button onClick={handleShareLink} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl mb-6 active:scale-95 transition-transform">
+               <Share2 className="w-5 h-5" /> Compartir Link de Invitación
+             </button>
+
+             <div className="relative flex py-2 items-center mb-6">
+               <div className="flex-grow border-t border-zinc-800"></div>
+               <span className="shrink-0 px-4 text-zinc-600 text-xs font-bold uppercase">o invitar por usuario</span>
+               <div className="flex-grow border-t border-zinc-800"></div>
+             </div>
+
+             <div className={`flex items-center w-full bg-zinc-950 border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
+               <span className="pl-4 text-zinc-500 font-black">@</span>
+               <input 
+                 type="text" 
+                 value={inviteUsername}
+                 onChange={(e) => {
+                   const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                   setInviteUsername(val);
+                   setUsuarioSeleccionado(null);
+                   if (val.length > 0) {
+                     setUsuariosBuscados(buscarUsuario(val));
+                   } else {
+                     setUsuariosBuscados([]);
+                   }
+                 }}
+                 className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
+                 placeholder="usuario"
+               />
+               {usuarioSeleccionado && <span className="pr-4 text-emerald-500">✓</span>}
+             </div>
+
+             {/* Resultados de Búsqueda */}
+             {!usuarioSeleccionado && usuariosBuscados.length > 0 && (
+               <div className="bg-zinc-950 border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
+                 {usuariosBuscados.map(u => (
+                   <div 
+                     key={u.username}
+                     onClick={() => {
+                       setUsuarioSeleccionado(u);
+                       setInviteUsername(u.username);
+                       setUsuariosBuscados([]);
+                     }}
+                     className="flex items-center gap-3 p-3 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors last:border-0"
+                   >
+                     <div className="w-8 h-8 bg-zinc-800 rounded-full flex items-center justify-center text-sm">{u.emoji}</div>
+                     <div>
+                       <div className="text-sm font-bold text-white">{u.apodo}</div>
+                       <div className="text-xs text-zinc-500 font-medium">@{u.username}</div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             )}
+             {!usuarioSeleccionado && inviteUsername.length > 0 && usuariosBuscados.length === 0 && (
+               <div className="text-xs text-red-400 font-bold mb-4 px-2">Usuario no encontrado</div>
+             )}
+             {usuarioSeleccionado && (
+               <div className="text-xs text-emerald-400 font-bold mb-4 px-2">¡Usuario válido! Listo para invitar.</div>
+             )}
+
+             <button 
+               onClick={handleSendInvite} 
+               disabled={!usuarioSeleccionado}
+               className={`w-full font-black py-4 rounded-xl transition-all mt-2 ${usuarioSeleccionado ? 'bg-amber-500 text-zinc-950 active:scale-95' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
+             >
+               Enviar Notificación
+             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Armar Convocatoria */}
+      {mostrarModalConvocatoria && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <button onClick={() => setMostrarModalConvocatoria(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+             <h3 className="text-xl font-black mb-2">Armar Convocatoria</h3>
+             <p className="text-sm text-zinc-400 mb-6">Llamá a tu equipo a jugar el próximo partido.</p>
+
+             <label className="text-xs font-bold text-zinc-500 uppercase">Fecha y Hora</label>
+             <input 
+                type="text" 
+                value={convFecha}
+                onChange={(e) => setConvFecha(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+             />
+
+             <button 
+               onClick={handleCreateConvocatoria} 
+               className="w-full bg-amber-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform"
+             >
+               Abrir Convocatoria
+             </button>
+          </div>
+        </div>
+      )}
       </div>
 
       <MenuNavegacion />
