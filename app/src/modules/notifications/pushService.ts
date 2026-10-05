@@ -10,7 +10,11 @@ export const requestNotificationPermission = async (userId: string) => {
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+      const registration = await navigator.serviceWorker.getRegistration();
+      const currentToken = await getToken(messaging, { 
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration
+      });
       if (currentToken) {
         // Save the token to the user document in Firestore
         const userRef = doc(db, 'usuarios', userId);
