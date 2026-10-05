@@ -2,10 +2,57 @@ import { useEffect, useState } from 'react'
 import { Pantalla, Tarjeta } from '@/modules/ui/pantalla'
 import { BotonIngreso } from '@/modules/auth/BotonIngreso'
 import { useSesion } from '@/modules/auth/useSesion'
+import { cerrarSesion } from '@/modules/auth/servicio'
+import { messaging } from '@/core/firebase'
+import { getToken } from 'firebase/messaging'
 import { FormularioSolicitudDueno } from '@/modules/solicitudes/componentes/FormularioSolicitudDueno'
 import { PerfilDeportivoCard, UbicacionCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
 import { NavegacionHeader } from '@/modules/ui/NavegacionHeader'
 import type { Usuario } from '@/domain'
+
+function NotificacionesCard() {
+  const [permiso, setPermiso] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  )
+
+  const solicitarPermiso = async () => {
+    if (!('Notification' in window)) return
+    try {
+      const permission = await Notification.requestPermission()
+      setPermiso(permission)
+      if (permission === 'granted' && messaging) {
+        // En una app real acá se obtiene el token con getToken y se guarda en el doc de usuario
+        alert('¡Notificaciones activadas!')
+      }
+    } catch (err) {
+      console.error('Error al pedir permisos', err)
+    }
+  }
+
+  return (
+    <Tarjeta
+      titulo="Alertas y Notificaciones"
+      descripcion="Recibí avisos cuando un partido cerca tuyo necesite jugadores."
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-ink">Notificaciones Push</span>
+        {permiso === 'granted' ? (
+          <span className="text-sm font-bold text-pitch">Activadas</span>
+        ) : permiso === 'denied' ? (
+          <span className="text-sm font-bold text-urgent">Bloqueadas</span>
+        ) : (
+          <button
+            type="button"
+            onClick={solicitarPermiso}
+            className="rounded-full bg-pitch px-4 py-1.5 text-xs font-semibold text-canvas transition-transform hover:scale-105"
+          >
+            Activar Alertas
+          </button>
+        )}
+      </div>
+    </Tarjeta>
+  )
+}
 
 /** Pantalla de Ajustes / Perfil (PRD 4.5). */
 export default function Ajustes() {
@@ -95,6 +142,8 @@ export default function Ajustes() {
               >
                 <UbicacionCard usuario={usuario} onCambio={setOptimista} />
               </Tarjeta>
+
+              <NotificacionesCard />
             </>
           )}
 
@@ -106,6 +155,18 @@ export default function Ajustes() {
               <FormularioSolicitudDueno usuario={usuario} />
             </Tarjeta>
           )}
+        </div>
+
+        <div className="mt-12 flex justify-center pb-8">
+          <button
+            type="button"
+            className="rounded-full border border-red-500/30 px-6 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10 active:bg-red-500/20"
+            onClick={() => {
+              cerrarSesion().catch(console.error)
+            }}
+          >
+            Cerrar Sesión
+          </button>
         </div>
       </Pantalla>
     </div>

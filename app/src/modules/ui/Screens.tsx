@@ -343,11 +343,6 @@ export const Screen4WelcomeCard = () => {
       <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
         
         <div className="absolute top-6 right-6 flex gap-2 z-10">
-          <button onClick={() => {
-            if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid)
-          }} className="flex items-center gap-1 bg-blue-500 text-white px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
-            <Bell className="w-4 h-4" /> Alertas
-          </button>
           {isInstallable && (
             <button onClick={() => {
               promptInstall();
@@ -448,6 +443,12 @@ export const Screen4WelcomeCard = () => {
                  <button key={emoji} onClick={() => setEmojiFoto(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${emojiFoto === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
                ))}
              </div>
+
+             <button onClick={() => {
+               if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid)
+             }} className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 rounded-xl font-bold mb-4 active:scale-95 transition-transform">
+               <Bell className="w-5 h-5" /> Activar Alertas Push
+             </button>
 
              <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
           </div>
