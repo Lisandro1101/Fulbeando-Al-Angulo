@@ -567,7 +567,17 @@ export const Screen6LaunchChallenge = () => {
                   </span>
                 </div>
                 <p className="text-sm text-zinc-400 font-bold mt-2">{p.diaHora}</p>
-                <p className="text-xs text-zinc-500 mt-1">{p.cancha}</p>
+                <div className="flex justify-between items-center mt-3">
+                  <p className="text-xs text-zinc-500">{p.cancha}</p>
+                  {p.cancha.includes('buscamos') && (
+                    <button 
+                      onClick={() => navigate('/radar', { state: { matchId: p.id, teamName: p.rival || 'Mi Equipo', fromAlAngulo: true } })}
+                      className="bg-amber-500 text-zinc-950 px-3 py-1.5 rounded-lg text-xs font-black shadow-md hover:scale-105 transition-transform"
+                    >
+                      Reservar Cancha
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

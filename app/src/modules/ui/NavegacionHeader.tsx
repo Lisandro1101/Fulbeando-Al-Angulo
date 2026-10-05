@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { Shield, User as UserIcon, LogOut, ChevronDown, Check, MapPin, Zap, Building2, UserCheck } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Shield, User as UserIcon, LogOut, ChevronDown, Check, MapPin, Zap, Building2, UserCheck, ArrowLeft } from 'lucide-react'
 import { useSesion } from '@/modules/auth/useSesion'
 import { ingresoConEmail, cerrarSesion } from '@/modules/auth/servicio'
 
@@ -14,8 +14,24 @@ const CUENTAS_DEMO = [
 export function NavegacionHeader() {
   const sesion = useSesion()
   const location = useLocation()
+  const navigate = useNavigate()
   const [desplegable, setDesplegable] = useState(false)
   const [cambiando, setCambiando] = useState(false)
+
+  const ROOT_ROUTES = [
+    '/',
+    '/radar',
+    '/perfil',
+    '/turnos',
+    '/equipo',
+    '/partidos',
+    '/dashboard',
+    '/venue-dashboard',
+    '/admin',
+    '/superadmin',
+    '/ajustes'
+  ]
+  const esRutaRaiz = ROOT_ROUTES.includes(location.pathname) || location.pathname === '/login' || location.pathname === '/role-selector'
 
   const cambiarCuenta = async (email: string) => {
     try {
@@ -39,18 +55,28 @@ export function NavegacionHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-ink-faint/20 bg-canvas/90 backdrop-blur-md">
       <div className="mx-auto flex w-full items-center justify-between px-4 py-3">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 text-decoration-none">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-pitch font-black text-canvas shadow-lg shadow-pitch/20">
-            ⚽
-          </div>
-          <div>
-            <span className="text-lg font-extrabold tracking-tight text-ink">FULBEANDO</span>
-            <span className="ml-1.5 rounded-md bg-pitch-faint px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pitch">
-              PWA
-            </span>
-          </div>
-        </Link>
+        {/* Logo o Botón Volver */}
+        {esRutaRaiz ? (
+          <Link to="/" className="flex items-center gap-2 text-decoration-none min-h-[44px]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-pitch font-black text-canvas shadow-lg shadow-pitch/20">
+              ⚽
+            </div>
+            <div>
+              <span className="text-lg font-extrabold tracking-tight text-ink">FULBEANDO</span>
+              <span className="ml-1.5 rounded-md bg-pitch-faint px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pitch">
+                PWA
+              </span>
+            </div>
+          </Link>
+        ) : (
+          <button
+            onClick={() => navigate(-1)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl bg-canvas-raised text-ink hover:bg-ink-faint/10 transition-colors shrink-0"
+            aria-label="Volver atrás"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+        )}
 
         {/* Navegación Principal */}
         <nav className="hidden items-center gap-1 sm:flex">

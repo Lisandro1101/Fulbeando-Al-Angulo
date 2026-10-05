@@ -110,11 +110,7 @@ export const MapaRadarUnificado: React.FC = () => {
   const location = useLocation();
   
   // Estado de Filtros
-  const [filtros, setFiltros] = useState({
-    canchas: true,
-    desafios: true,
-    jugadores: true
-  });
+  const [filtroActivo, setFiltroActivo] = useState<'todos' | 'canchas' | 'jugadores'>('todos');
 
   // Estado de Entidades en el Mapa
   const [entidades, setEntidades] = useState<RadarEntity[]>([]);
@@ -184,28 +180,22 @@ export const MapaRadarUnificado: React.FC = () => {
     });
   }, []);
 
-  const toggleFiltro = (key: keyof typeof filtros) => {
-    setFiltros(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      // Si el seleccionado actual se oculta, cerramos el bottom sheet
-      if (seleccionado && 
-         ((seleccionado.type === 'cancha' && !next.canchas) ||
-          (seleccionado.type === 'desafio' && !next.desafios) ||
-          (seleccionado.type === 'jugador' && !next.jugadores))) {
-        setSeleccionado(null);
-      }
-      return next;
-    });
-  };
+  // Limpiar selección si cambiamos de filtro y el seleccionado no aplica
+  useEffect(() => {
+    if (seleccionado) {
+      if (filtroActivo === 'canchas' && seleccionado.type !== 'cancha') setSeleccionado(null);
+      if (filtroActivo === 'jugadores' && seleccionado.type !== 'jugador') setSeleccionado(null);
+    }
+  }, [filtroActivo, seleccionado]);
 
   const entidadesVisibles = useMemo(() => {
     return entidades.filter(e => {
-      if (e.type === 'cancha') return filtros.canchas;
-      if (e.type === 'desafio') return filtros.desafios;
-      if (e.type === 'jugador') return filtros.jugadores;
+      if (filtroActivo === 'todos') return true;
+      if (filtroActivo === 'canchas') return e.type === 'cancha';
+      if (filtroActivo === 'jugadores') return e.type === 'jugador';
       return false;
     });
-  }, [entidades, filtros]);
+  }, [entidades, filtroActivo]);
 
   return (
     <div className="h-full w-full bg-zinc-950 relative font-sans overflow-hidden">
@@ -249,25 +239,25 @@ export const MapaRadarUnificado: React.FC = () => {
       </div>
 
       {/* HEADER FLOTANTE / FILTROS RAPIDOS */}
-      <div className="absolute top-safe pt-4 px-4 w-full flex flex-col md:flex-row items-start md:items-center gap-3 z-10 pointer-events-none">
-        <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full pointer-events-auto">
+      <div className="absolute top-safe pt-4 w-full flex justify-center z-10 pointer-events-none px-2">
+        <div className="bg-zinc-900/90 backdrop-blur-md p-1 rounded-full border border-zinc-800 flex shadow-xl pointer-events-auto max-w-full overflow-x-auto hide-scrollbar">
           <button 
-            onClick={() => toggleFiltro('canchas')}
-            className={`flex-1 sm:flex-none px-3 py-2 rounded-full font-bold text-[11px] sm:text-xs text-center whitespace-nowrap shadow-lg transition-colors border ${filtros.canchas ? 'bg-emerald-500 text-emerald-950 border-emerald-500' : 'bg-zinc-900/90 backdrop-blur text-zinc-400 border-zinc-700'}`}
+            onClick={() => setFiltroActivo('todos')}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'todos' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🏟️ Predios
+            Todos
           </button>
           <button 
-            onClick={() => toggleFiltro('desafios')}
-            className={`flex-1 sm:flex-none px-3 py-2 rounded-full font-bold text-[11px] sm:text-xs text-center whitespace-nowrap shadow-lg transition-colors border ${filtros.desafios ? 'bg-amber-500 text-amber-950 border-amber-500' : 'bg-zinc-900/90 backdrop-blur text-zinc-400 border-zinc-700'}`}
+            onClick={() => setFiltroActivo('canchas')}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🛡️ Desafíos
+            🏟️ Canchas / Predios
           </button>
           <button 
-            onClick={() => toggleFiltro('jugadores')}
-            className={`flex-1 sm:flex-none px-3 py-2 rounded-full font-bold text-[11px] sm:text-xs text-center whitespace-nowrap shadow-lg transition-colors border ${filtros.jugadores ? 'bg-blue-600 text-white border-blue-600' : 'bg-zinc-900/90 backdrop-blur text-zinc-400 border-zinc-700'}`}
+            onClick={() => setFiltroActivo('jugadores')}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🏃 Libres
+            🏃 Jugadores Libres
           </button>
         </div>
       </div>
@@ -338,7 +328,7 @@ export const MapaRadarUnificado: React.FC = () => {
                   onClick={() => navigate(`/reservar/${seleccionado.id}`)}
                   className="bg-emerald-500 text-zinc-950 py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(16,185,129,0.3)] flex justify-center items-center gap-2 active:scale-95 transition"
                 >
-                  <Clock className="w-4 h-4" /> Ver Horarios
+                  <Clock className="w-4 h-4" /> Ver canchas y reservar
                 </button>
               </div>
             </div>
@@ -383,7 +373,7 @@ export const MapaRadarUnificado: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button className="bg-zinc-800 text-white py-3.5 rounded-xl font-bold border border-zinc-700 flex justify-center items-center gap-2 hover:border-blue-500 hover:text-blue-500 active:bg-zinc-700 transition">
-                  <MessageCircle className="w-4 h-4" /> Invitar a Hoy
+                  <User className="w-4 h-4" /> Ver perfil
                 </button>
                 <button 
                   onClick={() => {

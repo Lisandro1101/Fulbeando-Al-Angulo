@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useLocation } from 'react-router-dom'
 import { CheckCircle2, FileImage, Loader2, Upload, X } from 'lucide-react'
 import type { Predio, Turno } from '@/domain'
 import { MAX_BYTES_COMPROBANTE, MINUTOS_BLOQUEO_TEMPORAL, canchasDe, turnoId } from '@/domain'
@@ -24,6 +24,8 @@ type Vista = 'eligiendo' | 'subiendo' | 'esperando'
 export default function CargaDeSena() {
   const { predioId } = useParams<{ predioId: string }>()
   const sesion = useSesion()
+  const location = useLocation()
+  const contextState = location.state as { matchId?: number, teamName?: string } | undefined
 
   const [predio, setPredio] = useState<Predio | null>(null)
   const [cargandoPredio, setCargandoPredio] = useState(true)
@@ -148,6 +150,7 @@ export default function CargaDeSena() {
           mimeType: subida.mimeType,
           sizeBytes: subida.sizeBytes,
         },
+        partidoId: contextState?.matchId,
       })
 
       const fresco = await obtenerTurno(creado)
@@ -276,6 +279,11 @@ export default function CargaDeSena() {
   return (
     <div className="h-full bg-canvas pb-safe">
       <NavegacionHeader />
+      {contextState?.teamName && (
+        <div className="bg-amber-500/10 text-amber-500 font-bold text-sm px-4 py-3 border-b border-amber-500/20 text-center animate-pulse">
+          ⚽ Reservando turno para el partido de <span className="text-white">{contextState.teamName}</span>
+        </div>
+      )}
       <Pantalla
         titulo="Cargar seña"
         subtitulo={`${predio.nombre} · ${predio.barrio}`}

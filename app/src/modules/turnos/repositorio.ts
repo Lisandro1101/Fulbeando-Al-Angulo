@@ -333,6 +333,7 @@ export interface SolicitarTurnoParams {
   geo: ReturnType<typeof aGeoIndex>
   organizador: { uid: string; nombre: string; telefono: string | null }
   comprobante: { storagePath: string; mimeType: string; sizeBytes: number }
+  partidoId?: number | null
 }
 
 /**
@@ -375,6 +376,7 @@ export const solicitarTurno = async (params: SolicitarTurnoParams): Promise<stri
       expiracionNotificada: false,
       canceladoPor: null,
       geo: params.geo,
+      partidoId: params.partidoId ?? null,
       ...auditoriaInicial(),
     }
 
