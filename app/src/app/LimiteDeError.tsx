@@ -21,7 +21,7 @@ export class LimiteDeError extends Component<{ children: ReactNode }, Estado> {
     if (!this.state.error) return this.props.children
 
     return (
-      <div className="grid min-h-full place-items-center bg-canvas px-4">
+      <div className="grid h-full place-items-center bg-canvas px-4">
         <div className="surface max-w-md text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-urgent" />
           <h1 className="mt-3 text-lg font-bold text-ink">Algo salio mal</h1>

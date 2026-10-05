@@ -93,7 +93,7 @@ export default function Landing() {
   }, [predios])
 
   return (
-    <div className="min-h-full bg-canvas pb-safe">
+    <div className="h-full bg-canvas pb-safe">
       <NavegacionHeader />
 
       <main className="mx-auto w-full space-y-5 px-4 py-6">

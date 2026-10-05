@@ -13,7 +13,7 @@ export default function AlAnguloHome() {
   const [showRadarCard, setShowRadarCard] = useState(false);
 
   if (cargando) {
-    return <div className="flex h-screen items-center justify-center bg-pitch-900 text-neon-green">Cargando la cancha...</div>;
+    return <div className="flex h-full items-center justify-center bg-pitch-900 text-neon-green">Cargando la cancha...</div>;
   }
 
   return (

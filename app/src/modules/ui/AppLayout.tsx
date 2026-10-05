@@ -6,7 +6,7 @@ import React from 'react';
  */
 export const AppLayout = ({ children, showAds = true }: { children: React.ReactNode, showAds: boolean }) => {
   return (
-    <div className="flex flex-col h-screen bg-pitch-900 text-white font-sans overflow-hidden">
+    <div className="flex flex-col h-full bg-pitch-900 text-white font-sans overflow-hidden">
       
       {/* Contenido Principal */}
       <main className="flex-1 overflow-y-auto pb-safe-bottom scroll-smooth">

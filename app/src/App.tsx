@@ -15,7 +15,7 @@ function Onboarding({ usuarioUid }: { usuarioUid: string }) {
   }
 
   return (
-    <div className="grid h-screen place-items-center bg-canvas px-4 pb-safe">
+    <div className="grid h-full place-items-center bg-canvas px-4 pb-safe">
       <div className="surface w-full max-w-sm space-y-6 p-6 text-center">
         <div>
           <h1 className="text-xl font-bold text-ink">¡Bienvenido a Fulbeando!</h1>
@@ -59,7 +59,7 @@ export default function App() {
 
   // Sin configuracion de Firebase no se puede seguir: se explica que falta.
   const pantalla = sesion.error ? (
-    <div className="grid min-h-full place-items-center bg-canvas px-4">
+    <div className="grid h-full place-items-center bg-canvas px-4">
       <div className="surface max-w-md text-center">
         <AlertTriangle className="mx-auto h-8 w-8 text-urgent" />
         <h1 className="mt-3 text-lg font-bold text-ink">No pudimos iniciar Fulbeando</h1>
@@ -67,7 +67,7 @@ export default function App() {
       </div>
     </div>
   ) : sesion.cargando ? (
-    <div className="grid min-h-full place-items-center bg-canvas">
+    <div className="grid h-full place-items-center bg-canvas">
       <div className="flex flex-col items-center gap-3">
         <span className="h-10 w-10 animate-radar-pulse rounded-full bg-pitch" />
         <p className="text-sm text-ink-muted">Cargando Fulbeando...</p>

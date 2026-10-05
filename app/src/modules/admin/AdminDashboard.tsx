@@ -13,7 +13,7 @@ export const AdminDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#05080E] text-white font-sans flex flex-col md:flex-row">
+    <div className="h-full bg-[#05080E] text-white font-sans flex flex-col md:flex-row">
       
       {/* Sidebar B2B */}
       <aside className="w-full md:w-64 bg-pitch-900 border-r border-pitch-700 p-6 flex flex-col">

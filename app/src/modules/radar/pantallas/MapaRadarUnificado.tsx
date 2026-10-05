@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, MessageCircle, X, Search, Calendar, Phone, Clock, Map as MapIcon, User, Shield } from 'lucide-react';
+import { UserPlus, MessageCircle, X, Search, Calendar, Phone, Clock, Map as MapIcon, User, Shield, Target } from 'lucide-react';
 import { onMapMoveDebounced } from '../radarService'; // Asumiendo que reutilizamos la logica de debounce
 import { listarPrediosPublicos } from '@/modules/predios/repositorio';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { canchasDe } from '@/domain';
+import { useGeolocation } from '@/hooks/useGeolocation';
 
 // ==========================================
 // ICONOS PERSONALIZADOS
@@ -49,6 +50,16 @@ function MapEventsListener({ onMove }: { onMove: (lat: number, lng: number, radi
       onMove(center.lat, center.lng, radiusKm);
     }
   });
+  return null;
+}
+
+function FlyToLocation({ lat, lng }: { lat: number | null, lng: number | null }) {
+  const map = useMapEvents({});
+  useEffect(() => {
+    if (lat && lng) {
+      map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+    }
+  }, [lat, lng, map]);
   return null;
 }
 
@@ -108,8 +119,10 @@ export const MapaRadarUnificado: React.FC = () => {
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
 
   const [toastMessage, setToastMessage] = useState('');
+  
+  const { location: geoLoc, requestLocation } = useGeolocation();
 
-  const mapCenter = { lat: -34.9221, lng: -58.3842 }; 
+  const mapCenter = { lat: geoLoc.latitude || -34.9221, lng: geoLoc.longitude || -58.3842 };
 
   // CARGA DE DATOS
   useEffect(() => {
@@ -185,7 +198,7 @@ export const MapaRadarUnificado: React.FC = () => {
   }, [entidades, filtros]);
 
   return (
-    <div className="h-screen w-full bg-zinc-950 relative font-sans overflow-hidden">
+    <div className="h-full w-full bg-zinc-950 relative font-sans overflow-hidden">
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -208,6 +221,7 @@ export const MapaRadarUnificado: React.FC = () => {
             className="mapa-oscuro-filtro"
           />
           <MapEventsListener onMove={handleMapMove} />
+          {geoLoc.latitude && geoLoc.longitude && <FlyToLocation lat={geoLoc.latitude} lng={geoLoc.longitude} />}
 
           {entidadesVisibles.map(entidad => (
             <Marker 
@@ -250,9 +264,19 @@ export const MapaRadarUnificado: React.FC = () => {
 
       {/* FAB - Lanzar Desafío (Sólo visible si no hay nada seleccionado para no molestar) */}
       {!seleccionado && (
-        <button onClick={() => navigate('/partidos')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
-          <Search className="w-6 h-6" />
-        </button>
+        <>
+          <button 
+            onClick={requestLocation} 
+            className="absolute bottom-40 right-4 bg-zinc-800 text-blue-500 p-3 rounded-full shadow-lg z-10 active:scale-95 transition-transform border border-zinc-700"
+            title="Mi Ubicación"
+          >
+            <Target className="w-6 h-6" />
+          </button>
+          
+          <button onClick={() => navigate('/partidos')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
+            <Search className="w-6 h-6" />
+          </button>
+        </>
       )}
 
       <MenuNavegacion />

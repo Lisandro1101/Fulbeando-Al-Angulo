@@ -22,7 +22,7 @@ export default function Ajustes() {
 
   if (sesion.user === null) {
     return (
-      <div className="min-h-full bg-canvas pb-safe">
+      <div className="h-full bg-canvas pb-safe">
         <NavegacionHeader />
         <Pantalla titulo="Ajustes" subtitulo="Datos personales y disponibilidad para jugar.">
           <div className="space-y-4">
@@ -37,7 +37,7 @@ export default function Ajustes() {
 
   if (usuario === null) {
     return (
-      <div className="min-h-full bg-canvas pb-safe">
+      <div className="h-full bg-canvas pb-safe">
         <NavegacionHeader />
         <Pantalla titulo="Ajustes">
           <p className="surface text-sm text-ink-muted">Cargando tu perfil...</p>
@@ -47,7 +47,7 @@ export default function Ajustes() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas pb-safe">
+    <div className="flex h-full flex-col overflow-hidden bg-canvas pb-safe">
       <div className="shrink-0">
         <NavegacionHeader />
       </div>

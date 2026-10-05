@@ -274,7 +274,7 @@ export default function CargaDeSena() {
   const listoParaEnviar = seleccion !== null && archivo !== null && sesion.user !== null
 
   return (
-    <div className="min-h-full bg-canvas pb-safe">
+    <div className="h-full bg-canvas pb-safe">
       <NavegacionHeader />
       <Pantalla
         titulo="Cargar seña"

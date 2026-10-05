@@ -143,7 +143,7 @@ export default function DashboardDueno() {
   const actor = sesion.actor!
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas pb-safe">
+    <div className="flex h-full flex-col overflow-hidden bg-canvas pb-safe">
       <div className="shrink-0">
         <NavegacionHeader />
       </div>

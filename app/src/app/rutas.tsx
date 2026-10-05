@@ -24,7 +24,7 @@ import { MapaRadarUnificado } from '@/modules/radar/pantallas/MapaRadarUnificado
 const ProtectedRoute = ({ children, allowedRoles }: { children: JSX.Element, allowedRoles?: string[] }) => {
   const { usuario, cargando } = useSesion();
   
-  if (cargando) return <div className="bg-zinc-950 h-screen w-screen flex justify-center items-center text-emerald-500">Cargando...</div>;
+  if (cargando) return <div className="bg-zinc-950 h-full w-screen flex justify-center items-center text-emerald-500">Cargando...</div>;
   if (!usuario) return <Navigate to="/login" replace />;
   
   if (allowedRoles && !allowedRoles.includes(usuario.rol || 'jugador')) {

@@ -23,6 +23,8 @@ export const Screen1Login = () => {
 
   React.useEffect(() => {
     if (sesion.usuario && !sesion.cargando) {
+      // Intentar pedir permiso automáticamente si el usuario ya está logueado
+      requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked', e));
       navigate('/radar');
     }
   }, [sesion.usuario, sesion.cargando, navigate]);
@@ -75,7 +77,7 @@ export const Screen1Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col justify-center items-center p-6 text-white font-sans">
+    <div className="h-full bg-zinc-950 flex flex-col justify-center items-center p-6 text-white font-sans">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-black italic tracking-tighter">AL ÁNGULO</h1>
@@ -130,7 +132,7 @@ export const Screen1Login = () => {
 export const Screen2RoleSelector = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col justify-center font-sans">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col justify-center font-sans">
       <h2 className="text-2xl font-black text-white text-center mb-8">¿Cómo vas a jugar hoy?</h2>
       
       <div className="space-y-4">
@@ -207,7 +209,7 @@ export const Screen3PlayerOnboarding = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe">
       <h2 className="text-2xl font-black mt-8">Creá tu Carta de Jugador</h2>
       <p className="text-zinc-400 text-sm mt-2 mb-8">Revisá y completá tus datos base. Arrancás con Media 50%.</p>
 
@@ -337,7 +339,7 @@ export const Screen4WelcomeCard = () => {
   const { isInstallable, promptInstall } = useInstallPrompt();
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
         
         <div className="absolute top-6 right-6 flex gap-2 z-10">
@@ -347,7 +349,10 @@ export const Screen4WelcomeCard = () => {
             <Bell className="w-4 h-4" /> Alertas
           </button>
           {isInstallable && (
-            <button onClick={promptInstall} className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
+            <button onClick={() => {
+              promptInstall();
+              if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked on install', e));
+            }} className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
               <Download className="w-4 h-4" /> Instalar
             </button>
           )}
@@ -492,7 +497,7 @@ export const Screen6LaunchChallenge = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto p-6 pb-28">
         {toastMessage && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm z-[9999] animate-bounce shadow-xl border-2 border-zinc-950">
@@ -751,10 +756,10 @@ export const Screen7MyTeam = () => {
     setMostrarInvitar(false);
   };
 
-  if (!equipo) return <div className="h-screen bg-zinc-950 flex justify-center items-center text-white">Cargando...</div>;
+  if (!equipo) return <div className="h-full bg-zinc-950 flex justify-center items-center text-white">Cargando...</div>;
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto pb-28">
         {/* Toast Notification */}
         {toastMessage && (
@@ -1060,7 +1065,7 @@ export const Screen7MyTeam = () => {
 export const Screen8VenueRegistration = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col font-sans text-white">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white">
       <h2 className="text-2xl font-black mt-8">Da de alta tu Complejo</h2>
       <p className="text-zinc-400 text-sm mt-2 mb-8">Completá los datos para aparecer en el radar de los jugadores.</p>
 
@@ -1092,7 +1097,7 @@ export const Screen8VenueRegistration = () => {
 export const Screen9VenueSubscription = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 flex flex-col items-center justify-center font-sans text-white text-center">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col items-center justify-center font-sans text-white text-center">
       <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
         <Building className="w-10 h-10 text-emerald-500" />
       </div>
@@ -1120,7 +1125,7 @@ export const Screen9VenueSubscription = () => {
 // ==========================================
 export const Screen10VenueDashboard = () => {
   return (
-    <div className="min-h-screen bg-zinc-950 p-6 font-sans text-white">
+    <div className="h-full bg-zinc-950 p-6 font-sans text-white">
       <header className="flex justify-between items-center mb-8 mt-4">
         <div>
           <h1 className="text-2xl font-black">El Templo 🏟️</h1>
