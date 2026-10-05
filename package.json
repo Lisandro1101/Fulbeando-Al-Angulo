@@ -8,7 +8,7 @@
     "dev:emulators": "firebase emulators:start",
     "seed:wait": "wait-on tcp:127.0.0.1:8080 && tsx scripts/seed-emuladores.ts",
     "dev:app": "npm run dev --prefix app",
-    "deploy:hosting": "npm run build --prefix app && firebase hosting:channel:deploy pre-produccion"
+    "deploy:hosting": "cd app && npm run build && cd .. && firebase deploy --only hosting"
   },
   "devDependencies": {
     "firebase-admin": "^11.8.0"

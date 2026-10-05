@@ -19,8 +19,8 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [2/3] Desplegando en Firebase Hosting (Pre-produccion)...
-call firebase hosting:channel:deploy pre-produccion
+echo [2/3] Desplegando en Firebase Hosting...
+cd app && call npm run build && cd .. && call firebase deploy --only hosting
 if %errorlevel% neq 0 (
     echo [ERROR] Fallo el despliegue en Firebase.
     pause

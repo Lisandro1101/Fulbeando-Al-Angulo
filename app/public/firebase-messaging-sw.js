@@ -2,6 +2,14 @@ importScripts('/__/firebase/9.1.3/firebase-app-compat.js');
 importScripts('/__/firebase/9.1.3/firebase-messaging-compat.js');
 importScripts('/__/firebase/init.js');
 
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
 try {
   const messaging = firebase.messaging();
 
