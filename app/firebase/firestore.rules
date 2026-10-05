@@ -1,154 +1,331 @@
 rules_version = '2';
+
+/**
+ * Fulbeando - reglas de Firestore.
+ *
+ * Decisiones que vienen del PRD y no se negocian:
+ * - El comprobante NO es legible por el publico: vive en `comprobantes/{turnoId}`
+ *   y el turno solo expone `comprobantePendiente`.
+ * - No existe borrado fisico: `delete` esta prohibido en todas las colecciones
+ *   de negocio; la baja logica (`deletedAt` / `estado: 'inactivo'`).
+ * - Los turnos se crean solo desde la grilla que carga el dueno del predio.
+ * - La pertenencia a un predio se resuelve leyendo `predios/{id}.duenoId`.
+ */
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // -------------------------------------------------------------------------
-    // FUNCIONES COMUNES
-    // Fomentan la reusabilidad, seguridad estricta y bajo costo operativo
-    // -------------------------------------------------------------------------
-    function isAuthenticated() {
+
+    // ================================================================== //
+    // Helpers de Autenticacion y Roles                                   //
+    // ================================================================== //
+    function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
     }
 
-    // Valida que el payload entrante tenga un tamaño razonable para evitar ataques de inyección masiva
-    function isPayloadSizeValid() {
-      // 10KB es un tamaño muy generoso para cualquier documento de este sistema
-      return request.resource.size < 10000; 
+    function isSuperadmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && getUserData().rol == 'superadmin';
     }
 
-    // -------------------------------------------------------------------------
-    // USERS (Ficha de jugador)
-    // -------------------------------------------------------------------------
-    match /users/{userId} {
-      // Lectura pública permitida para la Ficha/Carta, pero controlada.
-      // Los datos altamente sensibles (ej: email, teléfono, dirección) no deben estar aquí,
-      // deben estar en una subcolección o colección separada como /user_private/{userId}
-      allow read: if isAuthenticated(); 
-      
-      allow create, update: if isOwner(userId) 
-                            && isPayloadSizeValid()
-                            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['stats', 'rating']); // Protegemos las estadisticas para que no las auto-editen
-      allow delete: if false; // Solo administrable vía admin SDK / Functions
-
-      // Subcolección para datos verdaderamente privados
-      match /private_data/{docId} {
-        allow read, write: if isOwner(userId);
-      }
+    /** Dueno del predio indicado (o superadmin). */
+    function esDuenoDe(predioId) {
+      return isSignedIn()
+        && (
+          isSuperadmin()
+          || (
+            exists(/databases/$(database)/documents/predios/$(predioId))
+            && get(/databases/$(database)/documents/predios/$(predioId)).data.duenoUid == request.auth.uid
+          )
+        );
     }
 
-    // -------------------------------------------------------------------------
-    // TEAMS
-    // -------------------------------------------------------------------------
-    match /teams/{teamId} {
-      allow read: if isAuthenticated();
-      
-      // Creación: El creador es el capitán y debe incluir entre 5 y 22 miembros en el array
-      allow create: if isAuthenticated() 
-                    && isPayloadSizeValid()
-                    && request.resource.data.captainId == request.auth.uid
-                    && request.resource.data.members.size() >= 5
-                    && request.resource.data.members.size() <= 22;
-                    
-      // Actualización: Solo el capitán actual puede editar, y no puede transferir la capitanía directamente (evita fraudes)
-      allow update: if isAuthenticated() 
-                    && resource.data.captainId == request.auth.uid
-                    && request.resource.data.captainId == resource.data.captainId
-                    && request.resource.data.members.size() >= 5
-                    && request.resource.data.members.size() <= 22;
-                    
-      allow delete: if false; 
-    }
+    // ------------------------------------------------------------------ //
+    // Usuarios                                                          //
+    // ------------------------------------------------------------------ //
+    match /usuarios/{uid} {
+      allow read: if isSignedIn();
 
-    // -------------------------------------------------------------------------
-    // CHALLENGES (El Radar)
-    // -------------------------------------------------------------------------
-    match /challenges/{challengeId} {
-      // Todos pueden ver los desafíos en el radar
-      allow read: if isAuthenticated();
-      
-      // Solo se puede crear un desafío a nombre propio (como capitán).
-      // En una arquitectura sin costo N+1, asumimos que se guarda `creatorId` (que debe coincidir con uid del capitan del equipo)
-      allow create: if isAuthenticated()
-                    && isPayloadSizeValid()
-                    && request.resource.data.creatorId == request.auth.uid;
-                    
-      // Solo el creador original lo modifica (ej: cancelar, cambiar hora)
-      allow update: if isAuthenticated()
-                    && resource.data.creatorId == request.auth.uid;
-                    
-      allow delete: if isAuthenticated()
-                    && resource.data.creatorId == request.auth.uid;
-    }
+      // Creacion propia desde Auth: rol jugador o invitado.
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'invitado')
+        && request.resource.data.estado == 'activo'
+        && request.resource.data.deletedAt == null;
 
-    // -------------------------------------------------------------------------
-    // MATCHES (Partidos y validación antifraude)
-    // -------------------------------------------------------------------------
-    match /matches/{matchId} {
-      allow read: if isAuthenticated();
-      
-      // Creación: Alguien (uno de los dos capitanes) lo crea al concretar el desafío
-      allow create: if isAuthenticated()
-                    && isPayloadSizeValid()
-                    && (request.resource.data.localCaptainId == request.auth.uid || request.resource.data.visitorCaptainId == request.auth.uid);
-                    
-      // Actualización: Los resultados son cargados por un capitán.
-      // EXTREMO AHORRO/SEGURIDAD: Prohibido modificar 'playerStats' desde el cliente.
-      // El cliente solo carga el payload { localScore, visitorScore, status: 'PENDING_VALIDATION' }.
-      // Una Cloud Function o un proceso backend validará y procesará las estadísticas definitivas 
-      // cuando el rival apruebe o pasen las 24hs, actualizando las fichas de los jugadores de a 1 sola vez.
-      allow update: if isAuthenticated()
-                    && (resource.data.localCaptainId == request.auth.uid || resource.data.visitorCaptainId == request.auth.uid)
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playerStats', 'matchConfirmedAt']); 
-                    
+      // El usuario puede alterar su propio rol solo si es 'invitado'.
+      allow update: if isSignedIn()
+        && (
+          isSuperadmin()
+          || (
+            request.auth.uid == uid
+            && (
+              request.resource.data.rol == resource.data.rol
+              || (resource.data.rol == 'invitado' && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'dueno_predio'))
+            )
+            && request.resource.data.estado == resource.data.estado
+            && request.resource.data.deletedAt == resource.data.deletedAt
+          )
+        );
+
       allow delete: if false;
     }
 
-    // -------------------------------------------------------------------------
-    // VENUES (Complejos y Canchas B2B)
-    // -------------------------------------------------------------------------
-    match /venues/{venueId} {
-      // Todo jugador puede leer la información pública de las canchas (para el radar)
-      allow read: if isAuthenticated();
-      
-      // Escritura bloqueada para jugadores normales.
-      // Solo se administra mediante Custom Claims de admin, o bien un dashboard externo B2B.
-      allow write: if isAuthenticated() 
-                   && (request.auth.token.admin == true || request.auth.token.venueOwnerId == venueId); 
+    // ------------------------------------------------------------------ //
+    // Solicitudes de dueno (autodesdeclaracion con verificacion)         //
+    // ------------------------------------------------------------------ //
+    match /solicitudes/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.revisadoPor == null
+        && request.resource.data.motivoRechazo == null;
+
+      // Solo el superadmin puede aprobar. El usuario solo actualiza si esta pendiente.
+      allow update: if isSuperadmin()
+        || (
+          request.auth.uid == uid
+          && request.resource.data.estado == 'pendiente'
+          && resource.data.estado != 'aprobada'
+        );
+
+      allow delete: if false;
     }
 
-    // -------------------------------------------------------------------------
-    // REVIEWS (Sistema de Reputación Cruzada)
-    // -------------------------------------------------------------------------
+    // ------------------------------------------------------------------ //
+    // Predios y canchas                                                  //
+    // ------------------------------------------------------------------ //
+    match /predios/{predioId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.duenoUid == request.auth.uid
+        && request.resource.data.verificado == false
+        && request.resource.data.estado == 'activo'
+        && request.resource.data.deletedAt == null;
+
+      allow update: if isSuperadmin()
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+          && getUserData().rol == 'dueno_predio'
+          && resource.data.duenoUid == request.auth.uid
+          && request.resource.data.verificado == resource.data.verificado
+          && request.resource.data.duenoUid == resource.data.duenoUid);
+
+      allow delete: if false;
+
+      match /canchas/{canchaId} {
+        allow read: if true;
+        allow create, update: if esDuenoDe(predioId)
+          && request.resource.data.predioId == predioId;
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Turnos                                                            //
+    // ------------------------------------------------------------------ //
+    match /turnos/{turnoId} {
+      allow get, list: if true;
+
+      // Alta de grilla: solo el dueno del predio, siempre en `disponible`.
+      allow create: if esDuenoDe(request.resource.data.predioId)
+        && request.resource.data.estado == 'disponible'
+        && request.resource.data.deletedAt == null;
+
+      allow update: if esDuenoDe(resource.data.predioId)
+        || (
+          isSignedIn()
+          && (
+            // Reservar (jugador)
+            (
+              resource.data.estado == 'disponible'
+              && resource.data.jugadorId == null
+              && request.resource.data.jugadorId == request.auth.uid
+              && request.resource.data.estado == 'bloqueado_temporal'
+              && request.resource.data.bloqueadoHasta != null
+              && request.resource.data.comprobantePendiente == true
+            )
+            // Cancelar propia reserva (jugador)
+            || (
+              resource.data.estado == 'confirmado'
+              && resource.data.jugadorId == request.auth.uid
+              && request.resource.data.estado == 'cancelado'
+            )
+            || (
+              resource.data.estado == 'bloqueado_temporal'
+              && resource.data.jugadorId == request.auth.uid
+              && request.resource.data.estado == 'cancelado'
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Comprobantes                                                       //
+    // ------------------------------------------------------------------ //
+    match /comprobantes/{turnoId} {
+      function turnoDelDocumento() {
+        return get(/databases/$(database)/documents/turnos/$(turnoId)).data;
+      }
+
+      allow read: if isSuperadmin()
+        || (isSignedIn() && resource.data.jugadorId == request.auth.uid)
+        || esDuenoDe(turnoDelDocumento().predioId);
+
+      allow create: if isSignedIn()
+        && request.resource.data.turnoId == turnoId
+        && request.resource.data.jugadorId == request.auth.uid
+        && request.resource.data.verificado == false
+        && request.resource.data.revisadoPor == null
+        && exists(/databases/$(database)/documents/turnos/$(turnoId));
+
+      allow update: if esDuenoDe(turnoDelDocumento().predioId) || isSuperadmin();
+
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------ //
+    // Alertas "Falta 1" y postulaciones                                 //
+    // ------------------------------------------------------------------ //
+    match /alertas/{alertaId} {
+      function turnoDeAlerta() {
+        return get(/databases/$(database)/documents/turnos/$(request.resource.data.turnoId)).data;
+      }
+
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.creadoPorUid == request.auth.uid
+        && request.resource.data.estado == 'activa'
+        && request.resource.data.confirmados == 0
+        && (
+          turnoDeAlerta().estado == 'confirmado'
+            && (
+              turnoDeAlerta().jugadorId == request.auth.uid
+              || esDuenoDe(request.resource.data.predioId)
+            )
+        );
+
+      allow update: if isSuperadmin()
+        || (
+          isSignedIn()
+          && resource.data.creadoPorUid == request.auth.uid
+          && request.resource.data.confirmados >= resource.data.confirmados
+          && request.resource.data.turnoId == resource.data.turnoId
+          && request.resource.data.fecha == resource.data.fecha
+          && request.resource.data.horaInicio == resource.data.horaInicio
+          && request.resource.data.cantidadRequeridos == resource.data.cantidadRequeridos
+          && request.resource.data.geo.prefijo == resource.data.geo.prefijo
+          && request.resource.data.geo.lat == resource.data.geo.lat
+          && request.resource.data.geo.lng == resource.data.geo.lng
+        );
+
+      allow delete: if false;
+
+      match /postulaciones/{uid} {
+        allow read: if isSignedIn();
+
+        allow create: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.estado == 'postulado';
+
+        allow update: if isSuperadmin()
+          || (
+            isSignedIn() && request.auth.uid == uid
+            && resource.data.uid == uid
+            && resource.data.estado != 'confirmado'
+            && (
+              request.resource.data.estado == 'retirado'
+              || request.resource.data.estado == 'postulado'
+            )
+            && request.resource.data.uid == resource.data.uid
+            && request.resource.data.nombre == resource.data.nombre
+          )
+          || (
+            isSignedIn()
+            && get(/databases/$(database)/documents/alertas/$(alertaId)).data.creadoPorUid == request.auth.uid
+            && request.resource.data.uid == resource.data.uid
+          );
+
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    // Reportes (moderacion del superadmin)                              //
+    // ------------------------------------------------------------------ //
+    match /reportes/{reporteId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reportanteUid == request.auth.uid
+        && request.resource.data.estado == 'abierto'
+        && request.resource.data.resueltoPor == null;
+
+      allow read: if isSuperadmin()
+        || (isSignedIn() && resource.data.reportanteUid == request.auth.uid);
+
+      allow update: if isSuperadmin();
+
+      allow delete: if false;
+    }
+
+    // ================================================================== //
+    // INTEGRACIÓN "AL ÁNGULO" (Módulos Sociales y Gamificación)
+    // ================================================================== //
+    
+    function isPayloadSizeValid() {
+      return request.resource.size < 10000; 
+    }
+
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() 
+                    && isPayloadSizeValid()
+                    && request.resource.data.captainId == request.auth.uid
+                    && request.resource.data.members.size() >= 1
+                    && request.resource.data.members.size() <= 22;
+      allow update: if isSignedIn() 
+                    && resource.data.captainId == request.auth.uid
+                    && request.resource.data.captainId == resource.data.captainId
+                    && request.resource.data.members.size() >= 1
+                    && request.resource.data.members.size() <= 22;
+      allow delete: if false; 
+    }
+
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isPayloadSizeValid() && request.resource.data.creatorId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+    }
+
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isPayloadSizeValid() 
+                    && (request.resource.data.localCaptainId == request.auth.uid || request.resource.data.visitorCaptainId == request.auth.uid);
+      allow update: if isSignedIn() 
+                    && (resource.data.localCaptainId == request.auth.uid || resource.data.visitorCaptainId == request.auth.uid)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['playerStats', 'matchConfirmedAt']); 
+      allow delete: if false;
+    }
+
     match /reviews/{reviewId} {
-      // Lectura bajo demanda (paginada desde el cliente con limit)
-      allow read: if isAuthenticated();
-      
-      // REGLA ANTIFRAUDE ESTRICTA:
-      // 1. Quien sube la reseña debe ser él mismo.
-      // 2. IDEMPOTENCIA: El ID del documento DEBE ser la concatenación del matchId y el userId 
-      //    (garantiza matemáticamente que nadie califique dos veces el mismo partido).
-      // 3. Validación Cruzada: Leemos el doc de Matches para asegurar que el estado sea 'confirmed'.
-      allow create: if isAuthenticated()
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
                     && isPayloadSizeValid()
                     && request.resource.data.reviewerUserId == request.auth.uid
                     && reviewId == request.resource.data.matchId + '_' + request.auth.uid
                     && get(/databases/$(database)/documents/matches/$(request.resource.data.matchId)).data.status == 'confirmed';
-                    
-      // Las calificaciones son inmutables para los usuarios comunes (solo el B2B Admin puede borrarlas en caso de disputas)
       allow update, delete: if false; 
     }
 
-    // -------------------------------------------------------------------------
-    // SUPER ADMIN / DASHBOARD (Métricas y Moderación)
-    // -------------------------------------------------------------------------
     match /system_metrics/{docId} {
-      // Bloqueo total a usuarios normales. 
-      // Solo el equipo fundador (Admin Custom Claim) puede leer estas métricas estratégicas.
-      allow read, write: if isAuthenticated() && request.auth.token.admin == true;
+      allow read, write: if isSuperadmin();
     }
   }
 }

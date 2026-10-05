@@ -10,9 +10,9 @@ import {
   Screen6LaunchChallenge,
   Screen7MyTeam,
   Screen8VenueRegistration,
-  Screen9VenueSubscription,
-  Screen10VenueDashboard
+  Screen9VenueSubscription
 } from '@/modules/ui/Screens';
+import DashboardDueno from '@/modules/predios/pantallas/DashboardDueno';
 
 // Mapa Radar Unificado (único mapa en toda la aplicación)
 import { MapaRadarUnificado } from '@/modules/radar/pantallas/MapaRadarUnificado';
@@ -54,7 +54,7 @@ export const rutas: RouteObject[] = [
   // Flujo 3: Dueño de Predio
   { path: '/venue-registration', element: <ProtectedRoute allowedRoles={['dueno_predio', 'pending_venue']}><Screen8VenueRegistration /></ProtectedRoute> },
   { path: '/venue-subscription', element: <ProtectedRoute allowedRoles={['dueno_predio', 'pending_venue']}><Screen9VenueSubscription /></ProtectedRoute> },
-  { path: '/venue-dashboard', element: <ProtectedRoute allowedRoles={['dueno_predio']}><Screen10VenueDashboard /></ProtectedRoute> },
+  { path: '/venue-dashboard', element: <ProtectedRoute allowedRoles={['dueno_predio']}><DashboardDueno /></ProtectedRoute> },
   
   // Catch all (404)
   { path: '*', element: <Navigate to="/radar" replace /> },

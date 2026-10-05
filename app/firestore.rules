@@ -38,7 +38,7 @@ service cloud.firestore {
           isSuperadmin()
           || (
             exists(/databases/$(database)/documents/predios/$(predioId))
-            && get(/databases/$(database)/documents/predios/$(predioId)).data.duenoId == request.auth.uid
+            && get(/databases/$(database)/documents/predios/$(predioId)).data.duenoUid == request.auth.uid
           )
         );
     }
@@ -49,19 +49,22 @@ service cloud.firestore {
     match /usuarios/{uid} {
       allow read: if isSignedIn();
 
-      // Creacion propia desde Auth: rol jugador.
+      // Creacion propia desde Auth: rol jugador o invitado.
       allow create: if isSignedIn() && request.auth.uid == uid
-        && request.resource.data.rol == 'jugador'
+        && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'invitado')
         && request.resource.data.estado == 'activo'
         && request.resource.data.deletedAt == null;
 
-      // El usuario no puede alterar su propio rol, ni estado.
+      // El usuario puede alterar su propio rol solo si es 'invitado'.
       allow update: if isSignedIn()
         && (
           isSuperadmin()
           || (
             request.auth.uid == uid
-            && request.resource.data.rol == resource.data.rol
+            && (
+              request.resource.data.rol == resource.data.rol
+              || (resource.data.rol == 'invitado' && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'dueno_predio'))
+            )
             && request.resource.data.estado == resource.data.estado
             && request.resource.data.deletedAt == resource.data.deletedAt
           )
@@ -100,7 +103,7 @@ service cloud.firestore {
       allow read: if true;
 
       allow create: if isSignedIn()
-        && request.resource.data.duenoId == request.auth.uid
+        && request.resource.data.duenoUid == request.auth.uid
         && request.resource.data.verificado == false
         && request.resource.data.estado == 'activo'
         && request.resource.data.deletedAt == null;
@@ -108,10 +111,10 @@ service cloud.firestore {
       allow update: if isSuperadmin()
         || (isSignedIn()
           && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-          && getUserData().rol == 'dueno'
-          && resource.data.duenoId == request.auth.uid
+          && getUserData().rol == 'dueno_predio'
+          && resource.data.duenoUid == request.auth.uid
           && request.resource.data.verificado == resource.data.verificado
-          && request.resource.data.duenoId == resource.data.duenoId);
+          && request.resource.data.duenoUid == resource.data.duenoUid);
 
       allow delete: if false;
 

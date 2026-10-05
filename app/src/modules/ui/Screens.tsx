@@ -6,6 +6,7 @@ import { ingresoConGoogle, ingresoConEmail, registroConEmail, cerrarSesion } fro
 import { useSesion } from '@/modules/auth/useSesion';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
+import { useGeolocation } from '@/hooks/useGeolocation';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -135,11 +136,11 @@ export const Screen2RoleSelector = () => {
   const [cargando, setCargando] = useState(false);
 
   const elegirRol = async (rol: 'jugador' | 'dueno_predio', path: string) => {
-    if (!sesion.usuario) return;
+    if (!sesion.user) return;
     setCargando(true);
     try {
       const { cambiarRol } = await import('@/modules/usuarios/repositorio');
-      await cambiarRol(sesion.usuario.uid, rol);
+      await cambiarRol(sesion.user.uid, rol);
       window.location.href = path; // Redirige y fuerza recarga para actualizar la sesión
     } catch (err) {
       console.error(err);
@@ -1093,30 +1094,104 @@ export const Screen7MyTeam = () => {
 // ==========================================
 // PANTALLA 8: Registro de Complejo
 // ==========================================
+// PANTALLA 8: Alta de Predio
+// ==========================================
 export const Screen8VenueRegistration = () => {
   const navigate = useNavigate();
+  const sesion = useSesion();
+  const [cargando, setCargando] = useState(false);
+  const { location, requestLocation } = useGeolocation();
+
+  React.useEffect(() => {
+    requestLocation();
+  }, [requestLocation]);
+
+  const [formData, setFormData] = useState({
+    nombre: '',
+    direccion: '',
+    barrio: 'Centro',
+    ciudad: 'Buenos Aires',
+    telefono: ''
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async () => {
+    if (!sesion.user) return;
+    setCargando(true);
+    try {
+      const { crearPredio } = await import('@/modules/predios/repositorio');
+      await crearPredio({
+        nombre: formData.nombre || 'Mi Complejo',
+        direccion: formData.direccion || 'Av. Siempre Viva 123',
+        barrio: formData.barrio,
+        ciudad: formData.ciudad,
+        telefono: formData.telefono || '1122334455',
+        cobro: { cbu: '', alias: '', titular: '' },
+        duenoUid: sesion.user.uid,
+        punto: { 
+          lat: location.latitude ?? -34.6037, 
+          lng: location.longitude ?? -58.3816 
+        }
+      });
+      navigate('/venue-subscription');
+    } catch (err) {
+      console.error('Error creando predio:', err);
+      setCargando(false);
+    }
+  };
+
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe overflow-y-auto">
       <h2 className="text-2xl font-black mt-8">Da de alta tu Complejo</h2>
       <p className="text-zinc-400 text-sm mt-2 mb-8">Completá los datos para aparecer en el radar de los jugadores.</p>
 
       <div className="space-y-6 flex-1">
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Nombre del Predio</label>
-          <input type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <input name="nombre" value={formData.nombre} onChange={handleChange} type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
         </div>
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ubicación</label>
-          <input type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Dirección</label>
+          <input name="direccion" value={formData.direccion} onChange={handleChange} type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-zinc-500 cursor-pointer hover:border-emerald-500 transition">
-          <UploadCloud className="w-8 h-8 mb-2" />
-          <span className="text-sm font-bold">Subir foto de la cancha principal</span>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Barrio / Localidad</label>
+            <input name="barrio" value={formData.barrio} onChange={handleChange} type="text" placeholder="Ej: Palermo" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ciudad</label>
+            <input name="ciudad" value={formData.ciudad} onChange={handleChange} type="text" placeholder="Ej: CABA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ubicación GPS</label>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
+            <div className="text-sm">
+              {location.loading ? (
+                <span className="text-amber-500 font-bold">Obteniendo ubicación...</span>
+              ) : location.latitude && location.longitude ? (
+                <span className="text-emerald-500 font-bold">📍 Coordenadas capturadas</span>
+              ) : (
+                <span className="text-zinc-500">No se detectó ubicación</span>
+              )}
+            </div>
+            <button onClick={requestLocation} disabled={location.loading} className="text-xs bg-zinc-800 text-zinc-300 font-bold px-3 py-1.5 rounded-lg">
+              Actualizar
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Teléfono de Contacto</label>
+          <input name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="Ej: 11 1234 5678" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
         </div>
       </div>
 
-      <button onClick={() => navigate('/venue-subscription')} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-6">
-        CONTINUAR
+      <button onClick={handleSubmit} disabled={cargando} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-6 disabled:opacity-50">
+        {cargando ? 'CREANDO...' : 'CONTINUAR'}
       </button>
     </div>
   );

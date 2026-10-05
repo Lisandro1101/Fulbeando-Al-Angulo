@@ -50,7 +50,8 @@ export const crearUsuario = async (alta: AltaUsuario): Promise<void> => {
 
 export const obtenerUsuario = async (uid: string): Promise<Usuario | null> => {
   const snap = await getDoc(ref(uid))
-  return snap.exists() ? (snap.data() as Usuario) : null
+  if (!snap.exists()) return null
+  return { ...snap.data(), uid } as Usuario
 }
 
 /**
@@ -67,6 +68,7 @@ export const asegurarUsuario = async (
 
   const batch = writeBatch(db)
   batch.set(ref(uid), {
+    uid,
     ...perfil,
     rol: rolPorDefecto,
     telefono: null,
