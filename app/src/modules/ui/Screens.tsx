@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Building, Share2, UploadCloud, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, Bell } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
-import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
+import { ingresoConGoogle, ingresoConEmail, registroConEmail, cerrarSesion } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
@@ -131,13 +131,33 @@ export const Screen1Login = () => {
 // ==========================================
 export const Screen2RoleSelector = () => {
   const navigate = useNavigate();
+  const sesion = useSesion();
+  const [cargando, setCargando] = useState(false);
+
+  const elegirRol = async (rol: 'jugador' | 'dueno_predio', path: string) => {
+    if (!sesion.usuario) return;
+    setCargando(true);
+    try {
+      const { cambiarRol } = await import('@/modules/usuarios/repositorio');
+      await cambiarRol(sesion.usuario.uid, rol);
+      window.location.href = path; // Redirige y fuerza recarga para actualizar la sesión
+    } catch (err) {
+      console.error(err);
+      setCargando(false);
+    }
+  };
+
   return (
     <div className="h-full bg-zinc-950 p-6 flex flex-col justify-center font-sans">
       <h2 className="text-2xl font-black text-white text-center mb-8">¿Cómo vas a jugar hoy?</h2>
       
       <div className="space-y-4">
         {/* Card Jugador */}
-        <button onClick={() => navigate('/onboarding-player')} className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left">
+        <button 
+          onClick={() => elegirRol('jugador', '/onboarding-player')} 
+          disabled={cargando}
+          className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left disabled:opacity-50"
+        >
           <div className="bg-zinc-800 p-3 rounded-full text-blue-500 group-hover:bg-blue-500 group-hover:text-zinc-950 transition">
             <User className="w-6 h-6" />
           </div>
@@ -148,7 +168,11 @@ export const Screen2RoleSelector = () => {
         </button>
 
         {/* Card Dueño */}
-        <button onClick={() => navigate('/venue-registration')} className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left">
+        <button 
+          onClick={() => elegirRol('dueno_predio', '/venue-registration')} 
+          disabled={cargando}
+          className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left disabled:opacity-50"
+        >
           <div className="bg-zinc-800 p-3 rounded-full text-emerald-500 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition">
             <Building className="w-6 h-6" />
           </div>
@@ -449,8 +473,14 @@ export const Screen4WelcomeCard = () => {
              }} className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 rounded-xl font-bold mb-4 active:scale-95 transition-transform">
                <Bell className="w-5 h-5" /> Activar Alertas Push
              </button>
-
-             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
+             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform mb-4">Guardar Cambios</button>
+             
+             <button onClick={async () => {
+               await cerrarSesion();
+               navigate('/login');
+             }} className="w-full border border-red-500/50 text-red-500 font-bold py-3 rounded-xl active:scale-95 transition-transform hover:bg-red-500/10">
+               Cerrar Sesión
+             </button>
           </div>
         </div>
       )}

@@ -6,12 +6,16 @@ import { UserPlus, MessageCircle, X, Search, Calendar, Phone, Clock, Map as MapI
 import { onMapMoveDebounced } from '../radarService'; // Asumiendo que reutilizamos la logica de debounce
 import { listarPrediosPublicos } from '@/modules/predios/repositorio';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
+import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe } from '@/domain';
 import { useGeolocation } from '@/hooks/useGeolocation';
 
-// ==========================================
-// ICONOS PERSONALIZADOS
-// ==========================================
+const LOCALIDADES_FALLBACK = [
+  { nombre: 'CABA', lat: -34.6037, lng: -58.3816 },
+  { nombre: 'La Plata', lat: -34.9221, lng: -58.3842 },
+  { nombre: 'Córdoba', lat: -31.4201, lng: -64.1888 },
+  { nombre: 'Rosario', lat: -32.9442, lng: -60.6505 },
+];
 
 // 🟢 Pin Verde Esmeralda: Predios/Canchas
 const iconoPredio = L.divIcon({
@@ -120,9 +124,15 @@ export const MapaRadarUnificado: React.FC = () => {
 
   const [toastMessage, setToastMessage] = useState('');
   
-  const { location: geoLoc, requestLocation } = useGeolocation();
+  const { usuario } = useSesion();
+  const { location: geoLoc, requestLocation, setLocation } = useGeolocation(
+    usuario?.geo ? { lat: usuario.geo.lat, lng: usuario.geo.lng } : undefined
+  );
 
-  const mapCenter = { lat: geoLoc.latitude || -34.9221, lng: geoLoc.longitude || -58.3842 };
+  const fallbackLat = usuario?.geo?.lat ?? -34.6037;
+  const fallbackLng = usuario?.geo?.lng ?? -58.3816;
+
+  const mapCenter = { lat: geoLoc.latitude || fallbackLat, lng: geoLoc.longitude || fallbackLng };
 
   // CARGA DE DATOS
   useEffect(() => {
@@ -261,6 +271,26 @@ export const MapaRadarUnificado: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* SELECTOR DE LOCALIDAD FALLBACK (Opcional, ya que ahora usa la ciudad del perfil, pero se mantiene como alternativa si quieren moverse) */}
+      {geoLoc.isFallback && !usuario?.geo && (
+        <div className="absolute top-20 w-full px-4 z-10 pointer-events-none">
+          <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 rounded-xl p-3 shadow-xl pointer-events-auto">
+            <p className="text-xs text-amber-500 font-bold mb-2">📍 Ubicación denegada. Seleccioná una zona:</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+              {LOCALIDADES_FALLBACK.map(loc => (
+                <button
+                  key={loc.nombre}
+                  onClick={() => setLocation(prev => ({ ...prev, latitude: loc.lat, longitude: loc.lng }))}
+                  className="bg-zinc-800 text-white px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap border border-zinc-700 hover:border-emerald-500 hover:text-emerald-500 transition-colors"
+                >
+                  {loc.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FAB - Lanzar Desafío (Sólo visible si no hay nada seleccionado para no molestar) */}
       {!seleccionado && (

@@ -46,7 +46,7 @@ export function useSesion(): EstadoSesion {
           nombre: (user.displayName ?? 'Jugador').split(' ')[0] ?? 'Jugador',
           apellido: user.displayName?.split(' ').slice(1).join(' ') ?? '',
           email: user.email ?? '',
-        })
+        }, 'invitado')
 
         const usuario = await obtenerUsuario(user.uid)
         const prediosIds = usuario?.rol === 'dueno_predio' ? await idsDePredios(user.uid) : []

@@ -1,25 +1,33 @@
 import { useState, useCallback } from 'react';
 
 export interface LocationState {
-  latitude: number;
-  longitude: number;
-  accuracy: number;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
   error: string | null;
   loading: boolean;
+  isFallback: boolean;
 }
 
-export const useGeolocation = () => {
+const FALLBACK_LAT = -34.6037; // CABA por defecto
+const FALLBACK_LNG = -58.3816;
+
+export const useGeolocation = (defaultLocation?: { lat: number, lng: number }) => {
+  const defaultLat = defaultLocation?.lat ?? FALLBACK_LAT;
+  const defaultLng = defaultLocation?.lng ?? FALLBACK_LNG;
+
   const [location, setLocation] = useState<LocationState>({
-    latitude: 0,
-    longitude: 0,
-    accuracy: 0,
+    latitude: null,
+    longitude: null,
+    accuracy: null,
     error: null,
     loading: false,
+    isFallback: false,
   });
 
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setLocation(prev => ({ ...prev, error: 'La geolocalización no está soportada en tu navegador', loading: false }));
+      setLocation(prev => ({ ...prev, latitude: defaultLat, longitude: defaultLng, error: 'La geolocalización no está soportada en tu navegador', loading: false, isFallback: true }));
       return;
     }
 
@@ -33,6 +41,7 @@ export const useGeolocation = () => {
           accuracy: position.coords.accuracy,
           error: null,
           loading: false,
+          isFallback: false,
         });
       },
       (error) => {
@@ -41,7 +50,7 @@ export const useGeolocation = () => {
         else if (error.code === error.POSITION_UNAVAILABLE) errorMessage = 'Ubicación no disponible';
         else if (error.code === error.TIMEOUT) errorMessage = 'Tiempo de espera agotado';
         
-        setLocation(prev => ({ ...prev, error: errorMessage, loading: false }));
+        setLocation(prev => ({ ...prev, latitude: defaultLat, longitude: defaultLng, error: errorMessage, loading: false, isFallback: true }));
       },
       {
         enableHighAccuracy: true,
@@ -51,5 +60,5 @@ export const useGeolocation = () => {
     );
   }, []);
 
-  return { location, requestLocation };
+  return { location, requestLocation, setLocation };
 };
