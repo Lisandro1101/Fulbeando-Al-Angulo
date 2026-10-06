@@ -49,6 +49,7 @@ export function useSesion(): EstadoSesion {
         }, 'invitado')
 
         const usuario = await obtenerUsuario(user.uid)
+        // Solo `dueno_predio`: el rol 'dueno' del modelo legacy ya no existe en `Rol`.
         const prediosIds = usuario?.rol === 'dueno_predio' ? await idsDePredios(user.uid) : []
 
         setEstado({

@@ -11,6 +11,13 @@ export interface FirebaseEnv {
   appId: string
 }
 
+/**
+ * Senia por defecto para predios que aun no cargaron sus datos bancarios.
+ * `DatosDeCobro.montoSena` es obligatorio, asi que el alta de predio usa este
+ * valor como placeholder hasta que el dueno lo configure.
+ */
+export const MONTO_SENA_DEFAULT = 15000
+
 export interface AppEnv {
   firebase: FirebaseEnv
   /** Conecta al emulador local de Firebase. */
@@ -65,4 +72,13 @@ export const COLECCIONES = {
   reportes: 'reportes',
   notificaciones: 'notificaciones',
   solicitudes: 'solicitudes',
+
+  // Colecciones del modulo "AL ANGULO". La clave es en español (consistencia con
+  // el resto) pero el valor conserva el nombre legacy en ingles: renombrarlas
+  // dejaria huerfano el contenido del proyecto real `fulbeando-al-angulo-26`
+  // y obligaria a migrar `firestore.rules`. No cambiar sin una migracion.
+  equipos: 'teams',
+  desafios: 'challenges',
+  partidos: 'matches',
+  resenas: 'reviews',
 } as const

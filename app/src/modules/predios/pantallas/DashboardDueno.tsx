@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellRing, Loader2, Lock, Plus, Unlock, X } from 'lucide-react'
+import { Loader2, Lock, Plus, Unlock, X } from 'lucide-react'
 import type { Predio, Turno } from '@/domain'
 import { canchasDe } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'

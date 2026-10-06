@@ -32,6 +32,10 @@ const PERFIL: PerfilDeportivo = {
   nivel: 3,
   disponibleHoy: true,
   notificacionesRadar: true,
+  playerRole: null,
+  stats: { goals: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 5.0 },
+  rating: 5.0,
+  teamIds: [],
 }
 
 const PUNTOS = [
@@ -209,6 +213,7 @@ const jugadores: JugadorSeed[] = [
           expiracionNotificada: false,
           canceladoPor: null,
           geo: predio.geo,
+          partidoId: null,
           ...auditoria(),
         } satisfies Turno)
       }
@@ -247,12 +252,13 @@ const jugadores: JugadorSeed[] = [
     bloqueadoHasta: null,
     expiracionNotificada: false,
     canceladoPor: null,
-    geo: aGeoIndex({ lat: PUNTOS[0]!.lat, lng: PUNTOS[0]!.lng }),
+geo: aGeoIndex({ lat: PUNTOS[0]!.lat, lng: PUNTOS[0]!.lng }),
+    partidoId: null,
     ...auditoria(),
   }
   const comprobante: Comprobante = {
     turnoId: idConfirmado,
-    organizerUid: 'uid_jug_1',
+    organizadorUid: 'uid_jug_1',
     storagePath: `comprobantes/uid_jug_1/${idConfirmado}/demo.png`,
     mimeType: 'image/png',
     sizeBytes: 120_000,
@@ -339,8 +345,8 @@ const jugadores: JugadorSeed[] = [
   }
   const solicitud2: SolicitudDueno = {
     uid: 'uid_solicitante_martin',
-    nombre: 'Martín',
-    apellido: 'Gómez',
+    nombre: 'MartÃ­n',
+    apellido: 'GÃ³mez',
     telefono: '+5491133332222',
     email: 'mgomez@parquechacabuco.com',
     nombrePredio: 'Canchas Parque Chacabuco',
@@ -348,7 +354,7 @@ const jugadores: JugadorSeed[] = [
     barrio: 'Parque Chacabuco',
     tipoCancha: 'F8',
     cantidadCanchas: 2,
-    mensaje: 'Poseemos un predio con 2 canchas descubiertas de F8 con iluminación LED.',
+    mensaje: 'Poseemos un predio con 2 canchas descubiertas de F8 con iluminaciÃ³n LED.',
     estado: 'pendiente',
     revisadoPor: null,
     revisadoAt: null,
@@ -403,14 +409,14 @@ const jugadores: JugadorSeed[] = [
     telefono: '+5491199998888',
     fotos: [],
     cobro: {
-      titular: 'Estadio F6 SRL',
-      alias: 'estadio.f6',
+titular: 'Estadio F5 SRL',
+    alias: 'estadio.f5',
       cbu: '0000000000000000000000',
       montoSena: 7000,
     },
     duenoUid: duenos[0]!.uid,
     canchasResumen: [
-      { id: 'predio_sin_verificar_1_cancha_1', nombre: 'Cancha Central', tipo: 'F6', techada: false, precioHora: 7000 },
+      { id: 'predio_sin_verificar_1_cancha_1', nombre: 'Cancha Central', tipo: 'F5', techada: false, precioHora: 7000 },
     ],
     verificado: false,
     estado: 'activo',
@@ -449,6 +455,6 @@ const jugadores: JugadorSeed[] = [
 main()
   .then(() => process.exit(0))
   .catch((error: unknown) => {
-    console.error('Falló el seed:', error)
+    console.error('FallÃ³ el seed:', error)
     process.exit(1)
   })

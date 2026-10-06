@@ -8,7 +8,13 @@ import type { Timestamp } from './comun'
  */
 export interface Comprobante {
   turnoId: string
-  organizerUid: string
+  /**
+   * Mismo nombre que en `Turno`. Antes esta collection usaba `organizerUid`
+   * (en ingles, y en un solo documento) mientras `Turno` usaba
+   * `organizadorUid`: las rules no podian referenciar un unico campo y
+   * cualquier lectura se iba a `undefined`.
+   */
+  organizadorUid: string
   storagePath: string
   mimeType: string
   sizeBytes: number

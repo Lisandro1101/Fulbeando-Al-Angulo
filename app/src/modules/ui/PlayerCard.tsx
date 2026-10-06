@@ -1,8 +1,6 @@
-import React from 'react';
-
 /**
  * CARTA DE JUGADOR (FUT Style)
- * Cero librerías pesadas, 100% puro CSS/Tailwind.
+ * Cero librerÃ­as pesadas, 100% puro CSS/Tailwind.
  */
 export const PlayerCard = () => {
   return (
@@ -18,7 +16,7 @@ export const PlayerCard = () => {
           <span className="text-xs font-bold tracking-widest text-gray-300 uppercase">MED</span>
         </div>
         {/* Placeholder del escudo del equipo principal */}
-        <div className="w-10 h-10 bg-pitch-800 rounded-full border border-gray-500 flex items-center justify-center shadow-lg">🛡️</div>
+        <div className="w-10 h-10 bg-pitch-800 rounded-full border border-gray-500 flex items-center justify-center shadow-lg">ðŸ›¡ï¸</div>
       </div>
 
       {/* Avatar Jugador */}
@@ -33,7 +31,7 @@ export const PlayerCard = () => {
       <div className="text-center z-10 border-t border-gray-600 pt-3 bg-gradient-to-t from-pitch-900 to-transparent -mx-4 px-4 pb-2">
         <h2 className="text-2xl font-display font-bold uppercase tracking-wider text-white">Riquelme</h2>
         
-        {/* Grilla de Métricas Reales */}
+        {/* Grilla de MÃ©tricas Reales */}
         <div className="grid grid-cols-3 gap-2 mt-3 text-[10px] text-gray-400 font-bold uppercase">
           <div className="flex flex-col items-center bg-pitch-800 rounded py-1 border border-pitch-700">
             <span className="text-lg text-white font-display">120</span>

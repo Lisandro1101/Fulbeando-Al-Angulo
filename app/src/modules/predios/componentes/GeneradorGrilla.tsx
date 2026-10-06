@@ -3,7 +3,7 @@ import { Check, Loader2, Plus, Trash2, Wand2 } from 'lucide-react'
 import type { Franja, Predio } from '@/domain'
 import { duracionDeFranja, errorEnFranjas, formatearDuracion, minutosDeHora, precioDeFranja } from '@/domain'
 import { formatearMoneda } from '@/core/tiempo'
-import { generarGrillaDelDia, generarGrillaMasiva } from '@/modules/turnos/repositorio'
+import { generarGrillaMasiva } from '@/modules/turnos/repositorio'
 import { listarCanchas } from '@/modules/canchas/repositorio'
 
 /** Minutos desde medianoche -> `HH:mm`. El caller ya validó que no pase de 24 h. */

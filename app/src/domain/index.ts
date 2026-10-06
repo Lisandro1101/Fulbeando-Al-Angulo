@@ -8,3 +8,8 @@ export * from './alerta'
 export * from './comprobante'
 export * from './reporte'
 export * from './solicitud'
+
+// Modulo "AL ANGULO". `equipo.ts` y `desafio.ts` son la unica definicion de la
+// forma de un equipo y de un desafio: reemplazan al duplicado `types.ts` legacy.
+export * from './equipo'
+export * from './desafio'

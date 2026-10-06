@@ -1,36 +1,58 @@
 {
   "indexes": [
     {
+      "comment": "Radar de desafios: el mapa filtra por prefijo geoespacial + estado abierto. Sin este indice la query de radarService.listarDesafiosCercanos falla con 'The query requires an index'.",
       "collectionGroup": "challenges",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "geohash", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "ASCENDING" }
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
       ]
     },
     {
-      "collectionGroup": "matches",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" }
-      ]
-    },
-    {
+      "comment": "Capa de equipos del area (listarEquiposCercanos): se consulta solo por prefijo geoespacial, con limite duro en el cliente.",
       "collectionGroup": "teams",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "zone", "order": "ASCENDING" },
-        { "fieldPath": "rating", "order": "DESCENDING" }
+        { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
       ]
     },
     {
-      "collectionGroup": "venues",
+      "comment": "Turnos por predio y fecha: la grilla del dueno y la pantalla de reserva filtran por esta combinacion.",
+      "collectionGroup": "turnos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "geohash", "order": "ASCENDING" },
-        { "fieldPath": "reputationScore", "order": "DESCENDING" }
+        { "fieldPath": "predioId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Historial de turnos de un jugador, del mas nuevo al mas viejo.",
+      "collectionGroup": "turnos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizadorUid", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "comment": "Alertas de 'Falta 1' activas de un predio.",
+      "collectionGroup": "alertas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fechaUnix", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Radar de agentes libres (listarCandidatosRadar). La query filtra por prefijo geoespacial + 3 campos de igualdad (estado y dos switches dentro de perfilDeportivo).",
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "perfilDeportivo.disponibleHoy", "order": "ASCENDING" },
+        { "fieldPath": "perfilDeportivo.notificacionesRadar", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
       ]
     }
   ],

@@ -81,18 +81,18 @@ export function NavegacionHeader() {
         {/* Navegación Principal */}
         <nav className="hidden items-center gap-1 sm:flex">
           <Link
-            to="/"
+            to="/radar"
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              esRutaActiva('/') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
+              esRutaActiva('/radar') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
             }`}
           >
             <MapPin className="h-3.5 w-3.5" />
             Canchas
           </Link>
           <Link
-            to="/dashboard"
+            to="/partidos"
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              esRutaActiva('/dashboard') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
+              esRutaActiva('/partidos') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
             }`}
           >
             <Zap className="h-3.5 w-3.5 text-urgent" />
@@ -100,9 +100,9 @@ export function NavegacionHeader() {
           </Link>
           {sesion.usuario?.rol === 'dueno_predio' || sesion.usuario?.rol === 'superadmin' ? (
             <Link
-              to="/admin"
+              to="/venue-dashboard"
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                esRutaActiva('/admin') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
+                esRutaActiva('/venue-dashboard') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
               }`}
             >
               <Building2 className="h-3.5 w-3.5 text-pitch" />
@@ -179,7 +179,7 @@ export function NavegacionHeader() {
 
               <div className="mt-1 border-t border-ink-faint/20 pt-1">
                 <Link
-                  to="/ajustes"
+                  to="/perfil"
                   onClick={() => setDesplegable(false)}
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-ink hover:bg-canvas"
                 >

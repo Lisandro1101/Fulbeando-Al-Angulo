@@ -1,13 +1,13 @@
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/core/firebase';
 import { COLECCIONES } from '@/core/config';
-import type { Posicion, Modalidad } from '@/domain';
+import type { Posicion, ModalidadDesafio } from '@/domain';
 
 export interface OnboardingData {
   apodo: string;
   posicion: Posicion;
   pieHabil: 'Derecho' | 'Zurdo' | 'Ambidiestro';
-  modalidadPreferida: Modalidad;
+  modalidadPreferida: ModalidadDesafio;
   zonaId: string;
 }
 

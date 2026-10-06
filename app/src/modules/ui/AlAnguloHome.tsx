@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AppLayout } from '../ui/AppLayout';
 import { useSesion } from '@/modules/auth/useSesion';
 
@@ -32,11 +32,11 @@ export default function AlAnguloHome() {
           </section>
         )}
 
-        {/* VISTA 2: CREACIÓN DE EQUIPO */}
+        {/* VISTA 2: CREACIÃ“N DE EQUIPO */}
         {showTeamForm && (
           <section className="relative">
             <button onClick={() => setShowTeamForm(false)} className="absolute -top-10 left-0 text-amber-500 font-bold text-sm">
-              ← Volver
+              â† Volver
             </button>
             <TeamCreationForm 
               isLoading={false}
@@ -51,7 +51,7 @@ export default function AlAnguloHome() {
         {/* DEMO RADAR FLOATING CARD */}
         {showRadarCard && (
           <RadarFloatingCard 
-            user={{ uid: 'user-1', displayName: 'Matias El Rústico', stats: { partidosJugados: 120, goles: 5, fairPlayScore: 3.5 } } as any}
+            user={{ uid: 'user-1', displayName: 'Matias El RÃºstico', stats: { partidosJugados: 120, goles: 5, fairPlayScore: 3.5 } } as any}
             onClose={() => setShowRadarCard(false)}
             onInviteToMatch={() => alert("Invitado al partido de hoy!")}
             onRecruit={() => alert("Fichado para el equipo!")}

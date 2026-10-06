@@ -91,9 +91,17 @@ export function GestorCanchas({
       {error && <p className="text-sm text-occupied">{error}</p>}
 
       {canchas.length === 0 ? (
-        <p className="text-sm text-ink-muted">
-          Este predio todavia no tiene canchas. Agrega la primera para poder abrir la grilla.
-        </p>
+        <div className="space-y-4">
+          <p className="text-sm text-ink-muted">
+            Este predio todavia no tiene canchas. Agrega la primera para poder abrir la grilla.
+          </p>
+          <FormularioCancha
+            onCancelar={() => undefined}
+            onGuardar={async (alta) => {
+              await crear(alta)
+            }}
+          />
+        </div>
       ) : (
         <ul className="space-y-2">
           {canchas.map((cancha) => (

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Building, Share2, UploadCloud, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, Bell } from 'lucide-react';
+import { User, Building, Share2, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, Bell } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
+import { NavegacionHeader } from '@/modules/ui/NavegacionHeader';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail, cerrarSesion } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { MONTO_SENA_DEFAULT } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
 
@@ -131,7 +133,6 @@ export const Screen1Login = () => {
 // PANTALLA 2: Selector de Rol
 // ==========================================
 export const Screen2RoleSelector = () => {
-  const navigate = useNavigate();
   const sesion = useSesion();
   const [cargando, setCargando] = useState(false);
 
@@ -357,9 +358,14 @@ export const Screen4WelcomeCard = () => {
   const navigate = useNavigate();
   const sesion = useSesion();
   const [mostrarConfig, setMostrarConfig] = useState(false);
-  const [apodo, setApodo] = useState('EL RÚSTICO');
-  const [username, setUsername] = useState('el_rustico');
+  const [apodo, setApodo] = useState(sesion.usuario?.nombre || 'EL RÚSTICO');
+  const [username, setUsername] = useState(sesion.user?.email?.split('@')[0] || 'el_rustico');
   const [emojiFoto, setEmojiFoto] = useState('⚽');
+
+  React.useEffect(() => {
+    if (sesion.usuario?.nombre) setApodo(sesion.usuario.nombre);
+    if (sesion.user?.email) setUsername(sesion.user.email.split('@')[0] ?? 'jugador');
+  }, [sesion.usuario, sesion.user]);
   
   const { isInstallable, promptInstall } = useInstallPrompt();
 
@@ -411,6 +417,12 @@ export const Screen4WelcomeCard = () => {
           </button>
           <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">
             <MapPinned className="w-5 h-5" /> Explorar Radar
+          </button>
+          {/* Ajustes reales: disponibilidad para el radar, notificaciones y
+              solicitud de duelo de predio. El modal de arriba solo edita estado
+              local, asi que este boton es el que persiste de verdad. */}
+          <button onClick={() => navigate('/ajustes')} className="w-full flex items-center justify-center gap-2 bg-zinc-800 text-zinc-200 font-bold py-3.5 rounded-xl active:scale-95 transition-transform">
+            <Settings className="w-4 h-4" /> Ajustes y disponibilidad
           </button>
           <button 
             onClick={async () => {
@@ -496,6 +508,27 @@ export const Screen4WelcomeCard = () => {
 // Screen5Radar ha sido reemplazado por MapaRadarUnificado en src/modules/radar/pantallas/MapaRadarUnificado.tsx
 
 // ==========================================
+// PANTALLA 5: Tus Reservas / Turnos
+// ==========================================
+export const Screen5Reservas = () => {
+  return (
+    <div className="h-full bg-zinc-950 flex flex-col font-sans">
+      <div className="shrink-0">
+        <NavegacionHeader />
+      </div>
+      <div className="flex-1 p-6 flex flex-col justify-center items-center pb-24 text-center">
+        <Calendar className="w-16 h-16 text-emerald-500 mb-6" />
+        <h2 className="text-2xl font-black text-white mb-2">Tus Reservas</h2>
+        <p className="text-zinc-400 text-sm max-w-[280px]">
+          Acá vas a poder ver todos los turnos que tenés reservados o en espera de confirmación.
+        </p>
+      </div>
+      <MenuNavegacion />
+    </div>
+  );
+};
+
+// ==========================================
 // PANTALLA 6: Partidos y Desafíos
 // ==========================================
 export const Screen6LaunchChallenge = () => {
@@ -514,10 +547,17 @@ export const Screen6LaunchChallenge = () => {
 
   const handlePublicar = () => {
     if (!diaHora) return;
+    
+    let fechaFormateada = diaHora;
+    const dateObj = new Date(diaHora);
+    if (!isNaN(dateObj.getTime())) {
+      fechaFormateada = dateObj.toLocaleString('es-AR', { weekday: 'long', hour: '2-digit', minute:'2-digit' });
+    }
+
     const nuevoPartido = {
       id: Date.now(),
       modalidad,
-      diaHora: new Date(diaHora).toLocaleString('es-AR', { weekday: 'long', hour: '2-digit', minute:'2-digit' }),
+      diaHora: fechaFormateada,
       cancha,
       estado: 'En Radar',
       rival: null
@@ -700,8 +740,9 @@ export const Screen7MyTeam = () => {
   const equipo = equipos[equipoActivo];
 
   const handleUpdateEmoji = (newEmoji: string) => {
+    if (!equipo) return;
     const nuevosEquipos = [...equipos];
-    nuevosEquipos[equipoActivo].emoji = newEmoji;
+    nuevosEquipos[equipoActivo] = { ...equipo, emoji: newEmoji };
     setEquipos(nuevosEquipos);
   };
 
@@ -740,11 +781,15 @@ export const Screen7MyTeam = () => {
   };
 
   const handleCreateConvocatoria = () => {
+    if (!equipo) return;
     const nuevosEquipos = [...equipos];
-    nuevosEquipos[equipoActivo].convocatoria = {
-      fecha: convFecha,
-      confirmados: [],
-      bajas: []
+    nuevosEquipos[equipoActivo] = {
+      ...equipo,
+      convocatoria: {
+        fecha: convFecha,
+        confirmados: [],
+        bajas: [],
+      },
     };
     setEquipos(nuevosEquipos);
     setMostrarModalConvocatoria(false);
@@ -772,6 +817,7 @@ export const Screen7MyTeam = () => {
   };
 
   const handleShareLink = async () => {
+    if (!equipo) return;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -1139,7 +1185,9 @@ export const Screen8VenueRegistration = () => {
         barrio: formData.barrio,
         ciudad: formData.ciudad,
         telefono: formData.telefono || '1122334455',
-        cobro: { cbu: '', alias: '', titular: '' },
+        // El dueno aun no cargó datos bancarios: se dejan vacíos y `cbu` en null.
+// `montoSena` es obligatorio, asi que se usa el default del proyecto.
+cobro: { cbu: null, alias: '', titular: '', montoSena: MONTO_SENA_DEFAULT },
         duenoUid: sesion.user.uid,
         punto: { 
           lat: location.latitude ?? -34.6037, 

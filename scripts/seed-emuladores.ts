@@ -1,276 +1,514 @@
-import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin'
+import { PROJECT_ID } from './proyecto-emulador'
 
 // ============================================================================
-// SCRIPT DE SEEDING: "AL ÁNGULO" (ZONA SUR)
+// SEED DE EMULADORES (raiz) — "AL ANGULO" + "FULBEANDO", Zona Sur
 // ============================================================================
-// Este script inicializa los emuladores locales de Firebase (Auth y Firestore)
-// con datos realistas para probar el flujo completo de la app.
-// 
-// Para ejecutarlo:
-// 1. Asegurate de tener los emuladores corriendo.
-// 2. Ejecutá: npx ts-node scripts/seed-emuladores.ts
+// Corre los emuladores locales de Auth y Firestore con datos FICTICIOS para
+// poder desarrollar sin tocar ningun proyecto real.
+//
+//   1. Levanta los emuladores:  npm run dev:emulators
+//   2. Carga los datos:          npm run seed:wait   (lo hace `dev:all` solo)
+//
+// IMPORTANTE — este archivo escribe el ESQUEMA CANONICO de `app/src/domain`.
+// Antes escribia el schema viejo (`status`, `location`, `creatorTeamId`,
+// `displayName`) y por eso el mapa no encontraba nada: el codigo busca
+// `estado == 'ABIERTO'` + `geo.prefijos`. Si cambias un modelo del dominio,
+// actualiza este seed en el mismo commit.
 // ============================================================================
 
-// Configurar variables de entorno para forzar el uso de los Emuladores Locales
-// Estos puertos deben coincidir con tu firebase.json
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
 
-// Inicializar el SDK de Admin
-// Al detectar las variables de entorno, apuntará automáticamente a los emuladores.
-admin.initializeApp({
-  projectId: 'demo-al-angulo' // El Project ID del emulador
-});
+// Importamos el MISMO codigo de geohash que usa la app, en vez de inventar
+// prefijos a mano. `geohash.ts` no tiene imports, asi que tsx lo resuelve bien
+// desde aca sin necesitar el alias `@/`.
+import { encodeGeohash, prefijosQueCubren } from '../app/src/core/geo/geohash'
 
-const auth = admin.auth();
-const db = admin.firestore();
+// El projectId tiene que ser EXACTAMENTE el que usa el bundle de la app:
+// los emuladores guardan los datos en un namespace por proyecto y, si
+// difieren, el login falla con `auth/user-not-found` aunque el seed haya
+// terminado bien. Ver `scripts/proyecto-emulador.ts`.
+admin.initializeApp({ projectId: PROJECT_ID })
 
-// Utilidad para crear Geohashes (simplificado para el seed, puedes usar la librería de geofire-common)
-// Guernica aprox: -34.919, -58.384
-// Lomas de Zamora aprox: -34.760, -58.402
-// Lanús aprox: -34.704, -58.396
+const auth = admin.auth()
+const db = admin.firestore()
+const serverTimestamp = admin.firestore.FieldValue.serverTimestamp()
 
-async function clearEmulators() {
-  console.log('🧹 Limpiando datos previos del emulador...');
-  // Nota: Idealmente deberías limpiar Auth y Firestore haciendo un flush por API REST
-  // al endpoint de los emuladores (ej. DELETE http://localhost:8080/emulator/v1/projects/demo-al-angulo/databases/(default)/documents)
-  // Para este script, asumiremos que se corre con emuladores limpios o sobrescribiremos por ID.
-}
+/** Espejo de `core/geo/index.ts` → `aGeoIndex`. */
+const geo = (lat: number, lng: number, radioKm = 5) => ({
+  lat: Number(lat.toFixed(4)),
+  lng: Number(lng.toFixed(4)),
+  prefijo: encodeGeohash(lat, lng, 5),
+  prefijos: prefijosQueCubren({ lat, lng }, radioKm, 5),
+})
+
+const texto = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+
+// Coordenadas de la Zona Sur (datos ficticios).
+const LOMAS = { lat: -34.7601, lng: -58.4023 }
+const LANUS = { lat: -34.7042, lng: -58.3965 }
+const BANFIELD = { lat: -34.782, lng: -58.397 }
+const AVELLANEDA = { lat: -34.6959, lng: -58.3634 }
 
 async function seedData() {
   try {
-    await clearEmulators();
-    console.log('🌱 Iniciando carga de datos en Emuladores...\n');
+    console.log('🌱 Iniciando carga de datos FICTICIOS en los emuladores...\n')
 
-    // ==========================================
-    // 1. USUARIOS (Auth + Firestore)
-    // ==========================================
-    console.log('👤 Creando Usuarios...');
-    const usersData = [
-      {
-        uid: 'user-diego-10',
-        email: 'diego@alangulo.com',
-        password: 'password123',
-        displayName: 'Diego Armando',
-        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Diego',
-        stats: { goles: 124, partidos: 50, fairPlayScore: 8.5 }
-      },
+    // ---------------------------------------------------------------- //
+    // 1. USUARIOS — shape canonico de `domain/usuario.ts` (Usuario)
+    // ---------------------------------------------------------------- //
+    console.log('👤 Creando Usuarios...')
+
+    const PERFIL_VACIO = {
+      posicion: null,
+      piernaHabil: null,
+      nivel: null,
+      disponibleHoy: false,
+      notificacionesRadar: false,
+      playerRole: null,
+      stats: { goals: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 5.0 },
+      rating: 5.0,
+      teamIds: [],
+    }
+
+    const usuarios = [
       {
         uid: 'user-lio-10',
+        nombre: 'Lionel',
+        apellido: 'Andrés',
         email: 'lio@alangulo.com',
-        password: 'password123',
         displayName: 'Lionel Andrés',
-        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lio',
-        stats: { goles: 210, partidos: 80, fairPlayScore: 9.8 }
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lio',
+        telefono: '+5491122334455',
+        zona: 'Lomas de Zamora',
+        playerRole: 'FWD' as const,
+        posicion: 'delantero' as const,
+        stats: { goals: 210, matchesPlayed: 80, mvpCount: 31, fairPlayIndex: 9.8 },
+        rating: 9.4,
+        teamIds: ['team-scaloneta-f5'],
+        disponible: false,
       },
-      { uid: 'user-dibu-1', email: 'dibu@alangulo.com', password: 'password123', displayName: 'Dibu Martinez', stats: { goles: 0, partidos: 75, fairPlayScore: 7.0 } },
-      { uid: 'user-fideo-11', email: 'fideo@alangulo.com', password: 'password123', displayName: 'Angel Di Maria', stats: { goles: 85, partidos: 90, fairPlayScore: 9.0 } },
-      { uid: 'user-cuti-13', email: 'cuti@alangulo.com', password: 'password123', displayName: 'Cuti Romero', stats: { goles: 5, partidos: 60, fairPlayScore: 5.5 } },
-      
-      // ==========================================
-      // AGENTES LIBRES (Para probar el Radar)
-      // ==========================================
+      {
+        uid: 'user-diego-10',
+        nombre: 'Diego',
+        apellido: 'Armando',
+        email: 'diego@alangulo.com',
+        displayName: 'Diego Armando',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Diego',
+        telefono: '+5491122334401',
+        zona: 'Lanús',
+        playerRole: 'MID' as const,
+        posicion: 'medio' as const,
+        stats: { goals: 124, matchesPlayed: 50, mvpCount: 12, fairPlayIndex: 8.5 },
+        rating: 8.8,
+        teamIds: ['team-scaloneta-f5'],
+        disponible: false,
+      },
+      {
+        uid: 'user-dibu-1',
+        nombre: 'Dibu',
+        apellido: 'Martinez',
+        email: 'dibu@alangulo.com',
+        displayName: 'Dibu Martinez',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Dibu',
+        telefono: '+5491122334402',
+        zona: 'Avellaneda',
+        playerRole: 'GK' as const,
+        posicion: 'arquero' as const,
+        stats: { goals: 0, matchesPlayed: 75, mvpCount: 4, fairPlayIndex: 7.0 },
+        rating: 7.6,
+        teamIds: ['team-scaloneta-f5'],
+        // Dueño del predio de abajo: necesario para que las rules lo dejen
+        // operar la grilla de turnos.
+        dueno: true,
+        disponible: false,
+      },
+      {
+        uid: 'user-fideo-11',
+        nombre: 'Ángel',
+        apellido: 'Di María',
+        email: 'fideo@alangulo.com',
+        displayName: 'Angel Di Maria',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Fideo',
+        telefono: '+5491122334403',
+        zona: 'Lanús',
+        playerRole: 'DEF' as const,
+        posicion: 'defensor' as const,
+        stats: { goals: 85, matchesPlayed: 90, mvpCount: 18, fairPlayIndex: 9.0 },
+        rating: 9.0,
+        teamIds: ['team-scaloneta-f5'],
+        disponible: false,
+      },
+      {
+        uid: 'user-cuti-13',
+        nombre: 'Cristian',
+        apellido: 'Romero',
+        email: 'cuti@alangulo.com',
+        displayName: 'Cuti Romero',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Cuti',
+        telefono: '+5491122334404',
+        zona: 'Lomas de Zamora',
+        playerRole: 'DEF' as const,
+        posicion: 'defensor' as const,
+        stats: { goals: 5, matchesPlayed: 60, mvpCount: 9, fairPlayIndex: 5.5 },
+        rating: 6.2,
+        teamIds: ['team-scaloneta-f5'],
+        disponible: false,
+      },
+
+      // --- Agentes libres: aparecen en la capa "Jugadores" del mapa ---
       {
         uid: 'user-libre-1',
+        nombre: 'Matías',
+        apellido: 'El Rústico',
         email: 'rustico@fulbeando.com',
-        password: 'password123',
         displayName: 'Matias "El Rústico"',
-        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Rustico',
-        position: 'DFC',
-        isAvailable: true,
-        stats: { partidosJugados: 120, goles: 5, fairPlayScore: 3.5 },
-        geo: {
-          prefijos: ['69y7', '69y7q', '69y7qk'],
-          lat: -34.7612, // Lomas de Zamora
-          lng: -58.4001,
-        }
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Rustico',
+        telefono: '+5491122334411',
+        zona: 'Lomas de Zamora',
+        playerRole: 'DEF' as const,
+        posicion: 'defensor' as const,
+        stats: { goals: 5, matchesPlayed: 120, mvpCount: 0, fairPlayIndex: 3.5 },
+        rating: 4.1,
+        // Es el capitan de "Los Pibes de Lomas": el puente tiene que estar.
+        teamIds: ['team-pibes-lomas'],
+        disponible: true,
+        punto: LOMAS,
       },
       {
         uid: 'user-libre-2',
+        nombre: 'Nicolás',
+        apellido: 'El Distinto',
         email: 'distinto@fulbeando.com',
-        password: 'password123',
         displayName: 'Nico "El Distinto"',
-        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Nico',
-        position: 'MCO',
-        isAvailable: true,
-        stats: { partidosJugados: 45, goles: 22, fairPlayScore: 4.9 },
-        geo: {
-          prefijos: ['69y7', '69y7w', '69y7wm'],
-          lat: -34.7042, // Lanús
-          lng: -58.3965,
-        }
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Nico',
+        telefono: '+5491122334412',
+        zona: 'Lanús',
+        playerRole: 'MID' as const,
+        posicion: 'medio' as const,
+        stats: { goals: 22, matchesPlayed: 45, mvpCount: 6, fairPlayIndex: 4.9 },
+        rating: 6.8,
+        teamIds: ['team-pibes-lomas'],
+        disponible: true,
+        punto: LANUS,
       },
       {
         uid: 'user-libre-3',
+        nombre: 'Joaquín',
+        apellido: 'Muralla',
         email: 'muralla@fulbeando.com',
-        password: 'password123',
         displayName: 'Juampi "Muralla"',
-        photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Juampi',
-        position: 'ARQ',
-        isAvailable: true,
-        stats: { partidosJugados: 80, goles: 1, fairPlayScore: 4.8 },
-        geo: {
-          prefijos: ['69y7', '69y7m', '69y7mw'],
-          lat: -34.7820, // Banfield
-          lng: -58.3970,
-        }
-      }
-    ];
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Muralla',
+        telefono: '+5491122334413',
+        zona: 'Banfield',
+        playerRole: 'GK' as const,
+        posicion: 'arquero' as const,
+        stats: { goals: 1, matchesPlayed: 80, mvpCount: 2, fairPlayIndex: 4.8 },
+        rating: 6.5,
+        teamIds: [],
+        disponible: true,
+        punto: BANFIELD,
+      },
+      // --------------------------------------------------------------- //
+      // DUENOS DE PREDIO
+      //
+      // Hace falta al menos una cuenta `dueno_predio` para poder probar la
+      // rama de dueños: `/venue-dashboard` exige ese rol en el guard, asi que
+      // sin esto la rama del PRD no se puede abrir ni en local.
+      //
+      // Antes los predios Apuntaban a `user-libre-2` y `user-libre-3`, que son
+      // "jugadores libres" del radar: incoherente, un jugador libre no puede
+      // arrendar su propia cancha.
+      // --------------------------------------------------------------- //
+      {
+        uid: 'user-dueno-templo',
+        nombre: 'Ramiro',
+        apellido: 'Sosa',
+        email: 'dueno@fulbeando.com',
+        displayName: 'Ramiro (dueño El Templo)',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ramiro',
+        telefono: '+5491155550001',
+        rol: 'dueno_predio' as const,
+      },
+      {
+        uid: 'user-dueno-lomas',
+        nombre: 'Valeria',
+        apellido: 'Ferreyra',
+        email: 'duenolomas@fulbeando.com',
+        displayName: 'Vale (dueña Complejo Lomas)',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Valeria',
+        telefono: '+5491155550002',
+        rol: 'dueno_predio' as const,
+      },
+      {
+        uid: 'user-dueno-banfield',
+        nombre: 'Nestor',
+        apellido: 'Pereira',
+        email: 'duenobanfield@fulbeando.com',
+        displayName: 'Néstor (dueño Club Banfield)',
+        fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Nestor',
+        telefono: '+5491155550003',
+        rol: 'dueno_predio' as const,
+      },
+    ]
 
-    for (const u of usersData) {
+    for (const u of usuarios) {
       try {
-        // Crear usuario en Auth
         await auth.createUser({
           uid: u.uid,
           email: u.email,
-          password: u.password,
+          password: 'password123',
           displayName: u.displayName,
-          photoURL: u.photoURL
-        });
+          photoURL: u.fotoUrl,
+        })
       } catch (error: any) {
-        if (error.code === 'auth/uid-already-exists') {
-          console.log(`   - Usuario ${u.uid} ya existe en Auth, omitiendo creación.`);
-        } else {
-          throw error;
-        }
+        if (error.code !== 'auth/uid-already-exists') throw error
       }
 
-      // TTL para los que están disponibles (24hs)
-      let availableUntil = null;
-      if (u.isAvailable) {
-        const expiration = new Date();
-        expiration.setHours(expiration.getHours() + 24);
-        availableUntil = admin.firestore.Timestamp.fromDate(expiration);
-      }
+      // Un dueno no tiene perfil deportivo: las dos ramas del PRD son
+    // excluyentes, y ademas `undefined` es un valor que Firestore rechaza.
+    const esDueño = u.rol === 'dueno_predio'
 
-      // Crear documento en Firestore (Perfil de Jugador)
-      await db.collection('usuarios').doc(u.uid).set({
-        uid: u.uid,
-        rol: 'jugador',
-        estado: 'activo',
-        deletedAt: null,
-        displayName: u.displayName,
-        email: u.email,
-        photoURL: u.photoURL || null,
-        stats: u.stats,
-        position: u.position || 'DEL',
-        isAvailable: u.isAvailable || false,
-        availableUntil: availableUntil,
-        geo: u.geo || null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-      console.log(`   ✔️  Usuario creado: ${u.displayName} ${u.isAvailable ? '(🔥 AGENTE LIBRE)' : ''}`);
-    }
-
-    // ==========================================
-    // 2. EQUIPOS (Teams)
-    // ==========================================
-    console.log('\n🛡️  Creando Equipos...');
-    const teamId = 'team-scaloneta-f5';
-    const teamData = {
-      id: teamId,
-      name: 'La Scaloneta F5',
-      captainId: 'user-lio-10',
-      shieldUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=Scaloneta',
-      stats: { wins: 45, losses: 5, draws: 10 },
-      // Array desnormalizado para acceso rápido (como sugiere NoSQL)
-      members: [
-        { uid: 'user-lio-10', name: 'Lionel Andrés', role: 'CAPTAIN', position: 'DEL' },
-        { uid: 'user-diego-10', name: 'Diego Armando', role: 'PLAYER', position: 'MCO' },
-        { uid: 'user-dibu-1', name: 'Dibu Martinez', role: 'PLAYER', position: 'POR' },
-        { uid: 'user-fideo-11', name: 'Angel Di Maria', role: 'PLAYER', position: 'EI' },
-        { uid: 'user-cuti-13', name: 'Cuti Romero', role: 'PLAYER', position: 'DFC' }
-      ],
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    await db.collection('teams').doc(teamId).set(teamData);
-    console.log(`   ✔️  Equipo creado: ${teamData.name} con ${teamData.members.length} jugadores`);
-
-    // ==========================================
-    // 3. CANCHAS / COMPLEJOS (Predios)
-    // ==========================================
-    console.log('\n🏟️  Creando Complejos y Canchas...');
-    const venueId = 'venue-lanus-01';
-    const venueData = {
-      id: venueId,
-      name: 'El Templo del Fútbol (Lanús)',
-      duenoUid: 'user-dibu-1', // Set owner to a user so rules pass
-      verificado: true,
+    await db.collection('usuarios').doc(u.uid).set({
+      uid: u.uid,
+      nombre: u.nombre,
+      apellido: u.apellido,
+      email: u.email,
+      telefono: u.telefono,
+      whatsappVerificado: false,
+      rol: u.rol ?? 'jugador',
+      perfilDeportivo: esDueño
+        ? null
+        : {
+            ...PERFIL_VACIO,
+            posicion: u.posicion ?? null,
+            playerRole: u.playerRole ?? null,
+            disponibleHoy: u.disponible ?? false,
+            notificacionesRadar: u.disponible ?? false,
+            stats: u.stats ?? PERFIL_VACIO.stats,
+            rating: u.rating ?? 5,
+            teamIds: u.teamIds ?? [],
+          },
+      geo: u.punto ? geo(u.punto.lat, u.punto.lng, 2) : null,
+      zona: u.zona ?? null,
+      fotoUrl: u.fotoUrl ?? null,
       estado: 'activo',
+      createdAt: serverTimestamp,
+      updatedAt: serverTimestamp,
       deletedAt: null,
-      location: {
-        address: 'Av. Hipólito Yrigoyen 4500, Lanús',
-        lat: -34.7042,
-        lng: -58.3965,
-        geohash: '69y7q', // Mock geohash (Zona Sur)
-      },
-      subscription: {
-        status: 'ACTIVE',
-        plan: 'PREMIUM'
-      },
-      fields: [
-        { id: 'f1', name: 'Cancha 1 (La Bombonerita)', type: 'F5', surface: 'SINTETICO', isRoofed: false },
-        { id: 'f2', name: 'Cancha 2 (Techada)', type: 'F7', surface: 'SINTETICO', isRoofed: true }
-      ],
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    await db.collection('predios').doc(venueId).set(venueData);
-    console.log(`   ✔️  Complejo creado: ${venueData.name} (${venueData.fields.length} canchas)`);
-
-    // ==========================================
-    // 4. DESAFÍOS EN EL RADAR (Challenges)
-    // ==========================================
-    console.log('\n⚔️  Creando Desafíos en el Radar...');
-    const challenges = [
-      {
-        id: 'challenge-01',
-        creatorTeamId: teamId,
-        creatorTeamName: 'La Scaloneta F5',
-        status: 'open',
-        matchType: 'F5',
-        venueId: venueId,
-        date: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 86400000)), // Mañana
-        location: {
-          lat: -34.7042, // En la cancha de Lanús
-          lng: -58.3965,
-          geohash: '69y7q'
-        },
-        description: 'Buscamos equipo de F5 para picadito amistoso. Nivel medio/alto.',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      {
-        id: 'challenge-02',
-        creatorTeamId: 'mock-team-2',
-        creatorTeamName: 'Los Pibes de Lomas',
-        status: 'open',
-        matchType: 'F7',
-        venueId: null, // A confirmar
-        date: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 172800000)), // Pasado mañana
-        location: {
-          lat: -34.7601, // Lomas de Zamora
-          lng: -58.4023,
-          geohash: '69y7m'
-        },
-        description: 'Desafío F7 en Lomas de Zamora. Nosotros ponemos la cancha.',
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      }
-    ];
-
-    for (const c of challenges) {
-      await db.collection('challenges').doc(c.id).set(c);
-      console.log(`   ✔️  Desafío abierto creado: ${c.creatorTeamName} (${c.matchType})`);
+    })
+    console.log(`   ✔️  ${u.displayName}${u.disponible ? '  (🔥 disponible)' : ''}${esDueño ? '  🏟️ dueño' : ''}`)
     }
 
-    console.log('\n✅ SEED FINALIZADO CON ÉXITO. ¡Listo para jugar! ⚽\n');
-    process.exit(0);
+    // ---------------------------------------------------------------- //
+    // 2. EQUIPOS — shape canonico de `domain/equipo.ts` (Equipo)
+    // ---------------------------------------------------------------- //
+    console.log('\n🛡️  Creando Equipos...')
 
+    const equipos = [
+      {
+        id: 'team-scaloneta-f5',
+        name: 'La Scaloneta F5',
+        shieldUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=Scaloneta',
+        captainId: 'user-lio-10',
+        modalidadBase: 'F5',
+        stats: { wins: 45, draws: 10, losses: 5 },
+        punto: LANUS,
+        members: [
+          { uid: 'user-lio-10', name: 'Lionel Andrés', role: 'CAPTAIN' as const, dorsal: 10, position: 'FWD' as const },
+          { uid: 'user-diego-10', name: 'Diego Armando', role: 'PLAYER' as const, dorsal: 5, position: 'MID' as const },
+          { uid: 'user-dibu-1', name: 'Dibu Martinez', role: 'PLAYER' as const, dorsal: 1, position: 'GK' as const },
+          { uid: 'user-fideo-11', name: 'Angel Di Maria', role: 'PLAYER' as const, dorsal: 7, position: 'DEF' as const },
+          { uid: 'user-cuti-13', name: 'Cuti Romero', role: 'PLAYER' as const, dorsal: 4, position: 'DEF' as const },
+        ],
+      },
+      {
+        id: 'team-pibes-lomas',
+        name: 'Los Pibes de Lomas',
+        shieldUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=Pibes',
+        captainId: 'user-libre-1',
+        modalidadBase: 'F7',
+        stats: { wins: 12, draws: 4, losses: 9 },
+        punto: LOMAS,
+        members: [
+          { uid: 'user-libre-1', name: 'Matías El Rústico', role: 'CAPTAIN' as const, dorsal: 2, position: 'DEF' as const },
+          { uid: 'user-libre-2', name: 'Nicolás El Distinto', role: 'PLAYER' as const, dorsal: 8, position: 'MID' as const },
+        ],
+      },
+    ]
+
+    for (const e of equipos) {
+      await db.collection('teams').doc(e.id).set({
+        id: e.id,
+        name: e.name,
+        shieldUrl: e.shieldUrl,
+        captainId: e.captainId,
+        modalidadBase: e.modalidadBase,
+        members: e.members,
+        stats: e.stats,
+        geo: e.punto ? geo(e.punto.lat, e.punto.lng) : null,
+        createdAt: serverTimestamp,
+      })
+      console.log(`   ✔️  ${e.name} — ${e.members.length} jugadores`)
+    }
+
+    // ---------------------------------------------------------------- //
+    // 3. PREDIOS — shape canonico de `domain/predio.ts` (Predio)
+    // ---------------------------------------------------------------- //
+    console.log('\n🏟️  Creando Predios...')
+
+    const predios = [
+      {
+        id: 'predio-lanus-01',
+        nombre: 'El Templo del Fútbol',
+        direccion: 'Av. Hipólito Yrigoyen 4500',
+        barrio: 'Lanús',
+        ciudad: 'Buenos Aires',
+telefono: '+5491122334402',
+    duenoUid: 'user-dueno-templo',
+        verificado: true,
+        punto: LANUS,
+        cobro: { titular: 'El Templo SA', alias: 'eltemplo.futbol', cbu: '2850590940090418135201', montoSena: 12000 },
+        canchasResumen: [
+          { id: 'cancha-1', nombre: 'La Bombonerita', tipo: 'F5' as const, techada: false, precioHora: 8000 },
+          { id: 'cancha-2', nombre: 'La Techada', tipo: 'F7' as const, techada: true, precioHora: 11000 },
+        ],
+      },
+      {
+        id: 'predio-lomas-02',
+        nombre: 'Complejo Lomas',
+        direccion: 'Av. Argentina 1200',
+        barrio: 'Lomas de Zamora',
+        ciudad: 'Buenos Aires',
+telefono: '+5491122334421',
+    duenoUid: 'user-dueno-lomas',
+        verificado: true,
+        punto: LOMAS,
+        cobro: { titular: 'Lomas Sport', alias: 'lomas.sport', cbu: '2850590940090418135202', montoSena: 10000 },
+        canchasResumen: [
+          { id: 'cancha-1', nombre: 'Cancha 1', tipo: 'F5' as const, techada: false, precioHora: 7500 },
+        ],
+      },
+      {
+        id: 'predio-banfield-03',
+        nombre: 'Club Banfield Futbol 5',
+        direccion: 'Av. Monte 120',
+        barrio: 'Banfield',
+        ciudad: 'Buenos Aires',
+telefono: '+5491122334422',
+    duenoUid: 'user-dueno-banfield',
+        verificado: false, // A proposito: sirve para probar el filtro de publicos.
+        punto: BANFIELD,
+        cobro: { titular: 'Club Banfield', alias: 'banfield.f5', cbu: null, montoSena: 9000 },
+        canchasResumen: [
+          { id: 'cancha-1', nombre: 'Cancha techada', tipo: 'F7' as const, techada: true, precioHora: 9500 },
+        ],
+      },
+    ]
+
+    for (const p of predios) {
+      await db.collection('predios').doc(p.id).set({
+        id: p.id,
+        nombre: p.nombre,
+        direccion: p.direccion,
+        barrio: p.barrio,
+        barrioNormalizado: texto(p.barrio),
+        ciudad: p.ciudad,
+        geo: geo(p.punto.lat, p.punto.lng),
+        telefono: p.telefono,
+        fotos: [],
+        cobro: p.cobro,
+        duenoUid: p.duenoUid,
+        canchasResumen: p.canchasResumen,
+        verificado: p.verificado,
+        estado: 'activo',
+        createdAt: serverTimestamp,
+        updatedAt: serverTimestamp,
+        deletedAt: null,
+      })
+      console.log(`   ✔️  ${p.nombre} (${p.barrio}) — ${p.canchasResumen.length} canchas${p.verificado ? '' : ' · sin verificar'}`)
+    }
+
+    // ---------------------------------------------------------------- //
+    // 4. DESAFIOS — shape canonico de `domain/desafio.ts` (Desafio)
+    // ---------------------------------------------------------------- //
+    // La query del mapa es:
+    //   where('geo.prefijos', 'array-contains-any', ...) && where('estado','==','ABIERTO')
+    console.log('\n⚔️  Creando Desafíos...')
+
+    const manana = Date.now() + 86_400_000
+    const pasado = Date.now() + 172_800_000
+
+    const desafios = [
+      {
+        id: 'desafio-01',
+        creatorId: 'user-lio-10',
+        equipoId: 'team-scaloneta-f5',
+        equipoNombre: 'La Scaloneta F5',
+        equipoEscudoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=Scaloneta',
+        modalidad: 'F5' as const,
+        estadoCancha: 'CON_CANCHA' as const,
+        estado: 'ABIERTO' as const,
+        turnoId: null,
+        predioId: 'predio-lanus-01',
+        posicionBuscada: 'arquero' as const,
+        fechaUnix: manana,
+        descripcion: 'Buscamos arquero para partido amistoso. Nivel medio/alto.',
+        punto: LANUS,
+        equiposAceptantes: [],
+      },
+      {
+        id: 'desafio-02',
+        creatorId: 'user-libre-1',
+        equipoId: 'team-pibes-lomas',
+        equipoNombre: 'Los Pibes de Lomas',
+        equipoEscudoUrl: 'https://api.dicebear.com/7.x/shapes/svg?seed=Pibes',
+        modalidad: 'F7' as const,
+        estadoCancha: 'BUSCA_CANCHA' as const,
+        estado: 'ABIERTO' as const,
+        turnoId: null,
+        predioId: null,
+        posicionBuscada: null,
+        fechaUnix: pasado,
+        descripcion: 'F7 en Lomas de Zamora. Nosotros ponemos la cancha, traé un defensor.',
+        punto: LOMAS,
+        equiposAceptantes: [],
+      },
+    ]
+
+    for (const d of desafios) {
+      await db.collection('challenges').doc(d.id).set({
+        id: d.id,
+        creatorId: d.creatorId,
+        equipoId: d.equipoId,
+        equipoNombre: d.equipoNombre,
+        equipoEscudoUrl: d.equipoEscudoUrl,
+        modalidad: d.modalidad,
+        estadoCancha: d.estadoCancha,
+        estado: d.estado,
+        turnoId: d.turnoId,
+        predioId: d.predioId,
+        posicionBuscada: d.posicionBuscada,
+        fechaUnix: d.fechaUnix,
+        descripcion: d.descripcion,
+        geo: geo(d.punto.lat, d.punto.lng),
+        equiposAceptantes: d.equiposAceptantes,
+        createdAt: Date.now(),
+      })
+      console.log(`   ✔️  ${d.equipoNombre} busca rival ${d.modalidad}`)
+    }
+
+    console.log('\n✅ SEED OK. Todos los datos son ficticios (Zona Sur).\n')
+    console.log('   Cuentas (password: password123):')
+    for (const u of usuarios) console.log(`     ${u.email.padEnd(26)} ${u.nombre} ${u.apellido}`)
+    console.log('')
+
+    process.exit(0)
   } catch (error) {
-    console.error('\n❌ ERROR DURANTE EL SEEDING:', error);
-    process.exit(1);
+    console.error('\n❌ ERROR DURANTE EL SEEDING:', error)
+    process.exit(1)
   }
 }
 
-// Ejecutar script
-seedData();
+seedData()

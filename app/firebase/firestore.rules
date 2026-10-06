@@ -44,6 +44,40 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------ //
+    // Helpers de Equipos ("AL ANGULO")                                   //
+    // ------------------------------------------------------------------ //
+
+    function getTeam(teamId) {
+      return get(/databases/$(database)/documents/teams/$(teamId));
+    }
+
+    /**
+     * El update agrega exclusivamente el propio uid como miembro `PLAYER` y no
+     * altera ningun otro miembro.
+     *
+     * NO se usa `List.where()` porque no existe en el lenguaje de reglas. La
+     * comparacion es de conjuntos: el nuevo plantel debe ser exactamente el
+     * anterior mas la entrada propia. Exigir igualdad exacta (y no solo "agregar
+     * el propio uid") impide que de paso borre o modifique a otro jugador.
+     *
+     * El nombre se exige igual al del documento del usuario: asi un cliente
+     * manipulado no puede meter un nombre arbitrario en el plantel ajeno.
+     */
+    function soloAnadePropioMiembro(teamId, uid) {
+      return exists(/databases/$(database)/documents/teams/$(teamId))
+        && exists(/databases/$(database)/documents/usuarios/$(uid))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        && request.resource.data.members.size() == resource.data.members.size() + 1
+        && request.resource.data.members.toSet() == resource.data.members.toSet().union(
+             [{
+               'uid': uid,
+               'name': getUserData().nombre + ' ' + getUserData().apellido,
+               'role': 'PLAYER'
+             }].toSet()
+           );
+    }
+
+    // ------------------------------------------------------------------ //
     // Usuarios                                                          //
     // ------------------------------------------------------------------ //
     match /usuarios/{uid} {
@@ -67,6 +101,23 @@ service cloud.firestore {
             )
             && request.resource.data.estado == resource.data.estado
             && request.resource.data.deletedAt == resource.data.deletedAt
+            // Regla de negocio: un jugador puede estar en como mucho 2 equipos a
+            // la vez (contando el propio que creo).
+            //
+            // Se valida ACIA porque `perfilDeportivo.teamIds` lo escribe el
+            // cliente: `teamService` avisa antes, pero un cliente modificado se
+            // saltaria ese chequeo. El limite tiene quevivir en el servidor.
+            //
+            // Acceder a una clave ausente es error de evaluacion, asi que se
+            // consulta con `keys().hasAny([...])` antes de `.size()`.
+            && (
+              !request.resource.data.keys().hasAny(['perfilDeportivo'])
+              || request.resource.data.perfilDeportivo == null || !request.resource.data.perfilDeportivo.keys().hasAny(['teamIds'])
+              || (
+                (request.resource.data.perfilDeportivo.teamIds is list)
+                && request.resource.data.perfilDeportivo.teamIds.size() <= 2
+              )
+            )
           )
         );
 
@@ -141,24 +192,27 @@ service cloud.firestore {
         || (
           isSignedIn()
           && (
-            // Reservar (jugador)
+            // Reservar (jugador).
+            // `organizadorUid` es el nombre canonico en `Turno`. Las rules
+            // pedian antes `jugadorId`, campo que el cliente nunca escribe:
+            // toda reserva caia en PERMISSION_DENIED.
             (
               resource.data.estado == 'disponible'
-              && resource.data.jugadorId == null
-              && request.resource.data.jugadorId == request.auth.uid
+              && resource.data.organizadorUid == null
+              && request.resource.data.organizadorUid == request.auth.uid
               && request.resource.data.estado == 'bloqueado_temporal'
               && request.resource.data.bloqueadoHasta != null
               && request.resource.data.comprobantePendiente == true
             )
-            // Cancelar propia reserva (jugador)
+            // Cancelar propia reserva confirmada (jugador)
             || (
               resource.data.estado == 'confirmado'
-              && resource.data.jugadorId == request.auth.uid
+              && resource.data.organizadorUid == request.auth.uid
               && request.resource.data.estado == 'cancelado'
             )
             || (
               resource.data.estado == 'bloqueado_temporal'
-              && resource.data.jugadorId == request.auth.uid
+              && resource.data.organizadorUid == request.auth.uid
               && request.resource.data.estado == 'cancelado'
             )
           )
@@ -170,21 +224,45 @@ service cloud.firestore {
     // ------------------------------------------------------------------ //
     // Comprobantes                                                       //
     // ------------------------------------------------------------------ //
-    match /comprobantes/{turnoId} {
+match /comprobantes/{turnoId} {
       function turnoDelDocumento() {
         return get(/databases/$(database)/documents/turnos/$(turnoId)).data;
       }
 
+/**
+       * El comprobante solo puede colgar de un turno PROPIO.
+       *
+       * Antes la regla se limitaba a `exists(turnos/$(turnoId))`, asi que
+       * cualquiera podia subir un comprobante sobre la reserva de otro y el
+       * dueno veia una imagen ajena.
+       *
+       * Usa `getAfter()` y no `get()`. No es una preferencia: `reservarTurno`
+       * escribe el turno y el comprobante en la MISMA transaccion, y dentro de
+       * una transaccion `get()` sigue viendo el estado previo al commit (el
+       * turno todavia tiene `organizadorUid == null`), con lo cual toda reserva
+       * online caia en PERMISSION_DENIED. Verificado con el test
+       * "reserva y comprobante en una sola transaccion", que ademas cubre el
+       * orden inverso de escrituras.
+       *
+       * `getAfter` degrada bien: en un `set` suelto del comprobante (sin
+       * escritura de turno en la misma peticion) devuelve el estado actual del
+       * turno, o sea que la regla sigue siendo estricta.
+       */
+      function turnoEsPropio(uid) {
+        let d = getAfter(/databases/$(database)/documents/turnos/$(turnoId)).data;
+        return d != null && d.organizadorUid == uid;
+      }
+
       allow read: if isSuperadmin()
-        || (isSignedIn() && resource.data.jugadorId == request.auth.uid)
+        || (isSignedIn() && resource.data.organizadorUid == request.auth.uid)
         || esDuenoDe(turnoDelDocumento().predioId);
 
       allow create: if isSignedIn()
         && request.resource.data.turnoId == turnoId
-        && request.resource.data.jugadorId == request.auth.uid
+        && request.resource.data.organizadorUid == request.auth.uid
         && request.resource.data.verificado == false
         && request.resource.data.revisadoPor == null
-        && exists(/databases/$(database)/documents/turnos/$(turnoId));
+        && turnoEsPropio(request.auth.uid);
 
       allow update: if esDuenoDe(turnoDelDocumento().predioId) || isSuperadmin();
 
@@ -195,8 +273,15 @@ service cloud.firestore {
     // Alertas "Falta 1" y postulaciones                                 //
     // ------------------------------------------------------------------ //
     match /alertas/{alertaId} {
+      /**
+       * El turno del que cuelga la alerta. Devuelve `null` si el turno no
+       * existe: el acceso directo a `.data.estado` de un `get()` inexistente
+       * revienta con error de evaluacion en vez de dar `false`, y eso se
+       * reporta como un `PERMISSION_DENIED` imposible de depurar.
+       */
       function turnoDeAlerta() {
-        return get(/databases/$(database)/documents/turnos/$(request.resource.data.turnoId)).data;
+        let p = /databases/$(database)/documents/turnos/$(request.resource.data.turnoId);
+        return exists(p) ? get(p).data : null;
       }
 
       allow read: if isSignedIn();
@@ -205,12 +290,11 @@ service cloud.firestore {
         && request.resource.data.creadoPorUid == request.auth.uid
         && request.resource.data.estado == 'activa'
         && request.resource.data.confirmados == 0
+        && turnoDeAlerta() != null
+        && turnoDeAlerta().estado == 'confirmado'
         && (
-          turnoDeAlerta().estado == 'confirmado'
-            && (
-              turnoDeAlerta().jugadorId == request.auth.uid
-              || esDuenoDe(request.resource.data.predioId)
-            )
+          turnoDeAlerta().organizadorUid == request.auth.uid
+          || esDuenoDe(request.resource.data.predioId)
         );
 
       allow update: if isSuperadmin()
@@ -276,26 +360,61 @@ service cloud.firestore {
     }
 
     // ================================================================== //
-    // INTEGRACIÓN "AL ÁNGULO" (Módulos Sociales y Gamificación)
+    // INTEGRACIÃ“N "AL ÃNGULO" (MÃ³dulos Sociales y GamificaciÃ³n)
     // ================================================================== //
     
+    /**
+     * Un texto opcional debe, si existe, ser string y estar acotado.
+     *
+     * Importante: en las reglas, ACCEDER a una clave inexistente es un error de
+     * evaluacion (no un `false`), y un error de evaluacion deniega la escritura.
+     * Por eso cada campo se consulta con `keys().hasAny([...])` antes de tocarlo.
+     */
+    function textoOpcionalSano(data, campo, max) {
+      return !data.keys().hasAny([campo])
+        || !(data.get(campo, '') is string)
+        || data.get(campo, '').size() <= max;
+    }
+
     function isPayloadSizeValid() {
-      return request.resource.size < 10000; 
+      return textoOpcionalSano(request.resource.data, 'name', 60)
+        && textoOpcionalSano(request.resource.data, 'description', 500)
+        && textoOpcionalSano(request.resource.data, 'descripcion', 500)
+        && textoOpcionalSano(request.resource.data, 'comment', 500)
+        && (!(request.resource.data.keys().hasAny(['members'])
+             && request.resource.data.members is list)
+             || request.resource.data.members.size() <= 23);
     }
 
     match /teams/{teamId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() 
+
+      allow create: if isSignedIn()
                     && isPayloadSizeValid()
                     && request.resource.data.captainId == request.auth.uid
                     && request.resource.data.members.size() >= 1
-                    && request.resource.data.members.size() <= 22;
-      allow update: if isSignedIn() 
-                    && resource.data.captainId == request.auth.uid
+                    && request.resource.data.members.size() <= 23;
+
+      // Dos vias legitimas de escritura:
+      //  1) El capitan gestiona el plantel (alta, baja, dorsal, capitania).
+      //  2) Un jugador se agrega a si mismo (autoinscripcion), porque las reglas de
+      //     `usuarios/{uid}` no permiten que el capitan escriba el perfil de otro.
+      //     En la autoinscripcion solo se anade el propio uid: no se puede tocar el
+      //     resto del plantel ni cambiar la capitania.
+      //
+      // El DT tambien puede gestionar el plantel, pero comprobarlo exigiria
+      // recorrer `members` y el lenguaje de reglas no tiene `List.where()` ni
+      // funciones recursivas. Se deja para cuando exista la UI de DT.
+      allow update: if isSignedIn()
+                    && (
+                      resource.data.captainId == request.auth.uid
+                      || soloAnadePropioMiembro(teamId, request.auth.uid)
+                    )
                     && request.resource.data.captainId == resource.data.captainId
                     && request.resource.data.members.size() >= 1
-                    && request.resource.data.members.size() <= 22;
-      allow delete: if false; 
+                    && request.resource.data.members.size() <= 23;
+
+      allow delete: if false;
     }
 
     match /challenges/{challengeId} {

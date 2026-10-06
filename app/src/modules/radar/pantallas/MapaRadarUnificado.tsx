@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, MessageCircle, X, Search, Calendar, Phone, Clock, Map as MapIcon, User, Shield, Target } from 'lucide-react';
-import { onMapMoveDebounced } from '../radarService'; // Asumiendo que reutilizamos la logica de debounce
+import { useNavigate } from 'react-router-dom';
+import { UserPlus, X, Search, Phone, Clock, Target, User } from 'lucide-react';
+import { listarDesafiosCercanos } from '../radarService';
 import { listarPrediosPublicos } from '@/modules/predios/repositorio';
+import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
+import { listarEquiposCercanos } from '@/modules/teams/teamService';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { useSesion } from '@/modules/auth/useSesion';
-import { canchasDe } from '@/domain';
+import { canchasDe, nombreCompleto } from '@/domain';
+import { appEnv } from '@/core/config';
+import { haversineKm, type Punto } from '@/core/geo/geohash';
 import { useGeolocation } from '@/hooks/useGeolocation';
 
 const LOCALIDADES_FALLBACK = [
@@ -21,6 +25,15 @@ const LOCALIDADES_FALLBACK = [
 const iconoPredio = L.divIcon({
   className: 'marcador-predio',
   html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #10B981; border: 3px solid #0F172A; box-shadow: 0 0 15px #10B981; display: flex; align-items: center; justify-content: center; font-size: 14px;">🏟️</div>`,
+  iconSize: [28, 28],
+  iconAnchor: [14, 14]
+});
+
+// 🔷 Pin Celeste: Equipos del area. Es la capa que mira el dueno de cancha
+// para saber a quien le puede ofrecer sus canchas.
+const iconoEquipo = L.divIcon({
+  className: 'marcador-equipo',
+  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #0EA5E9; border: 3px solid #0F172A; box-shadow: 0 0 15px #0EA5E9; display: flex; align-items: center; justify-content: center; font-size: 14px;">🧢</div>`,
   iconSize: [28, 28],
   iconAnchor: [14, 14]
 });
@@ -68,13 +81,14 @@ function FlyToLocation({ lat, lng }: { lat: number | null, lng: number | null })
 }
 
 // Tipos para el estado unificado
-type RadarEntityType = 'cancha' | 'desafio' | 'jugador';
+type RadarEntityType = 'cancha' | 'equipo' | 'desafio' | 'jugador';
 
 interface BaseEntity {
   id: string;
   lat: number;
   lng: number;
   type: RadarEntityType;
+  distanciaKm: number;
 }
 
 interface CanchaEntity extends BaseEntity {
@@ -84,36 +98,70 @@ interface CanchaEntity extends BaseEntity {
   cantidadCanchas: number;
 }
 
+/** Capa de equipos del area: la que mira el dueno de cancha para ofrecerles canchas. */
+interface EquipoEntity extends BaseEntity {
+  type: 'equipo';
+  equipoId: string;
+  nombre: string;
+  modalidad: string;
+  cantidadJugadores: number;
+  escudoUrl: string | null;
+}
+
 interface DesafioEntity extends BaseEntity {
   type: 'desafio';
+  /** Cruce con FULBEANDO: el desafio con `turnoId` ya tiene la cancha reservada. */
+  desafioId: string;
   equipo: string;
   modalidad: string;
-  horario: string;
+  fechaUnix: number;
+  conCancha: boolean;
+  descripcion: string | null;
 }
 
 interface JugadorEntity extends BaseEntity {
   type: 'jugador';
+  uid: string;
   apodo: string;
   posicion: string;
   media: number;
-  horaDisponible: string;
   fairPlay: number;
 }
 
-type RadarEntity = CanchaEntity | DesafioEntity | JugadorEntity;
+type RadarEntity = CanchaEntity | EquipoEntity | DesafioEntity | JugadorEntity;
+
+type FiltroRadar = 'todos' | 'canchas' | 'equipos' | 'desafios' | 'jugadores';
+
+/** `yyyy-mm-dd hh:mm` en hora local, sin depender de librerias de fecha. */
+const formatearHorario = (fechaUnix: number): string => {
+  const d = new Date(fechaUnix);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const hoy = new Date();
+  const mismoDia = d.toDateString() === hoy.toDateString();
+  const dia = mismoDia ? 'Hoy' : `${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+  return `${dia} ${p(d.getHours())}:${p(d.getMinutes())} hs`;
+};
+
+const ETIQUETA_POSICION: Record<string, string> = {
+  GK: 'Arquero',
+  DEF: 'Defensor',
+  MID: 'Medio',
+  FWD: 'Delantero',
+  DT: 'DT',
+};
 
 // ==========================================
 // MAPA RADAR UNIFICADO
 // ==========================================
 export const MapaRadarUnificado: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   
   // Estado de Filtros
-  const [filtroActivo, setFiltroActivo] = useState<'todos' | 'canchas' | 'jugadores'>('todos');
+  const [filtroActivo, setFiltroActivo] = useState<FiltroRadar>('todos');
 
   // Estado de Entidades en el Mapa
   const [entidades, setEntidades] = useState<RadarEntity[]>([]);
+  const [cargando, setCargando] = useState(true);
   
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
@@ -131,70 +179,150 @@ export const MapaRadarUnificado: React.FC = () => {
   const mapCenter = { lat: geoLoc.latitude || fallbackLat, lng: geoLoc.longitude || fallbackLng };
 
   // CARGA DE DATOS
+  //
+  // Las cuatro fuentes se consultan en paralelo sobre el mismo punto/radio, y con
+  // el mismo indice `geo.prefijos` (canchas, equipos, desafios y jugadores
+  // comparten el motor de `core/geo`). Asi el mapa muestra la realidad de los dos
+  // modulos.
+  const cargarRadar = useCallback(async (punto: Punto, radioKm: number) => {
+    const [predios, desafios, jugadores, equipos] = await Promise.all([
+      listarPrediosPublicos('').catch(() => []),
+      listarDesafiosCercanos(punto, radioKm).catch(() => []),
+      listarCandidatosRadar(punto, radioKm).catch(() => []),
+      listarEquiposCercanos(punto, radioKm).catch(() => []),
+    ]);
+
+    const canchasEntities: CanchaEntity[] = predios
+      .filter(p => p.geo !== null)
+      .map(p => {
+        const canchas = canchasDe(p);
+        return {
+          id: p.id,
+          type: 'cancha' as const,
+          lat: p.geo!.lat,
+          lng: p.geo!.lng,
+          distanciaKm: haversineKm(punto, p.geo!),
+          nombre: p.nombre,
+          tipo: canchas[0]?.tipo ?? 'Sintetico',
+          cantidadCanchas: canchas.length
+        };
+      })
+      .filter(c => c.distanciaKm <= radioKm);
+
+    const desafiosEntities: DesafioEntity[] = desafios.map(d => ({
+      id: d.id,
+      type: 'desafio' as const,
+      lat: d.geo.lat,
+      lng: d.geo.lng,
+      distanciaKm: d.distanciaKm,
+      desafioId: d.id,
+      equipo: d.equipoNombre,
+      modalidad: d.modalidad,
+      fechaUnix: d.fechaUnix,
+      // El puente con FULBEANDO: si hay turno, la cancha ya esta reservada.
+      conCancha: d.turnoId !== null,
+      descripcion: d.descripcion,
+    }));
+
+    const jugadoresEntities: JugadorEntity[] = jugadores
+      .filter(u => u.geo !== null && u.perfilDeportivo !== null)
+      .map(u => ({
+        id: u.uid,
+        type: 'jugador' as const,
+        lat: u.geo!.lat,
+        lng: u.geo!.lng,
+        distanciaKm: u.distanciaKm,
+        uid: u.uid,
+        apodo: nombreCompleto(u) || 'Jugador',
+        posicion: ETIQUETA_POSICION[u.perfilDeportivo!.playerRole ?? ''] ?? 'Cualquiera',
+        media: u.perfilDeportivo!.rating,
+        fairPlay: Math.round(u.perfilDeportivo!.stats.fairPlayIndex),
+      }));
+
+    const equiposEntities: EquipoEntity[] = equipos.map(e => ({
+      id: e.id,
+      type: 'equipo' as const,
+      lat: e.geo!.lat,
+      lng: e.geo!.lng,
+      distanciaKm: e.distanciaKm,
+      equipoId: e.id,
+      nombre: e.name,
+      modalidad: e.modalidadBase,
+      cantidadJugadores: e.members.length,
+      escudoUrl: e.shieldUrl ?? null,
+    }));
+
+    setEntidades([
+      ...canchasEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
+      ...equiposEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
+      ...desafiosEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
+      ...jugadoresEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
+    ]);
+  }, []);
+
+  // Carga inicial, centrada donde el usuario esta.
   useEffect(() => {
     let vigente = true;
-    const loadData = async () => {
+    (async () => {
       try {
-        // Obtenemos los predios reales de Firebase
-        const prediosReales = await listarPrediosPublicos('');
-        if (!vigente) return;
-
-        const canchasEntities: CanchaEntity[] = prediosReales.map(p => {
-           const canchas = canchasDe(p);
-           return {
-             id: p.id,
-             type: 'cancha' as const,
-             lat: p.geo.lat,
-             lng: p.geo.lng,
-             nombre: p.nombre,
-             tipo: canchas.length > 0 ? canchas[0].tipo : 'Sintético',
-             cantidadCanchas: canchas.length
-           };
-        });
-
-        // Mocks para desafíos y jugadores por ahora
-        setEntidades([
-          ...canchasEntities,
-          { id: 'd1', type: 'desafio', lat: -34.9150, lng: -58.3800, equipo: 'Los Lobos FC', modalidad: 'F5', horario: 'Hoy 20:00 hs' },
-          { id: 'j1', type: 'jugador', lat: -34.9201, lng: -58.3800, apodo: 'El Rústico', posicion: 'DEF', media: 50, horaDisponible: 'Hoy 19:00 hs', fairPlay: 3.5 }
-        ]);
-
+        await cargarRadar({ lat: mapCenter.lat, lng: mapCenter.lng }, appEnv().radarRadioKm);
       } catch (err) {
-        console.error("Error al cargar predios reales:", err);
+        console.error('Error al cargar el radar:', err);
+      } finally {
+        if (vigente) setCargando(false);
       }
-    };
-    loadData();
+    })();
+    return () => { vigente = false; };
+  }, [cargarRadar]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Al mover el mapa se recalcula el radio y se recarga. El debounce va aqui (y
+  // no en el servicio) para que un solo timer gobierne las TRES fuentes: si
+  // cada servicio trajera el suyo, un mismo gesto dispararia tres timers.
+  const [vista, setVista] = useState<{ punto: Punto; radioKm: number } | null>(null);
+
+  const handleMapMove = useCallback((lat: number, lng: number, radiusKm: number) => {
+    const radioKm = Math.min(Math.max(radiusKm, 1), 50);
+    setVista({ punto: { lat, lng }, radioKm });
+  }, []);
+
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!vista) return;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setCargando(true);
+      cargarRadar(vista.punto, vista.radioKm)
+        .catch((err) => console.error('Error al refrescar el radar:', err))
+        .finally(() => setCargando(false));
+    }, 700);
 
     return () => {
-      vigente = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [vista, cargarRadar]);
 
-  // Lógica de Debounce para actualizar datos según la vista del mapa (Eficiencia Firestore)
-  const handleMapMove = useCallback((lat: number, lng: number, radiusKm: number) => {
-    onMapMoveDebounced(lat, lng, radiusKm, (nuevosDesafios) => {
-      // Aquí se actualizarían las entidades con los datos frescos de Firestore usando la misma lógica.
-      // En una implementación real, combinaríamos resultados de canchas, desafíos y jugadores
-      // limitando a 20 documentos activos por tipo en el radio actual.
-      // console.log("Mapa movido, actualizando entidades en radio:", radiusKm);
-    });
-  }, []);
+  /** 'canchas' -> 'cancha'. Tabla explicita: derivarlo con `slice` es fragil. */
+const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
+  todos: null,
+  canchas: 'cancha',
+  equipos: 'equipo',
+  desafios: 'desafio',
+  jugadores: 'jugador',
+};
 
-  // Limpiar selección si cambiamos de filtro y el seleccionado no aplica
+// Limpiar selección si cambiamos de filtro y el seleccionado no aplica
   useEffect(() => {
-    if (seleccionado) {
-      if (filtroActivo === 'canchas' && seleccionado.type !== 'cancha') setSeleccionado(null);
-      if (filtroActivo === 'jugadores' && seleccionado.type !== 'jugador') setSeleccionado(null);
+    const tipoVisible = TIPO_POR_FILTRO[filtroActivo];
+    if (seleccionado && tipoVisible !== null && seleccionado.type !== tipoVisible) {
+      setSeleccionado(null);
     }
   }, [filtroActivo, seleccionado]);
 
   const entidadesVisibles = useMemo(() => {
-    return entidades.filter(e => {
-      if (filtroActivo === 'todos') return true;
-      if (filtroActivo === 'canchas') return e.type === 'cancha';
-      if (filtroActivo === 'jugadores') return e.type === 'jugador';
-      return false;
-    });
+    const tipoVisible = TIPO_POR_FILTRO[filtroActivo];
+    return tipoVisible === null ? entidades : entidades.filter(e => e.type === tipoVisible);
   }, [entidades, filtroActivo]);
 
   return (
@@ -228,8 +356,9 @@ export const MapaRadarUnificado: React.FC = () => {
               key={entidad.id}
               position={[entidad.lat, entidad.lng]} 
               icon={
-                entidad.type === 'cancha' ? iconoPredio : 
-                entidad.type === 'desafio' ? iconoDesafio : 
+                entidad.type === 'cancha' ? iconoPredio :
+                entidad.type === 'equipo' ? iconoEquipo :
+                entidad.type === 'desafio' ? iconoDesafio :
                 iconoJugadorLibre
               }
               eventHandlers={{ click: () => setSeleccionado(entidad) }}
@@ -247,11 +376,23 @@ export const MapaRadarUnificado: React.FC = () => {
           >
             Todos
           </button>
-          <button 
+          <button
             onClick={() => setFiltroActivo('canchas')}
             className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             🏟️ Canchas / Predios
+          </button>
+          <button
+            onClick={() => setFiltroActivo('equipos')}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+          >
+            🧢 Equipos
+          </button>
+          <button
+            onClick={() => setFiltroActivo('desafios')}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-zinc-200'}`}
+          >
+            🛡️ Desafíos
           </button>
           <button 
             onClick={() => setFiltroActivo('jugadores')}
@@ -259,6 +400,11 @@ export const MapaRadarUnificado: React.FC = () => {
           >
             🏃 Jugadores Libres
           </button>
+          {cargando && (
+            <span className="px-3 py-2 text-[11px] font-bold text-zinc-500 whitespace-nowrap">
+              Buscando…
+            </span>
+          )}
         </div>
       </div>
 
@@ -334,19 +480,78 @@ export const MapaRadarUnificado: React.FC = () => {
             </div>
           )}
 
-          {seleccionado.type === 'desafio' && (
+          {seleccionado.type === 'equipo' && (
             <div>
-               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(245,158,11,0.3)]">🐺</div>
-                <div>
-                  <h3 className="text-white font-black text-xl">{seleccionado.equipo}</h3>
-                  <div className="flex gap-2 text-xs font-bold mt-1">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(14,165,233,0.3)]">
+                  {seleccionado.escudoUrl
+                    ? <img src={seleccionado.escudoUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                    : '🧢'}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-white font-black text-xl truncate">{seleccionado.nombre}</h3>
+                  <div className="flex gap-2 text-xs font-bold mt-1 flex-wrap">
                     <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.modalidad}</span>
-                    <span className="bg-amber-400/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">{seleccionado.horario}</span>
+                    <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20">
+                      {seleccionado.cantidadJugadores} en el plantel
+                    </span>
+                    <span className="text-zinc-500 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
                   </div>
                 </div>
               </div>
-              <button className="w-full bg-amber-500 text-amber-950 py-4 rounded-xl font-black shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm">
+
+              <p className="text-zinc-400 text-sm mb-4">
+                Equipo que juega en tu zona. Si te interesa Readiness, coordiná la cancha desde el
+                chat o mandales un mensaje.
+              </p>
+
+              <button
+                onClick={() => {
+                  if (!usuario) { navigate('/login'); return; }
+                  setToastMessage('Mensaje enviado al equipo.');
+                  setTimeout(() => setToastMessage(''), 3500);
+                }}
+                className="w-full bg-sky-500 text-white py-4 rounded-xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm"
+              >
+                Contactar al equipo
+              </button>
+            </div>
+          )}
+
+          {seleccionado.type === 'desafio' && (
+            <div>
+               <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(245,158,11,0.3)]">🛡️</div>
+                <div className="min-w-0">
+                  <h3 className="text-white font-black text-xl truncate">{seleccionado.equipo}</h3>
+                  <div className="flex gap-2 text-xs font-bold mt-1 flex-wrap">
+                    <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.modalidad}</span>
+                    <span className="bg-amber-400/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">{formatearHorario(seleccionado.fechaUnix)}</span>
+                    <span className="text-zinc-500 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* PUENTE ENTRE MODULOS: si el desafio referencia un turno de
+                  FULBEANDO, la cancha ya esta reservada y se muestra el puente. */}
+              <div className={`mb-4 rounded-xl border px-4 py-3 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
+                {seleccionado.conCancha
+                  ? '✅ Cancha ya reservada (turno confirmado)'
+                  : '🏟️ El equipo busca cancha: se coordina al aceptar'}
+              </div>
+
+              {seleccionado.descripcion && (
+                <p className="text-zinc-300 text-sm mb-4 leading-relaxed">{seleccionado.descripcion}</p>
+              )}
+
+              <button 
+                onClick={() => {
+                  if (!usuario) { navigate('/login'); return; }
+                  setToastMessage('Desafío enviado. Te avisamos cuando alguien lo acepte.');
+                  setTimeout(() => setToastMessage(''), 3500);
+                }}
+                className="w-full bg-amber-500 text-amber-950 py-4 rounded-xl font-black shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm"
+              >
                 Aceptar Desafío
               </button>
             </div>
@@ -368,7 +573,7 @@ export const MapaRadarUnificado: React.FC = () => {
                     <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.posicion}</span>
                     <span className="bg-amber-400/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">⭐ {seleccionado.fairPlay} FP</span>
                   </div>
-                  <p className="text-xs text-zinc-400 mt-2 font-medium">Disponible: {seleccionado.horaDisponible}</p>
+                  <p className="text-xs text-zinc-400 mt-2 font-medium">Disponible hoy · {seleccionado.distanciaKm.toFixed(1)} km de distancia</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

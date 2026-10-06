@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserPlus, MessageCircle, X } from 'lucide-react';
-import type { Usuario } from '@/domain';
+import { nombreCompleto, type Usuario } from '@/domain';
 
 interface RadarFloatingCardProps {
   user: Usuario;
@@ -13,7 +13,8 @@ interface RadarFloatingCardProps {
  * Componente UI: Tarjeta inferior que se despliega al tocar un pin de Jugador Libre en el mapa.
  */
 export const RadarFloatingCard: React.FC<RadarFloatingCardProps> = ({ user, onClose, onInviteToMatch, onRecruit }) => {
-  const stats = user.stats || { partidosJugados: 0, goles: 0, fairPlayScore: 5.0 };
+  const stats = user.perfilDeportivo?.stats
+    ?? { goals: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 5.0 };
   const posicion = user.perfilDeportivo?.posicion || 'MED';
 
   return (
@@ -28,21 +29,21 @@ export const RadarFloatingCard: React.FC<RadarFloatingCardProps> = ({ user, onCl
           
           <div className="relative">
             {user.fotoUrl ? (
-              <img src={user.fotoUrl} alt={user.displayName} className="w-16 h-16 rounded-full border-2 border-white object-cover shadow-sm" />
+              <img src={user.fotoUrl} alt={nombreCompleto(user)} className="w-16 h-16 rounded-full border-2 border-white object-cover shadow-sm" />
             ) : (
               <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-white flex items-center justify-center shadow-sm">
-                <span className="text-xl">⚽</span>
+                <span className="text-xl">âš½</span>
               </div>
             )}
             <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white shadow-sm"></div>
           </div>
 
           <div className="text-white flex-1">
-            <h3 className="text-lg font-black leading-tight">{user.displayName}</h3>
+            <h3 className="text-lg font-black leading-tight">{nombreCompleto(user)}</h3>
             <div className="flex gap-2 text-xs font-semibold mt-1">
               <span className="bg-black/20 px-2 py-0.5 rounded-md uppercase">{posicion}</span>
               <span className="bg-amber-400 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1">
-                ⭐ {stats.fairPlayScore.toFixed(1)}
+                â­ {stats.fairPlayIndex.toFixed(1)}
               </span>
             </div>
           </div>

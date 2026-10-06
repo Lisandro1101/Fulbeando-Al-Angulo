@@ -15,6 +15,7 @@
     "seed": "tsx --tsconfig tsconfig.app.json --env-file=.env.local scripts/seed.ts",
     "verificar:geo": "tsx --tsconfig tsconfig.app.json scripts/verificar-geo.ts",
     "verificar:franjas": "tsx --tsconfig tsconfig.app.json scripts/verificar-franjas.ts",
+    "verificar:reserva": "tsx --tsconfig tsconfig.app.json --env-file=.env.local scripts/verificar-reserva.ts",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,storage"
   },
   "dependencies": {

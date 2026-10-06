@@ -36,6 +36,15 @@ export interface Turno extends Auditoria {
   canceladoPor: MotivoCancelacion | null
   /** Geo del predio denormalizado: el radar consulta alertas, no joins. */
   geo: GeoIndex
+  /**
+   * PUENTE ENTRE MODULOS: id numerico en la coleccion legacy `matches`.
+   *
+   * Cuando el turno existe para que se juegue un partido de AL ANGULO, este campo
+   * lo referencia. Es opcional porque la mayoria de los turnos son reservas
+   * sueltas, sin partido. Ojo: los ids de `matches` son numericos, a diferencia
+   * de los ids string del resto del modelo.
+   */
+  partidoId: number | null
 }
 
 /** Duracion maxima del bloqueo provisional esperando validacion del comprobante. */

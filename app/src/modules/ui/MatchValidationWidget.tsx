@@ -1,8 +1,6 @@
-import React from 'react';
-
 /**
- * WIDGET DE VALIDACIÓN DE RESULTADOS
- * Interfaz hiper-directa (cero fricción) para confirmar o rechazar partidos.
+ * WIDGET DE VALIDACIÃ“N DE RESULTADOS
+ * Interfaz hiper-directa (cero fricciÃ³n) para confirmar o rechazar partidos.
  */
 export const MatchValidationWidget = () => {
   return (
@@ -11,13 +9,13 @@ export const MatchValidationWidget = () => {
       {/* Header del modal */}
       <div className="text-center mb-5">
         <div className="inline-block bg-orange-500/20 text-neon-orange px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-2">
-          Acción Requerida
+          AcciÃ³n Requerida
         </div>
         <h3 className="text-xl font-display font-bold text-white leading-tight">Validar Resultado</h3>
-        <p className="text-xs text-gray-400 mt-1">El capitán rival subió el marcador. Confirmá antes de las 24hs o se auto-aprobará.</p>
+        <p className="text-xs text-gray-400 mt-1">El capitÃ¡n rival subiÃ³ el marcador. ConfirmÃ¡ antes de las 24hs o se auto-aprobarÃ¡.</p>
       </div>
 
-      {/* Marcador Visual Titánico */}
+      {/* Marcador Visual TitÃ¡nico */}
       <div className="flex justify-between items-center bg-pitch-900 rounded-xl p-6 mb-6 shadow-inner border border-pitch-800">
         <div className="flex flex-col items-center flex-1">
           <span className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Vos</span>
@@ -32,7 +30,7 @@ export const MatchValidationWidget = () => {
         </div>
       </div>
 
-      {/* CTAs Ergonómicos (Dedo pulgar) */}
+      {/* CTAs ErgonÃ³micos (Dedo pulgar) */}
       <div className="flex space-x-3">
         <button className="flex-1 bg-transparent border border-gray-600 text-gray-300 py-4 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors active:scale-95">
           Apelar Fraude

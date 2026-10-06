@@ -1,12 +1,19 @@
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/core/firebase';
-
-// Mock de funciones
-const getFunctions = () => ({});
-const httpsCallable = (funcs: any, name: string) => async (data: any) => ({ data: {} as any }); 
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { storage } from '@/core/firebase'; 
 
 interface UploadResult {
   publicUrl: string;
+  fileKey: string;
+}
+
+/** Respuesta de la Cloud Function `getPresignedUploadUrl`. */
+interface PresignedUpload {
+  /** URL firmada de PUT contra el edge de R2/S3. */
+  uploadUrl: string;
+  /** URL publica definitiva del objeto. */
+  publicUrl: string;
+  /** Clave del objeto en el bucket, tipo `avatars/1712_abc.webp`. */
   fileKey: string;
 }
 
@@ -71,7 +78,7 @@ export const uploadImageToR2 = async (
       folder
     });
 
-    const { uploadUrl, publicUrl, fileKey } = data;
+    const { uploadUrl, publicUrl, fileKey } = data as PresignedUpload;
 
     // 2. Subida P2P (Cliente -> Cloudflare Edge)
     return await new Promise<UploadResult>((resolve, reject) => {

@@ -1,5 +1,3 @@
-import React from 'react';
-
 export const AdminDashboard = () => {
   // Datos mockeados que simulan la carga de O(1) de system_metrics/dashboard_summary
   const metrics = {

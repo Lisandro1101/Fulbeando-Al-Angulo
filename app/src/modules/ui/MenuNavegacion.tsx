@@ -8,7 +8,8 @@ export const MenuNavegacion: React.FC = () => {
   const navigate = useNavigate();
   const { usuario } = useSesion();
 
-  const esDueno = usuario?.rol === 'dueno_predio' || usuario?.rol === 'dueno';
+  // Solo `dueno_predio`: el rol 'dueno' del modelo legacy ya no existe en `Rol`.
+const esDueno = usuario?.rol === 'dueno_predio';
   const esAdmin = usuario?.rol === 'superadmin';
 
   return (

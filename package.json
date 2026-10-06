@@ -3,14 +3,24 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev:all": "concurrently -c \"cyan,magenta,yellow,green\" -n \"FUNCTIONS,EMULATORS,SEED,VITE\" \"npm run dev:functions\" \"npm run dev:emulators\" \"npm run seed:wait\" \"npm run dev:app\"",
-    "dev:functions": "npm run build:watch --prefix \"AL ANGULO/firebase/functions\"",
-    "dev:emulators": "firebase emulators:start",
-    "seed:wait": "wait-on tcp:127.0.0.1:8080 && tsx scripts/seed-emuladores.ts",
+    "dev:all": "concurrently -c \"cyan,magenta,yellow,green\" -n \"EMULATORS,SEED,VITE\" \"npm run dev:emulators\" \"npm run seed:wait\" \"npm run dev:app\"",
+    "dev:all:functions": "concurrently -c \"cyan,magenta,yellow,green\" -n \"FUNCTIONS,EMULATORS,SEED,VITE\" \"npm run dev:functions\" \"npm run dev:emulators\" \"npm run seed:wait\" \"npm run dev:app\"",
+    "dev:functions": "npm run build:watch --prefix \"app/firebase/functions\"",
+    "dev:emulators": "tsx scripts/firebase.ts emulators:start",
+    "seed:wait": "wait-on tcp:127.0.0.1:8080 tcp:127.0.0.1:9099 && tsx scripts/seed-emuladores.ts",
+    "seed:verify": "tsx scripts/verificar-seed.ts",
+    "login:verify": "tsx scripts/probar-login.ts",
     "dev:app": "npm run dev --prefix app",
-    "deploy:hosting": "cd app && npm run build && cd .. && firebase deploy --only hosting"
+    "test:rules": "tsx scripts/firebase.ts emulators:exec --only firestore \"tsx scripts/test-reglas-equipos.ts && tsx scripts/test-reglas-turnos.ts\"",
+    "build:app": "npm run build --prefix app",
+    "deploy:hosting": "npm run build:app && tsx scripts/deploy-hosting.ts",
+    "deploy:preview": "npm run build:app && tsx scripts/deploy-hosting.ts --preview pre-produccion"
   },
   "devDependencies": {
-    "firebase-admin": "^11.8.0"
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "concurrently": "^10.0.5",
+    "firebase-admin": "^11.8.0",
+    "tsx": "^4.23.15",
+    "wait-on": "^9.5.1"
   }
 }

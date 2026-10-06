@@ -1,6 +1,6 @@
 import React from 'react';
 import { Share2, ShieldPlus, MapPinned } from 'lucide-react';
-import type { Usuario } from '@/domain';
+import { nombreCompleto, type Usuario } from '@/domain';
 
 interface WelcomeCardProps {
   user: Usuario;
@@ -11,11 +11,12 @@ interface WelcomeCardProps {
 
 /**
  * Componente UI: Carta de Jugador (Estilo FUT) + Onboarding Actions
- * Mobile-First y Cero fricción al entrar.
+ * Mobile-First y Cero fricciÃ³n al entrar.
  */
 export const WelcomeCard: React.FC<WelcomeCardProps> = ({ user, onShare, onCreateTeam, onExploreRadar }) => {
   // Stats base en cero si no existen
-  const stats = user.stats || { partidosJugados: 0, goles: 0, fairPlayScore: 5.0 };
+  const stats = user.perfilDeportivo?.stats
+    ?? { goals: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 5.0 };
   const position = user.perfilDeportivo?.posicion || 'DEL';
 
   return (
@@ -23,8 +24,8 @@ export const WelcomeCard: React.FC<WelcomeCardProps> = ({ user, onShare, onCreat
       
       {/* HEADER BBIENVENIDA */}
       <div className="text-center">
-        <h1 className="text-2xl font-black text-slate-800 dark:text-white">¡Bienvenido a la cancha!</h1>
-        <p className="text-slate-500 text-sm mt-1">Tu perfil de jugador ya está listo.</p>
+        <h1 className="text-2xl font-black text-slate-800 dark:text-white">Â¡Bienvenido a la cancha!</h1>
+        <p className="text-slate-500 text-sm mt-1">Tu perfil de jugador ya estÃ¡ listo.</p>
       </div>
 
       {/* CARTA ESTILO FUT */}
@@ -33,7 +34,7 @@ export const WelcomeCard: React.FC<WelcomeCardProps> = ({ user, onShare, onCreat
         <div className="relative h-full w-full bg-slate-900 rounded-[22px] flex flex-col items-center p-6 text-white border-4 border-amber-400/50">
           
           <div className="absolute top-4 left-4 text-3xl font-black text-amber-400 drop-shadow-md">
-            {stats.fairPlayScore.toFixed(1)}
+            {stats.fairPlayIndex.toFixed(1)}
           </div>
           <div className="absolute top-12 left-4 text-sm font-bold text-slate-300">
             {position}
@@ -44,27 +45,27 @@ export const WelcomeCard: React.FC<WelcomeCardProps> = ({ user, onShare, onCreat
               <img src={user.fotoUrl} alt="Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-amber-400 shadow-lg" />
             ) : (
               <div className="w-32 h-32 rounded-full bg-slate-800 flex items-center justify-center border-4 border-amber-400 shadow-lg">
-                <span className="text-4xl">⚽</span>
+                <span className="text-4xl">âš½</span>
               </div>
             )}
           </div>
 
-          <h2 className="text-2xl font-black tracking-tight mb-4 uppercase">{user.displayName}</h2>
+          <h2 className="text-2xl font-black tracking-tight mb-4 uppercase">{nombreCompleto(user)}</h2>
           
           <div className="w-full border-t border-slate-700 pt-4 grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-2xl font-black text-amber-400">{stats.partidosJugados}</div>
+              <div className="text-2xl font-black text-amber-400">{stats.matchesPlayed}</div>
               <div className="text-[10px] text-slate-400 uppercase tracking-widest">Partidos</div>
             </div>
             <div>
-              <div className="text-2xl font-black text-amber-400">{stats.goles}</div>
+              <div className="text-2xl font-black text-amber-400">{stats.goals}</div>
               <div className="text-[10px] text-slate-400 uppercase tracking-widest">Goles</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ACCIONES (Cero Fricción) */}
+      {/* ACCIONES (Cero FricciÃ³n) */}
       <div className="w-full space-y-3">
         <button onClick={onCreateTeam} className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:opacity-90 transition">
           <ShieldPlus className="w-5 h-5" />

@@ -201,6 +201,7 @@ export const generarGrillaDelDia = async (
       expiracionNotificada: false,
       canceladoPor: null,
       geo,
+      partidoId: null,
       ...auditoriaInicial(),
     } satisfies Escritura<Turno>)
   }
@@ -271,9 +272,10 @@ export const generarGrillaMasiva = async (
         motivoRechazo: null,
         bloqueadoHasta: null,
         expiracionNotificada: false,
-        canceladoPor: null,
-        geo,
-        ...auditoriaInicial(),
+canceladoPor: null,
+    geo,
+    partidoId: null,
+    ...auditoriaInicial(),
       } satisfies Escritura<Turno>)
       
       operacionesEnBatch++
@@ -382,7 +384,7 @@ export const solicitarTurno = async (params: SolicitarTurnoParams): Promise<stri
 
     const comprobante: Comprobante = {
       turnoId: id,
-      organizerUid: params.organizador.uid,
+      organizadorUid: params.organizador.uid,
       storagePath: params.comprobante.storagePath,
       mimeType: params.comprobante.mimeType,
       sizeBytes: params.comprobante.sizeBytes,
