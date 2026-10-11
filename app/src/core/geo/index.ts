@@ -1,5 +1,5 @@
 import type { GeoIndex } from '@/domain'
-import { encodeGeohash, prefijosQueCubren } from './geohash'
+import { encodeGeohash, prefijosQueCubrenBD } from './geohash'
 
 /** Radio por defecto del radar "Falta 1", en km. */
 export const RADAR_RADIO_KM = 5
@@ -15,5 +15,5 @@ export const aGeoIndex = (
   lat: Number(punto.lat.toFixed(4)),
   lng: Number(punto.lng.toFixed(4)),
   prefijo: encodeGeohash(punto.lat, punto.lng, 5),
-  prefijos: prefijosQueCubren(punto, radioKm, 5),
+  prefijos: prefijosQueCubrenBD(punto, radioKm),
 })

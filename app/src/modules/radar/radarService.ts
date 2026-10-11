@@ -20,18 +20,24 @@ export const listarDesafiosCercanos = async (
   punto: Punto,
   radioKm: number = appEnv().radarRadioKm,
 ): Promise<PinDesafio[]> => {
-  const prefijos = prefijosQueCubren(punto, radioKm, 5)
-  if (prefijos.length === 0) return []
+  const esRadioGrande = radioKm > 50
+  const prefijos = esRadioGrande ? [] : prefijosQueCubren(punto, radioKm, 5)
+  if (!esRadioGrande && prefijos.length === 0) return []
 
-  const snap = await getDocs(
-    query(
-      collection(db, COLECCIONES.desafios),
-      where('geo.prefijos', 'array-contains-any', prefijos),
-      where('estado', '==', 'ABIERTO'),
-      // Limite duro: frena densidades extremas (100 partidos en 10 cuadras).
-      limit(20),
-    ),
-  )
+  const q = esRadioGrande
+    ? query(
+        collection(db, COLECCIONES.desafios),
+        where('estado', '==', 'ABIERTO'),
+        limit(50)
+      )
+    : query(
+        collection(db, COLECCIONES.desafios),
+        where('geo.prefijos', 'array-contains-any', prefijos),
+        where('estado', '==', 'ABIERTO'),
+        limit(20)
+      )
+
+  const snap = await getDocs(q)
 
   return snap.docs
     .map((d) => d.data() as Desafio)

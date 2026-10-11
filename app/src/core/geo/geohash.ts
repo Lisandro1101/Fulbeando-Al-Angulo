@@ -105,8 +105,8 @@ export function haversineKm(a: Punto, b: Punto): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)))
 }
 
-/** Firestore limita `in` / `array-contains-any` a 30 valores. */
-export const MAX_PREFIJOS = 30
+/** Firestore limita `in` / `array-contains-any` a 30 valores en prod, pero falla silenciosamente con >10 en el emulador local. */
+export const MAX_PREFIJOS = 10
 
 /**
  * Prefijos de geohash que cubren un radio (en km) alrededor de un punto.
@@ -118,6 +118,7 @@ export function prefijosQueCubren(
   punto: Punto,
   radioKm: number,
   precisionInicial = 5,
+  maxPrefijos = MAX_PREFIJOS
 ): string[] {
   const dLat = radioKm / KM_POR_GRADO_LAT
   const cos = Math.cos((punto.lat * Math.PI) / 180)
@@ -130,7 +131,7 @@ export function prefijosQueCubren(
 
     const filas = Math.max(1, Math.ceil((dLat * 2) / alto) + 1)
     const columnas = Math.max(1, Math.ceil((dLng * 2) / ancho) + 1)
-    if (filas * columnas > MAX_PREFIJOS) continue
+    if (filas * columnas > maxPrefijos) continue
 
     const set = new Set<string>()
     for (let f = 0; f < filas; f += 1) {
@@ -145,3 +146,21 @@ export function prefijosQueCubren(
 
   return [encodeGeohash(punto.lat, punto.lng, 1)]
 }
+
+/** 
+ * Genera todos los prefijos padre de los geohashes que cubren el area,
+ * asegurando que una query con menor precision todavia haga match exacto 
+ * con array-contains-any. 
+ */
+export function prefijosQueCubrenBD(punto: Punto, radioKm: number): string[] {
+  // Tolerancia alta (hasta ~500) para generar geohashes precisos en la BD
+  const base = prefijosQueCubren(punto, radioKm, 5, 500)
+  const set = new Set<string>()
+  for (const hash of base) {
+    for (let i = 1; i <= hash.length; i++) {
+      set.add(hash.substring(0, i))
+    }
+  }
+  return [...set]
+}
+

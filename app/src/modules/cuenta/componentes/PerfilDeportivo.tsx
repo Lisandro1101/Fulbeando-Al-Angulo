@@ -238,3 +238,135 @@ function Interruptor({
     </label>
   )
 }
+
+export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCambio: (usuario: Usuario) => void }) {
+  const [apodo, setApodo] = useState(usuario.nombre || '');
+  const [username, setUsername] = useState(usuario.email?.split('@')[0] || '');
+  const [emojiFoto, setEmojiFoto] = useState(usuario.fotoUrl || '⚽');
+  const [fechaNacimiento, setFechaNacimiento] = useState(usuario.fechaNacimiento || '');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guardar = async () => {
+    setGuardando(true);
+    setError(null);
+    try {
+      // Solo se manda el email si el usuario lo cambio de verdad: si no, cada
+      // "Guardar Cambios" reescribia la direccion con el dominio de relleno.
+      const cambios: { nombre: string; email?: string; fotoUrl: string | null; fechaNacimiento: string | null } = {
+        nombre: apodo,
+        fotoUrl: emojiFoto,
+        fechaNacimiento: fechaNacimiento || null,
+      };
+      const emailEditado = username + '@fulbeando.local';
+      if (username && emailEditado !== usuario.email) cambios.email = emailEditado;
+
+      const { actualizarDatosBasicos } = await import('@/modules/usuarios/repositorio');
+      await actualizarDatosBasicos(usuario.uid, cambios);
+      onCambio({ ...usuario, ...cambios });
+    } catch {
+      setError('Error al guardar.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="mb-1 block text-xs text-ink-muted">Apodo</label>
+        <input 
+          type="text" 
+          value={apodo} 
+          onChange={(e) => setApodo(e.target.value)} 
+          className="field" 
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-ink-muted">Nombre de Usuario (@)</label>
+        <div className="flex items-center field p-0 overflow-hidden">
+          <span className="pl-3 text-ink-muted font-bold">@</span>
+          <input 
+            type="text" 
+            value={username} 
+            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} 
+            className="w-full bg-transparent p-2 outline-none" 
+          />
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-ink-muted" htmlFor="fecha-nacimiento">Fecha de nacimiento</label>
+        <input
+          id="fecha-nacimiento"
+          type="date"
+          value={fechaNacimiento}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setFechaNacimiento(e.target.value)}
+          className="field [color-scheme:dark]"
+        />
+        <p className="mt-1 text-xs text-ink-muted">
+          De acá sale tu edad en la ficha del perfil.
+        </p>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-ink-muted">Foto de Perfil</label>
+        <div className="flex items-center gap-4 bg-canvas p-4 rounded-xl border border-border">
+          <div 
+            className="w-16 h-16 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center text-3xl border-2 border-pitch/50 cursor-pointer hover:border-pitch transition-colors relative group"
+            onClick={() => document.getElementById('avatar-upload')?.click()}
+          >
+            {emojiFoto?.startsWith('http') ? (
+               <img src={emojiFoto} alt="Perfil" className="w-full h-full object-cover" />
+            ) : (
+               <span className="text-sm font-bold text-zinc-500">Foto</span>
+            )}
+            <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white backdrop-blur-sm">
+              <span className="text-xs font-bold uppercase">Subir</span>
+            </div>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-ink-muted mb-2">Toca el círculo para subir una foto de perfil</p>
+          </div>
+          <input 
+            id="avatar-upload"
+            type="file" 
+            className="hidden" 
+            accept="image/*" 
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if(!file) return;
+              try {
+                 setGuardando(true);
+                 setError(null);
+                 const { optimizeAvatarImage } = await import('@/imageCompressor');
+                 const { uploadImageToR2 } = await import('@/uploader');
+                  const optimized = await optimizeAvatarImage(file, { maxSize: 300, quality: 0.8 });
+                  // `avatars/{uid}`: storage.rules solo deja escribir en el
+                  // espacio propio del usuario que sube.
+                  const result = await uploadImageToR2(optimized, file.name, `avatars/${usuario.uid}`, () => {});
+                 setEmojiFoto(result.publicUrl);
+              } catch(err) {
+                 setError('Error al subir la imagen');
+              } finally {
+                 setGuardando(false);
+              }
+            }} 
+          />
+        </div>
+      </div>
+      
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      
+      <div className="pt-2">
+        <button 
+          type="button"
+          onClick={guardar} 
+          disabled={guardando} 
+          className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl active:scale-95 transition-transform disabled:opacity-50"
+        >
+          {guardando ? 'Guardando...' : 'Guardar Cambios'}
+        </button>
+      </div>
+    </div>
+  );
+}

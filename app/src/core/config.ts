@@ -18,6 +18,20 @@ export interface FirebaseEnv {
  */
 export const MONTO_SENA_DEFAULT = 15000
 
+/**
+ * Contacto comercial del dueno de predio (PLACEHOLDER).
+ *
+ * El alta de dueño no se habilita sola: queda `pendiente` y el dueno ve este
+ * cartel hasta que el superadmin activa el plan. Cambiar el numero aca cambia
+ * el cartel y el link de WhatsApp, en un solo lugar.
+ */
+export const CONTACTO_PLAN_DUENO = {
+  /** Lo que se muestra en pantalla. */
+  visible: '+54 9 11 0000-0000',
+  /** Solo digitos, para armar `wa.me/<numero>`. */
+  whatsapp: '5491100000000',
+} as const
+
 export interface AppEnv {
   firebase: FirebaseEnv
   /** Conecta al emulador local de Firebase. */

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { User } from 'firebase/auth'
 import type { Actor, Usuario } from '@/domain'
-import { asegurarUsuario, obtenerUsuario } from '@/modules/usuarios/repositorio'
+import { asegurarUsuario } from '@/modules/usuarios/repositorio'
 import { idsDePredios } from '@/modules/predios/repositorio'
 import { getRedirectResult } from 'firebase/auth'
 import { auth } from '@/core/firebase'
-import { observarSesion } from './servicio'
+import { consumirFechaNacimientoDeAlta, observarSesion } from './servicio'
 
 export interface EstadoSesion {
   cargando: boolean
@@ -42,13 +42,20 @@ export function useSesion(): EstadoSesion {
         return
       }
       try {
-        await asegurarUsuario(user.uid, {
-          nombre: (user.displayName ?? 'Jugador').split(' ')[0] ?? 'Jugador',
-          apellido: user.displayName?.split(' ').slice(1).join(' ') ?? '',
-          email: user.email ?? '',
-        }, 'invitado')
+        // Una sola lectura: `asegurarUsuario` devuelve el doc si ya existia, y
+        // si hay que crearlo lo escribe con la fecha de nacimiento del registro
+        // en ese mismo batch (cero escrituras extra).
+        const usuario = await asegurarUsuario(
+          user.uid,
+          {
+            nombre: (user.displayName ?? 'Jugador').split(' ')[0] ?? 'Jugador',
+            apellido: user.displayName?.split(' ').slice(1).join(' ') ?? '',
+            email: user.email ?? '',
+          },
+          'invitado',
+          consumirFechaNacimientoDeAlta(),
+        )
 
-        const usuario = await obtenerUsuario(user.uid)
         // Solo `dueno_predio`: el rol 'dueno' del modelo legacy ya no existe en `Rol`.
         const prediosIds = usuario?.rol === 'dueno_predio' ? await idsDePredios(user.uid) : []
 

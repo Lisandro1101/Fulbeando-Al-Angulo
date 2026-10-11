@@ -80,24 +80,29 @@ export function NavegacionHeader() {
 
         {/* Navegación Principal */}
         <nav className="hidden items-center gap-1 sm:flex">
-          <Link
-            to="/radar"
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              esRutaActiva('/radar') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
-            }`}
-          >
-            <MapPin className="h-3.5 w-3.5" />
-            Canchas
-          </Link>
-          <Link
-            to="/partidos"
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              esRutaActiva('/partidos') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5 text-urgent" />
-            Radar & Partidos
-          </Link>
+          {/* Radar y partidos son del lado del jugador: el dueno no los tiene. */}
+          {sesion.usuario?.rol !== 'dueno_predio' && (
+            <>
+              <Link
+                to="/radar"
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  esRutaActiva('/radar') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Canchas
+              </Link>
+              <Link
+                to="/partidos"
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  esRutaActiva('/partidos') ? 'bg-pitch-faint text-pitch' : 'text-ink-muted hover:bg-canvas-raised hover:text-ink'
+                }`}
+              >
+                <Zap className="h-3.5 w-3.5 text-urgent" />
+                Radar & Partidos
+              </Link>
+            </>
+          )}
           {sesion.usuario?.rol === 'dueno_predio' || sesion.usuario?.rol === 'superadmin' ? (
             <Link
               to="/venue-dashboard"
@@ -179,12 +184,12 @@ export function NavegacionHeader() {
 
               <div className="mt-1 border-t border-ink-faint/20 pt-1">
                 <Link
-                  to="/perfil"
+                  to={sesion.usuario?.rol === 'dueno_predio' ? '/ajustes' : '/perfil'}
                   onClick={() => setDesplegable(false)}
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-ink hover:bg-canvas"
                 >
                   <UserCheck className="h-3.5 w-3.5 text-ink-muted" />
-                  Perfil & Ajustes
+                  {sesion.usuario?.rol === 'dueno_predio' ? 'Mi cuenta' : 'Perfil & Ajustes'}
                 </Link>
                 {sesion.user && (
                   <button

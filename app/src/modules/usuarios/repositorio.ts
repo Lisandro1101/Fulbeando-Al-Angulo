@@ -8,6 +8,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  limit,
 } from 'firebase/firestore'
 import type { GeoIndex, PerfilDeportivo, Rol, Usuario } from '@/domain'
 import { COLECCIONES, appEnv } from '@/core/config'
@@ -57,17 +58,21 @@ export const obtenerUsuario = async (uid: string): Promise<Usuario | null> => {
 /**
  * Alta idempotente desde Auth: no pisa un perfil ya existente ni su rol.
  * El primer ingreso de cada usuario tiene que existir antes que cualquier regla.
+ *
+ * Devuelve el documento resultante para que `useSesion` no tenga que hacer un
+ * segundo `getDoc`: arrancar la app sale UNA lectura en vez de dos.
  */
 export const asegurarUsuario = async (
   uid: string,
   perfil: { nombre: string; apellido: string; email: string },
   rolPorDefecto: Rol = 'jugador',
-): Promise<void> => {
+  fechaNacimiento: string | null = null,
+): Promise<Usuario | null> => {
   const snap = await getDoc(ref(uid))
-  if (snap.exists()) return
+  if (snap.exists()) return { ...snap.data(), uid } as Usuario
 
   const batch = writeBatch(db)
-  batch.set(ref(uid), {
+  const usuario: Escritura<Usuario> = {
     uid,
     ...perfil,
     rol: rolPorDefecto,
@@ -77,10 +82,17 @@ export const asegurarUsuario = async (
     geo: null,
     zona: null,
     fotoUrl: null,
+    fechaNacimiento,
     estado: 'activo',
     ...auditoriaInicial(),
-  })
+  }
+  batch.set(ref(uid), usuario)
   await batch.commit()
+
+  // `createdAt`/`updatedAt` quedan como `FieldValue` en el objeto en memoria:
+  // al recien creado nadie los lee, pero devolvemos fechas para no filtrar el
+  // centinela a la UI.
+  return { ...usuario, createdAt: new Date(), updatedAt: new Date() } as unknown as Usuario
 }
 
 export const actualizarPerfilDeportivo = async (
@@ -95,6 +107,18 @@ export const actualizarPerfilDeportivo = async (
 
 export const actualizarZona = async (uid: string, zona: string | null): Promise<void> => {
   await updateDoc(ref(uid), { zona, ...auditoriaUpdate() })
+}
+
+export const actualizarDatosBasicos = async (
+  uid: string,
+  cambios: {
+    nombre?: string
+    email?: string
+    fotoUrl?: string | null
+    fechaNacimiento?: string | null
+  },
+): Promise<void> => {
+  await updateDoc(ref(uid), { ...cambios, ...auditoriaUpdate() })
 }
 
 /** Guardar ubicacion aproximada (la que el usuario acepta compartir). */
@@ -125,20 +149,32 @@ export const listarCandidatosRadar = async (
   punto: Punto,
   radioKm: number = appEnv().radarRadioKm,
 ): Promise<Array<Usuario & { distanciaKm: number }>> => {
-  const prefijos = prefijosQueCubren(punto, radioKm, 5)
-  const snap = await getDocs(
-    query(
-      col(),
-      where('geo.prefijos', 'array-contains-any', prefijos),
-      where('estado', '==', 'activo'),
-      where('perfilDeportivo.disponibleHoy', '==', true),
-      where('perfilDeportivo.notificacionesRadar', '==', true),
-    ),
-  )
+  const esRadioGrande = radioKm > 50
+  const prefijos = esRadioGrande ? [] : prefijosQueCubren(punto, radioKm, 5)
+  if (!esRadioGrande && prefijos.length === 0) return []
+
+  const q = esRadioGrande
+    ? query(
+        col(),
+        where('estado', '==', 'activo'),
+        where('perfilDeportivo.disponibleHoy', '==', true),
+        where('perfilDeportivo.notificacionesRadar', '==', true),
+        limit(50)
+      )
+    : query(
+        col(),
+        where('geo.prefijos', 'array-contains-any', prefijos),
+        where('estado', '==', 'activo'),
+        where('perfilDeportivo.disponibleHoy', '==', true),
+        where('perfilDeportivo.notificacionesRadar', '==', true),
+        limit(30)
+      )
+
+  const snap = await getDocs(q)
 
   return snap.docs
     .map((d) => d.data() as Usuario)
-    .filter((u) => u.geo !== null && u.deletedAt === null && u.rol === 'jugador')
+    .filter((u) => u.geo !== null && !u.deletedAt && u.rol === 'jugador')
     .map((u) => ({ ...u, distanciaKm: haversineKm(punto, u.geo as GeoIndex) }))
     .filter((u) => u.distanciaKm <= radioKm)
     .sort((a, b) => a.distanciaKm - b.distanciaKm)

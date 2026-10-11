@@ -35,7 +35,41 @@ service firebase.storage {
       allow delete: if false;
     }
 
-    // Fotos de perfil, predios y canchas se resuelven en el paso siguiente.
+    // ------------------------------------------------------------------ //
+    // Avatar y escudo: imagenes NO sensibles que la app pinta en tarjetas. //
+    // Se leen con `<img src>` desde fuera de la app (sin cabecera de auth), //
+    // por eso la lectura queda abierta: el acceso efectivo depende del      //
+    // `token` que devuelve `getDownloadURL`. Lo sensible (comprobantes)     //
+    // sigue cerrado en su propio match.                                    //
+    // ------------------------------------------------------------------ //
+
+    /** Foto de perfil: cada quien escribe SOLO en su propio espacio. */
+    match /avatars/{uid}/{archivo} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+
+    /**
+     * Escudo del equipo: `teams/{teamId}/{archivo}`.
+     * La condicion de escritura es la misma que el update de `teams/{id}` en
+     * `firestore.rules`: solo el capitan. Por eso el caller tiene que pasar
+     * `folder = teams/${teamId}` y no `teams` a secas.
+     */
+    match /teams/{teamId}/{archivo} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*')
+        && firestore.get(/databases/(default)/documents/teams/$(teamId)).data.captainId
+             == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Cualquier otra ruta del bucket queda prohibida.
     match /{allPaths=**} {
       allow read, write: if false;
     }

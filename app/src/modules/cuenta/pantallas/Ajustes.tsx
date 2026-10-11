@@ -4,8 +4,8 @@ import { BotonIngreso } from '@/modules/auth/BotonIngreso'
 import { useSesion } from '@/modules/auth/useSesion'
 import { cerrarSesion } from '@/modules/auth/servicio'
 import { messaging } from '@/core/firebase'
-import { FormularioSolicitudDueno } from '@/modules/solicitudes/componentes/FormularioSolicitudDueno'
-import { PerfilDeportivoCard, UbicacionCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
+import { PerfilBasicoCard, PerfilDeportivoCard, UbicacionCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
+import { EditorPredioCard } from '@/modules/cuenta/componentes/EditorPredio'
 import { NavegacionHeader } from '@/modules/ui/NavegacionHeader'
 import type { Usuario } from '@/domain'
 
@@ -58,13 +58,20 @@ export default function Ajustes() {
   const sesion = useSesion()
   // `optimista` refleja el cambio al toque; se descarta cuando la sesion cambia.
   const [optimista, setOptimista] = useState<Usuario | null>(null)
-  const [tabActivo, setTabActivo] = useState<'jugador' | 'predio'>('jugador')
+  const [tabActivo, setTabActivo] = useState<'jugador' | 'cuenta' | 'predio'>('jugador')
   
   useEffect(() => {
     setOptimista(null)
   }, [sesion.usuario])
 
   const usuario = optimista ?? sesion.usuario
+
+  // Un dueno no tiene perfil deportivo: sus dos pestañas son Cuenta y Predio.
+  // El rol puede cambiar despues de montar la pantalla (cambio de cuenta demo),
+  // por lo que la decision se toma en cada render y no en el useState inicial.
+  const esDueno = usuario?.rol === 'dueno_predio'
+  const tab: 'jugador' | 'cuenta' | 'predio' =
+    esDueno && tabActivo === 'jugador' ? 'cuenta' : tabActivo
 
   if (sesion.user === null) {
     return (
@@ -99,35 +106,52 @@ export default function Ajustes() {
       </div>
       <Pantalla titulo="Ajustes" subtitulo="Configura tu cuenta deportiva y de predio.">
         <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-              tabActivo === 'jugador'
-                ? 'bg-pitch text-canvas'
-                : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
-            }`}
-            onClick={() => setTabActivo('jugador')}
-          >
-            Perfil de Jugador
-          </button>
-          {usuario.rol === 'dueno_predio' && (
+          {esDueno ? (
+            <>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  tab === 'cuenta'
+                    ? 'bg-pitch text-canvas'
+                    : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
+                }`}
+                onClick={() => setTabActivo('cuenta')}
+              >
+                Cuenta
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  tab === 'predio'
+                    ? 'bg-pitch text-canvas'
+                    : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
+                }`}
+                onClick={() => setTabActivo('predio')}
+              >
+                Datos de mi Predio
+              </button>
+            </>
+          ) : (
             <button
               type="button"
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-                tabActivo === 'predio'
-                  ? 'bg-pitch text-canvas'
-                  : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
-              }`}
-              onClick={() => setTabActivo('predio')}
+              className="rounded-full bg-pitch px-4 py-1.5 text-sm font-semibold text-canvas"
+              onClick={() => setTabActivo('jugador')}
             >
-              Datos de mi Predio
+              Perfil de Jugador
             </button>
           )}
         </div>
         
         <div className="space-y-4">
-          {tabActivo === 'jugador' && (
+          {tab === 'jugador' && (
             <>
+              <Tarjeta
+                titulo="Datos Básicos"
+                descripcion="Tu apodo, usuario y foto de perfil."
+              >
+                <PerfilBasicoCard usuario={usuario} onCambio={setOptimista} />
+              </Tarjeta>
+
               <Tarjeta
                 titulo="Perfil deportivo"
                 descripcion="Posicion, pierna habil y nivel. Define como te buscan para sumar."
@@ -146,17 +170,33 @@ export default function Ajustes() {
             </>
           )}
 
-          {tabActivo === 'predio' && usuario.rol === 'dueno_predio' && (
+          {tab === 'cuenta' && esDueno && (
+            <>
+              <Tarjeta
+                titulo="Datos de la cuenta"
+                descripcion="Tu nombre, foto de perfil y fecha de nacimiento."
+              >
+                <PerfilBasicoCard usuario={usuario} onCambio={setOptimista} />
+              </Tarjeta>
+
+              <NotificacionesCard />
+            </>
+          )}
+
+          {tab === 'predio' && esDueno && (
             <Tarjeta
-              titulo="Alta de predio"
-              descripcion="Cargá los datos del complejo para que el superadmin habilite tu panel de canchas."
+              titulo="Datos de mi Predio"
+              descripcion="Direccion, ubicacion exacta y contacto: lo que los jugadores necesitan para llegar."
             >
-              <FormularioSolicitudDueno usuario={usuario} />
+              <EditorPredioCard duenoUid={usuario.uid} />
             </Tarjeta>
           )}
         </div>
 
-        <div className="mt-12 flex justify-center pb-8">
+        {/* 6rem: el menu inferior es `fixed` y tapa los ultimos pixeles del
+            scroll. Sin este aire, "Cerrar Sena" y "Guardar datos del predio"
+            quedarian inalcanzables en mobile. */}
+        <div className="mt-12 flex justify-center pb-24">
           <button
             type="button"
             className="rounded-full border border-red-500/30 px-6 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10 active:bg-red-500/20"

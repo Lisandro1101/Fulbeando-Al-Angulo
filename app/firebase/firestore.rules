@@ -43,6 +43,34 @@ service cloud.firestore {
         );
     }
 
+    /**
+     * El autor es dueno de predio (rol, sin mirar el plan).
+     *
+     * Para el superadmin da `false`: el "dueno" es un rol que no tiene, asi
+     * que las excepciones de este rol no lo frenan a el.
+     */
+    function esDueno() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && getUserData().rol == 'dueno_predio';
+    }
+
+    /**
+     * El dueno con el plan abonado. Elegir "Tengo un Complejo" deja el rol en
+     * `pendiente`: hasta que el superadmin lo active, el dueno no da de alta
+     * predios ni toca su panel.
+     *
+     * Se lee con `get(clave, default)` y no con `.clave`: un documento creado
+     * antes del campo tiene que caer en `pendiente`, no en un error de
+     * evaluacion que negaria cualquier escritura con un mensaje imposible de
+     * depurar.
+     */
+    function planDelDuenoActivo() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && getUserData().get('planDueno', 'pendiente') == 'activo';
+    }
+
     // ------------------------------------------------------------------ //
     // Helpers de Equipos ("AL ANGULO")                                   //
     // ------------------------------------------------------------------ //
@@ -89,7 +117,58 @@ service cloud.firestore {
         && request.resource.data.estado == 'activo'
         && request.resource.data.deletedAt == null;
 
+      /**
+       * El capitan libero a un integrante y ahora desvincula SU equipo del
+       * perfil del jugador.
+       *
+       * Es la UNICA escritura de un documento ajena en todas las reglas, y
+       * esta acotada al maximo:
+       *   - solo cambia `perfilDeportivo`, y dentro de eso solo `teamIds`;
+       *   - no puede AGREGAR equipos (el listado nuevo tiene que estar
+       *     contenido en el viejo), asi que no se le pueden colar fichas;
+       *   - se quita exactamente UN teamId;
+       *   - ese teamId tiene que ser un equipo del que el que escribe es
+       *     capitan.
+       *
+       * Sin esto, sacar a un jugador dejaria `teamIds` con un id huerfano y
+       * el jugador se quedaria con una ficha gastada del tope de 2 equipos.
+       */
+      function equipoQuitado() {
+        return resource.data.perfilDeportivo.teamIds.removeAll(
+          request.resource.data.perfilDeportivo.teamIds);
+      }
+
+      /** El unico teamId que se quita. En rules NO existe `List.get(i)`: se usa el operador `lista[i]`. */
+      function equipoQuitadoId() {
+        return equipoQuitado()[0];
+      }
+
+      function capitanDesvinculaSuEquipo() {
+        return request.resource.data.perfilDeportivo != null
+          && resource.data.keys().hasAny(['perfilDeportivo'])
+          && resource.data.perfilDeportivo != null
+          && resource.data.perfilDeportivo.keys().hasAny(['teamIds'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['perfilDeportivo'])
+          && request.resource.data.perfilDeportivo.diff(resource.data.perfilDeportivo)
+               .affectedKeys().hasOnly(['teamIds'])
+          && request.resource.data.perfilDeportivo.teamIds is list
+          && resource.data.perfilDeportivo.teamIds is list
+          && equipoQuitado().size() == 1
+          && resource.data.perfilDeportivo.teamIds.hasAll(
+               request.resource.data.perfilDeportivo.teamIds)
+          // `exists()` antes de `get()`: si el equipo ya no existe, `get().data`
+          // revienta con error de evaluacion y eso negaria TAMBIEN las
+          // escrituras legitimas propias que caen despues en el `||`.
+          && exists(/databases/$(database)/documents/teams/$(equipoQuitadoId()))
+          && get(/databases/$(database)/documents/teams/$(equipoQuitadoId()))
+               .data.captainId == request.auth.uid;
+      }
+
       // El usuario puede alterar su propio rol solo si es 'invitado'.
+      // Va ANTES que `capitanDesvinculaSuEquipo()`: las escrituras propias son
+      // las frecuentes y no tienen por que pagar ni arriesgar un `get()` ajeno
+      // (`&&` cortocircuita, asi que rama propia sin equipo queda en false y
+      // sigue buscando permiso en la rama del capitan).
       allow update: if isSignedIn()
         && (
           isSuperadmin()
@@ -99,8 +178,8 @@ service cloud.firestore {
               request.resource.data.rol == resource.data.rol
               || (resource.data.rol == 'invitado' && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'dueno_predio'))
             )
-            && request.resource.data.estado == resource.data.estado
-            && request.resource.data.deletedAt == resource.data.deletedAt
+            && request.resource.data.get('estado', null) == resource.data.get('estado', null)
+            && request.resource.data.get('deletedAt', null) == resource.data.get('deletedAt', null)
             // Regla de negocio: un jugador puede estar en como mucho 2 equipos a
             // la vez (contando el propio que creo).
             //
@@ -118,7 +197,19 @@ service cloud.firestore {
                 && request.resource.data.perfilDeportivo.teamIds.size() <= 2
               )
             )
+            // Un dueno NO tiene ficha de jugador: las dos ramas del PRD son
+            // excluyentes. Solo se acepta que reescriba el campo tal cual esta
+            // (es decir, que no lo toque), para que un cliente alterado no le
+            // rearme una ficha de jugador con posicion, nivel y equipos.
+            // La rama del capitan no se toca: un dueno con equipo heredado
+            // tiene que poder seguir gestionandolo.
+            && (
+              !request.resource.data.keys().hasAny(['perfilDeportivo'])
+              || resource.data.rol != 'dueno_predio'
+              || request.resource.data.perfilDeportivo == resource.data.perfilDeportivo
+            )
           )
+          || capitanDesvinculaSuEquipo()
         );
 
       allow delete: if false;
@@ -157,7 +248,10 @@ service cloud.firestore {
         && request.resource.data.duenoUid == request.auth.uid
         && request.resource.data.verificado == false
         && request.resource.data.estado == 'activo'
-        && request.resource.data.deletedAt == null;
+        && request.resource.data.deletedAt == null
+        // Sin el plan abonado no se da de alta el complejo: el dueno pendiente
+        // queda en el cartel de contacto y no genera predios huerfanos.
+        && planDelDuenoActivo();
 
       allow update: if isSuperadmin()
         || (isSignedIn()
@@ -393,26 +487,43 @@ match /comprobantes/{turnoId} {
                     && isPayloadSizeValid()
                     && request.resource.data.captainId == request.auth.uid
                     && request.resource.data.members.size() >= 1
-                    && request.resource.data.members.size() <= 23;
+                    && request.resource.data.members.size() <= 23
+                    // Un dueno no tiene ficha de jugador ni plantel: si pudiera
+                    // crear equipos quedaria con una pertenencia que su
+                    // `perfilDeportivo` (que es `null`) no puede reflejar.
+                    && !esDueno();
 
       // Dos vias legitimas de escritura:
-      //  1) El capitan gestiona el plantel (alta, baja, dorsal, capitania).
+      //  1) El capitan gestiona su equipo: plantel, escudo, datos y DELEGACION
+      //     de la capitania. Es el documento de su equipo: cambiarle `captainId`
+      //     a un integrante del plantel es administracion legitima (el servicio
+      //     valida que el nuevo capitan sea miembro antes de escribir).
       //  2) Un jugador se agrega a si mismo (autoinscripcion), porque las reglas de
       //     `usuarios/{uid}` no permiten que el capitan escriba el perfil de otro.
       //     En la autoinscripcion solo se anade el propio uid: no se puede tocar el
-      //     resto del plantel ni cambiar la capitania.
+      //     resto del plantel ni la capitania, porque exige `affectedKeys ==
+      //     ['members']`.
       //
       // El DT tambien puede gestionar el plantel, pero comprobarlo exigiria
       // recorrer `members` y el lenguaje de reglas no tiene `List.where()` ni
       // funciones recursivas. Se deja para cuando exista la UI de DT.
       allow update: if isSignedIn()
-                    && (
-                      resource.data.captainId == request.auth.uid
-                      || soloAnadePropioMiembro(teamId, request.auth.uid)
-                    )
-                    && request.resource.data.captainId == resource.data.captainId
+                    && isPayloadSizeValid()
                     && request.resource.data.members.size() >= 1
-                    && request.resource.data.members.size() <= 23;
+                    && request.resource.data.members.size() <= 23
+                    && (
+                         // La autoinscripcion escribe `members` del equipo y
+                         // `teamIds` del propio perfil: el dueno ni siquiera
+                         // puede llegar al segundo paso, asi que se niega la
+                         // primera para que falle limpio y sin quedar a medias.
+                         (soloAnadePropioMiembro(teamId, request.auth.uid) && !esDueno())
+                         || (
+                              resource.data.captainId == request.auth.uid
+                              && request.resource.data.captainId is string
+                              && request.resource.data.captainId.size() > 0
+                              && request.resource.data.captainId.size() <= 60
+                            )
+                       );
 
       allow delete: if false;
     }

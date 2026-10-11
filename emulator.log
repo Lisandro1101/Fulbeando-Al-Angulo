@@ -2,6 +2,7 @@
   Proyecto: fulbeando-demo
     .firebaserc    -> fulbeando-demo
     app/.env.local -> fulbeando-demo
+    override env   -> (ninguno)
     firebase --project fulbeando-demo emulators:start
 
 [36m[1mi  emulators:[22m[39m Starting emulators: auth, functions, firestore, database, hosting, storage, extensions
@@ -60,3 +61,63 @@ WARNING: sun.misc.Unsafe::arrayBaseOffset will be removed in a future release
 [90m└─────────────────────────[39m[90m┴───────────────[39m[90m┴─────────────────────┘[39m
 Issues? Report them at [4m[1mhttps://github.com/firebase/firebase-tools/issues[22m[24m and attach the *-debug.log files.
  
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m50[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m51[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m50[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m51[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m125[39m:[33m75[39m - [31mWARNING[39m Incorrect number of arguments supplied to function: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m50[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m51[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m126[39m:[33m75[39m - [31mWARNING[39m Incorrect number of arguments supplied to function: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m50[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m51[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m50[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m51[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  storage:[22m[39m Change detected, updating rules for Cloud Storage...
+[36m[1mi  storage:[22m[39m Change detected, updating rules for Cloud Storage...
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m52[39m:[33m14[39m - [31mWARNING[39m Unused function: esDueno.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m12[39m - [31mWARNING[39m Invalid function name: exists.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m63[39m - [31mWARNING[39m Invalid variable name: request.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m68[39m:[33m14[39m - [31mWARNING[39m Unused function: planDelDuenoActivo.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m70[39m:[33m12[39m - [31mWARNING[39m Invalid function name: exists.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m70[39m:[33m63[39m - [31mWARNING[39m Invalid variable name: request.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m52[39m:[33m14[39m - [31mWARNING[39m Unused function: esDueno.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m12[39m - [31mWARNING[39m Invalid function name: exists.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m63[39m - [31mWARNING[39m Invalid variable name: request.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m52[39m:[33m14[39m - [31mWARNING[39m Unused function: esDueno.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m12[39m - [31mWARNING[39m Invalid function name: exists.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m54[39m:[33m63[39m - [31mWARNING[39m Invalid variable name: request.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.
+[36m[1mi  firestore:[22m[39m Change detected, updating rules...
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m78[39m:[33m14[39m - [31mWARNING[39m Unused function: getTeam.
+[33m[1m! [22m[39m [36mapp\firebase\firestore.rules[39m:[33m79[39m:[33m14[39m - [31mWARNING[39m Invalid function name: get.
+[32m[1m+  firestore:[22m[39m Rules updated.

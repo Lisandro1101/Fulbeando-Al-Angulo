@@ -13,7 +13,7 @@ export function Pantalla({
   children?: ReactNode
 }) {
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-canvas">
+    <div className="flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-canvas">
       <header className="sticky top-0 z-20 border-b border-ink-faint/20 bg-canvas/90 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex w-full items-center justify-between gap-3">
           <div>

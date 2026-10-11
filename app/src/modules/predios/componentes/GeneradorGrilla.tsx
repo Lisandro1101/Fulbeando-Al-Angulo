@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Loader2, Plus, Trash2, Wand2 } from 'lucide-react'
 import type { Franja, Predio } from '@/domain'
-import { duracionDeFranja, errorEnFranjas, formatearDuracion, minutosDeHora, precioDeFranja } from '@/domain'
+import { duracionDeFranja, errorEnFranjas, formatearDuracion, minutosRelativos, precioDeFranja } from '@/domain'
 import { formatearMoneda } from '@/core/tiempo'
 import { generarGrillaMasiva } from '@/modules/turnos/repositorio'
 import { listarCanchas } from '@/modules/canchas/repositorio'
+import { actualizarPredio } from '@/modules/predios/repositorio'
 
-/** Minutos desde medianoche -> `HH:mm`. El caller ya validó que no pase de 24 h. */
-const formatearHora = (minutos: number): string =>
-  `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
+/** Minutos -> `HH:mm`. Soporta minutos > 1440 mapeando al día correcto. */
+const formatearHora = (minutos: number): string => {
+  const m = minutos % 1440
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
 
 /** Fila editable: hora de inicio y de fin, con la duracion calculada. */
 function FranjaFila({
@@ -82,18 +85,16 @@ export function GeneradorGrilla({
   fecha: string
   onGenerado: () => void | Promise<void>
 }) {
-  const [franjas, setFranjas] = useState<Franja[]>([
-    { horaInicio: '18:00', horaFin: '19:30' },
-    { horaInicio: '19:30', horaFin: '21:00' },
-  ])
-  const [minutos, setMinutos] = useState(90)
-  const [cerrar, setCerrar] = useState('23:00')
+  const [franjas, setFranjas] = useState<Franja[]>(predio.franjasBase ?? [])
+  const [minutos, setMinutos] = useState(60)
+  const [cerrar, setCerrar] = useState('')
   const [generando, setGenerando] = useState(false)
   const [resultado, setResultado] = useState<{ creados: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [hasta, setHasta] = useState(fecha)
   const [dias, setDias] = useState<number[]>(() => {
+    if (predio.diasBase && predio.diasBase.length > 0) return predio.diasBase
     const d = new Date(fecha)
     const utcDay = d.getUTCDay()
     return [utcDay === 0 ? 7 : utcDay]
@@ -137,15 +138,18 @@ export function GeneradorGrilla({
     setResultado(null)
     setFranjas((prev) => {
       const ultima = prev[prev.length - 1]
-      if (!ultima) return [...prev, { horaInicio: '18:00', horaFin: '19:30' }]
-      const h = Number(ultima.horaFin.slice(0, 2))
-      const m = Number(ultima.horaFin.slice(3, 5))
-      // Encadena 90 min desde el fin de la ultima; no cruza la medianoche.
-      const totalMin = h * 60 + m + 90
-      if (totalMin >= 24 * 60) return prev
+      if (!ultima) return [...prev, { horaInicio: '18:00', horaFin: '19:00' }]
+      const iniRel = minutosRelativos(ultima.horaFin)
+      // Encadena 90 min desde el fin de la ultima.
+      const totalRel = iniRel + 90
+      
+      // Convertir de relativo a absoluto sumando 360 y tomando modulo
+      const absIni = (iniRel + 360) % 1440
+      const absFin = (totalRel + 360) % 1440
+      
       return [
         ...prev,
-        { horaInicio: ultima.horaFin, horaFin: formatearHora(totalMin) },
+        { horaInicio: formatearHora(absIni), horaFin: formatearHora(absFin || 1440) },
       ]
     })
   }
@@ -154,19 +158,29 @@ export function GeneradorGrilla({
   const completar = () => {
     setResultado(null)
     const paso = Math.max(15, Math.min(minutos, 240))
-    const limite = minutosDeHora(cerrar)
+    
+    // Si no configuro el cierre, se asume medianoche
+    const horaCierre = cerrar || '00:00'
+    let limiteRel = minutosRelativos(horaCierre)
+    if (horaCierre === '00:00') limiteRel = minutosRelativos('24:00')
 
     setFranjas((prev) => {
       const base = prev[0]
       if (!base) return prev
       const nuevas: Franja[] = []
-      let cursor = minutosDeHora(base.horaInicio)
-      while (cursor < limite) {
+      let cursorRel = minutosRelativos(base.horaInicio)
+      
+      // Si el limite parece menor que el cursor (ej. cierra 00:00 = relativo 1080, cursor 18:00 = 720, esta ok. Pero si cierra 05:00 = relativo 1380)
+      if (limiteRel <= cursorRel) limiteRel += 1440
+
+      while (cursorRel < limiteRel) {
+        const nextRel = Math.min(cursorRel + paso, limiteRel)
+        
         nuevas.push({
-          horaInicio: formatearHora(cursor),
-          horaFin: formatearHora(Math.min(cursor + paso, limite)),
+          horaInicio: formatearHora((cursorRel + 360) % 1440),
+          horaFin: formatearHora((nextRel + 360) % 1440 || 1440),
         })
-        cursor += paso
+        cursorRel = nextRel
       }
       return nuevas.length > 0 ? nuevas : prev
     })
@@ -208,6 +222,13 @@ export function GeneradorGrilla({
         franjas,
         predio,
       )
+      
+      // Guardar la configuración base de franjas y días para la próxima vez
+      await actualizarPredio(predio.id, { 
+        franjasBase: franjas,
+        diasBase: dias,
+      })
+      
       setResultado({ creados })
       await onGenerado()
     } catch (e) {
@@ -370,6 +391,11 @@ export function GeneradorGrilla({
 
       {problema && <p className="text-sm text-urgent">{problema}</p>}
       {error && <p className="text-sm text-occupied">{error}</p>}
+      {dias.length > 1 && hasta === fecha && (
+        <p className="text-sm text-amber-500">
+          ⚠️ Elegiste varios días de la semana pero la fecha final ('hasta') es el mismo día. Cambiá la fecha final para poder repetir la grilla hacia adelante.
+        </p>
+      )}
       {resultado && (
         <p className="flex items-center gap-2 text-sm text-pitch">
           <Check className="h-4 w-4" />

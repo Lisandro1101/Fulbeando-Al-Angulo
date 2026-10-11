@@ -43,14 +43,14 @@ export const uploadImageToR2 = async (
         },
         (error) => {
           console.error('[Fallback] Firebase Storage error:', error);
-          reject(new Error('No se pudo subir el comprobante. Intentá nuevamente o contactá al predio por WhatsApp'));
+          reject(new Error('No se pudo subir la imagen. Revisá el archivo y probá otra vez.'));
         },
         async () => {
           try {
             const publicUrl = await getDownloadURL(uploadTask.snapshot.ref);
             resolve({ publicUrl, fileKey });
           } catch (err) {
-            reject(new Error('No se pudo subir el comprobante. Intentá nuevamente o contactá al predio por WhatsApp'));
+            reject(new Error('No se pudo generar el enlace de la imagen. Probá otra vez.'));
           }
         }
       );

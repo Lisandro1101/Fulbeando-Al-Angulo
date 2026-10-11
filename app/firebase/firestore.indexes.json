@@ -53,6 +53,14 @@
         { "fieldPath": "perfilDeportivo.notificacionesRadar", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
+    },
+    {
+      "comment": "Buscador de jugadores por nombre.",
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "nombre", "order": "ASCENDING" }
       ]
     }
   ],

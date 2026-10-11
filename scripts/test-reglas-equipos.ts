@@ -226,7 +226,7 @@ async function main(): Promise<void> {
 
   /** Construye un plantel de `total` fichas, con el capitan al principio. */
   const plantelDe = (total: number) => [
-    { uid: CAPITAN, name: 'Capitan Prueba', role: 'CAPTAIN' },
+    { uid: CAPITAN, name: 'Capitan Prueba', role: 'CAPITAN' },
     ...Array.from({ length: total - 1 }, (_, i) => ({
       uid: `uid_${total}_${i}`,
       name: `Jugador ${total}-${i}`,

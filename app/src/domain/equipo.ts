@@ -30,6 +30,7 @@ export interface Equipo {
   captainId: string
   /** Modalidad base del equipo. Reusa el vocabulario de canchas del modulo FULBEANDO. */
   modalidadBase: string
+  genero?: 'Masculino' | 'Femenino' | 'Mixto'
   members: MiembroEquipo[]
   stats: {
     wins: number

@@ -66,17 +66,32 @@ export const minutosDeHora = (hora: string): number => {
   return (h ?? 0) * 60 + (m ?? 0)
 }
 
-export const duracionDeFranja = (f: Franja): number =>
-  minutosDeHora(f.horaFin) - minutosDeHora(f.horaInicio)
+/** Desplaza el inicio del día a las 06:00 AM para que la noche (ej. 23:00 a 02:00) sea lineal. */
+export const minutosRelativos = (hora: string): number => {
+  const m = minutosDeHora(hora)
+  return (m - 360 + 1440) % 1440
+}
 
-/** La hora de fin tiene que ser posterior a la de inicio. */
+export const duracionDeFranja = (f: Franja): number => {
+  const ini = minutosRelativos(f.horaInicio)
+  let fin = minutosRelativos(f.horaFin)
+  if (fin === 0 && ini > 0) fin = 1440
+  if (fin < ini) fin += 1440
+  return fin - ini
+}
+
+/** La hora de fin tiene que ser posterior a la de inicio y razonable (< 5 hs). */
 export const franjaValida = (f: Franja): boolean =>
-  esHoraValida(f.horaInicio) && esHoraValida(f.horaFin) && duracionDeFranja(f) > 0
+  esHoraValida(f.horaInicio) && esHoraValida(f.horaFin) && duracionDeFranja(f) > 0 && duracionDeFranja(f) <= 300
 
 /** Dos franjas se pisan si comparten minutos. */
-export const franjasSeSolapan = (a: Franja, b: Franja): boolean =>
-  minutosDeHora(a.horaInicio) < minutosDeHora(b.horaFin) &&
-  minutosDeHora(b.horaInicio) < minutosDeHora(a.horaFin)
+export const franjasSeSolapan = (a: Franja, b: Franja): boolean => {
+  const aIni = minutosRelativos(a.horaInicio)
+  const aFin = aIni + duracionDeFranja(a)
+  const bIni = minutosRelativos(b.horaInicio)
+  const bFin = bIni + duracionDeFranja(b)
+  return aIni < bFin && bIni < aFin
+}
 
 /**
  * Valida la grilla completa antes de escribir. Devuelve el motivo del rechazo
@@ -88,7 +103,9 @@ export const errorEnFranjas = (franjas: readonly Franja[]): string | null => {
     if (!esHoraValida(f.horaInicio) || !esHoraValida(f.horaFin)) {
       return 'Las horas van en formato HH:mm (24 h).'
     }
-    if (duracionDeFranja(f) <= 0) return 'La hora de fin debe ser posterior a la de inicio.'
+    const dur = duracionDeFranja(f)
+    if (dur <= 0) return 'La hora de fin debe ser posterior a la de inicio.'
+    if (dur > 300) return 'La franja es demasiado larga. Verifica que el horario no esté invertido.'
   }
   for (let i = 0; i < franjas.length; i += 1) {
     for (let j = i + 1; j < franjas.length; j += 1) {

@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, Building, Share2, MapPinned, Users, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, Bell } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { NavegacionHeader } from '@/modules/ui/NavegacionHeader';
-import { ingresoConGoogle, ingresoConEmail, registroConEmail, cerrarSesion } from '@/modules/auth/servicio';
+import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { MONTO_SENA_DEFAULT } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
+import { obtenerEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, unirseAEquipo } from '@/modules/teams/teamService';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/core/firebase';
+import { edadDe, MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole } from '@/domain';
+import { optimizeAvatarImage } from '@/imageCompressor';
+import { uploadImageToR2 } from '@/uploader';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -28,7 +34,8 @@ export const Screen1Login = () => {
     if (sesion.usuario && !sesion.cargando) {
       // Intentar pedir permiso automáticamente si el usuario ya está logueado
       requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked', e));
-      navigate('/radar');
+      // El superadmin no entra a la app: su unico destino es el panel.
+      navigate(sesion.usuario.rol === 'superadmin' ? '/superadmin' : '/radar');
     }
   }, [sesion.usuario, sesion.cargando, navigate]);
 
@@ -66,7 +73,8 @@ export const Screen1Login = () => {
       } else {
         await ingresoConEmail(email, password);
       }
-      navigate('/radar');
+      // Si la sesion todavia no cargo, el effect de arriba corrige el destino.
+      navigate(sesion.usuario?.rol === 'superadmin' ? '/superadmin' : '/radar');
     } catch (err: any) {
       console.error('Error en autenticación por email:', err);
       let msj = 'Hubo un error al autenticar.';
@@ -135,16 +143,36 @@ export const Screen1Login = () => {
 export const Screen2RoleSelector = () => {
   const sesion = useSesion();
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const elegirRol = async (rol: 'jugador' | 'dueno_predio', path: string) => {
     if (!sesion.user) return;
     setCargando(true);
+    setError(null);
     try {
+      if (rol === 'dueno_predio') {
+        // Alta de dueno: rol + solicitud en la MISMA transaccion y despues al
+        // cartel de contacto. El plan queda `pendiente`, asi que el usuario no
+        // llega a ninguna otra pantalla hasta que el superadmin lo active.
+        const { iniciarAltaDueno } = await import('@/modules/solicitudes/repositorio');
+        await iniciarAltaDueno(sesion.user.uid, {
+          nombre: sesion.usuario?.nombre ?? sesion.user.displayName?.split(' ')[0] ?? '',
+          apellido: sesion.usuario?.apellido ?? '',
+          telefono: sesion.usuario?.telefono ?? '',
+          email: sesion.usuario?.email ?? sesion.user.email ?? '',
+        });
+        // Recarga completa: la sesion se lee UNA sola vez por login y con un
+        // `navigate` quedaria vieja (rol `invitado`) y rebotaria a esta pantalla.
+        window.location.href = '/plan-pendiente';
+        return;
+      }
+
       const { cambiarRol } = await import('@/modules/usuarios/repositorio');
       await cambiarRol(sesion.user.uid, rol);
       window.location.href = path; // Redirige y fuerza recarga para actualizar la sesión
     } catch (err) {
       console.error(err);
+      setError(err instanceof Error ? err.message : 'No pudimos guardar tu eleccion.');
       setCargando(false);
     }
   };
@@ -152,7 +180,13 @@ export const Screen2RoleSelector = () => {
   return (
     <div className="h-full bg-zinc-950 p-6 flex flex-col justify-center font-sans">
       <h2 className="text-2xl font-black text-white text-center mb-8">¿Cómo vas a jugar hoy?</h2>
-      
+
+      {error && (
+        <div className="mb-6 rounded-lg bg-red-500/10 px-3 py-2 text-center text-sm font-bold text-red-500">
+          {error}
+        </div>
+      )}
+
       <div className="space-y-4">
         {/* Card Jugador */}
         <button 
@@ -181,6 +215,9 @@ export const Screen2RoleSelector = () => {
           <div>
             <h3 className="text-xl font-bold text-white">Tengo un Complejo</h3>
             <p className="text-sm text-zinc-400 mt-1">Promocioná tus canchas en el radar y recibí partidos.</p>
+            <p className="mt-2 text-xs font-semibold text-emerald-500">
+              Te pasamos el contacto para activar el plan
+            </p>
           </div>
         </button>
       </div>
@@ -192,16 +229,14 @@ export const Screen2RoleSelector = () => {
 // PANTALLA 3: Onboarding Jugador
 // ==========================================
 export const Screen3PlayerOnboarding = () => {
-  const navigate = useNavigate();
-  const [pos, setPos] = useState('DEL');
+  const sesion = useSesion();
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pos, setPos] = useState<'ARQ' | 'DEF' | 'MED' | 'DEL'>('DEL');
 
-  const [formData, setFormData] = useState({
-    nombre: 'Lionel Andrés', 
-    apellido: 'Messi',      
-    telefono: '',
-    fechaNacimiento: '',
-    apodo: 'Lio'
-  });
+  const [apodo, setApodo] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
 
   // --- ZONAS Y LOCALIDADES PARA ESCALAR ---
   const ZONAS_OPERATIVAS: Record<string, string[]> = {
@@ -221,8 +256,27 @@ export const Screen3PlayerOnboarding = () => {
 
   const [zonaSeleccionada, setZonaSeleccionada] = useState("GBA Zona Sur");
   const [localidadQuery, setLocalidadQuery] = useState('');
-  const [localidadElegida, setLocalidadElegida] = useState('Guernica');
+  const [localidadElegida, setLocalidadElegida] = useState('Lomas de Zamora');
   const [mostrarBuscador, setMostrarBuscador] = useState(false);
+
+  // Precargar datos de la sesión del usuario (sea de Google o de Email)
+  React.useEffect(() => {
+    if (sesion.usuario) {
+      if (!apodo) setApodo(sesion.usuario.nombre || sesion.user?.displayName?.split(' ')[0] || '');
+      if (!telefono && sesion.usuario.telefono) setTelefono(sesion.usuario.telefono);
+      if (!fechaNacimiento && sesion.usuario.fechaNacimiento) setFechaNacimiento(sesion.usuario.fechaNacimiento);
+      if (sesion.usuario.zona) setLocalidadElegida(sesion.usuario.zona);
+      if (sesion.usuario.perfilDeportivo?.posicion) {
+        const p = sesion.usuario.perfilDeportivo.posicion;
+        if (p === 'arquero') setPos('ARQ');
+        else if (p === 'defensor') setPos('DEF');
+        else if (p === 'medio') setPos('MED');
+        else if (p === 'delantero') setPos('DEL');
+      }
+    } else if (sesion.user) {
+      if (!apodo && sesion.user.displayName) setApodo(sesion.user.displayName.split(' ')[0] || '');
+    }
+  }, [sesion.usuario, sesion.user]);
 
   // Filtrado reactivo de localidades según zona y texto ingresado
   const localidadesDisponibles = ZONAS_OPERATIVAS[zonaSeleccionada] || [];
@@ -230,42 +284,113 @@ export const Screen3PlayerOnboarding = () => {
     loc.toLowerCase().includes(localidadQuery.toLowerCase())
   );
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleGenerarCarta = async () => {
+    if (!sesion.user) {
+      setError('Debes tener una sesión activa para continuar.');
+      return;
+    }
+    if (!fechaNacimiento) {
+      setError('Por favor completá tu fecha de nacimiento: así calculamos tu edad en la carta.');
+      return;
+    }
+    if (!localidadElegida) {
+      setError('Por favor seleccioná tu localidad o barrio para ubicarte en el radar.');
+      return;
+    }
+
+    setCargando(true);
+    setError(null);
+
+    try {
+      const posMap: Record<'ARQ' | 'DEF' | 'MED' | 'DEL', { posicion: Posicion; playerRole: PlayerRole }> = {
+        DEL: { posicion: 'delantero', playerRole: 'FWD' },
+        MED: { posicion: 'medio', playerRole: 'MID' },
+        DEF: { posicion: 'defensor', playerRole: 'DEF' },
+        ARQ: { posicion: 'arquero', playerRole: 'GK' },
+      };
+      const rolData = posMap[pos];
+      const perfilPrevio = sesion.usuario?.perfilDeportivo ?? PERFIL_DEPORTIVO_VACIO;
+      const nuevoPerfil: PerfilDeportivo = {
+        ...perfilPrevio,
+        posicion: rolData.posicion,
+        playerRole: rolData.playerRole,
+        disponibleHoy: perfilPrevio.disponibleHoy ?? true,
+        notificacionesRadar: perfilPrevio.notificacionesRadar ?? true,
+      };
+
+      const userRef = doc(db, 'usuarios', sesion.user.uid);
+      await updateDoc(userRef, {
+        nombre: apodo.trim() || sesion.usuario?.nombre || sesion.user.displayName?.split(' ')[0] || 'Jugador',
+        fechaNacimiento,
+        telefono: telefono.trim() || null,
+        zona: localidadElegida,
+        perfilDeportivo: nuevoPerfil,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Redirigir a la vista de perfil para ver la carta recién generada
+      window.location.href = '/perfil';
+    } catch (err: any) {
+      console.error('Error al guardar carta:', err);
+      setError('No pudimos guardar los datos de tu carta. Intentá nuevamente.');
+      setCargando(false);
+    }
   };
 
+  const nombreMostrar = sesion.usuario ? nombreCompleto(sesion.usuario) : (sesion.user?.displayName || '');
+
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe">
+    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe overflow-y-auto">
       <h2 className="text-2xl font-black mt-8">Creá tu Carta de Jugador</h2>
-      <p className="text-zinc-400 text-sm mt-2 mb-8">Revisá y completá tus datos base. Arrancás con Media 50%.</p>
+      <p className="text-zinc-400 text-sm mt-2 mb-6">
+        {nombreMostrar ? `¡Hola ${nombreMostrar}! ` : ''}
+        Completá tu ficha deportiva para jugar en el radar. Arrancás con Media 50%.
+      </p>
+
+      {error && (
+        <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm font-semibold text-red-500">
+          {error}
+        </div>
+      )}
 
       <div className="space-y-6 flex-1">
-        
-        {/* DATOS PERSONALES */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase">Nombre</label>
-            <input name="nombre" value={formData.nombre} onChange={handleChange} type="text" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-base text-zinc-300" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase">Apellido</label>
-            <input name="apellido" value={formData.apellido} onChange={handleChange} type="text" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-base text-zinc-300" />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Número de Teléfono</label>
-          <input name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="+54 11 1234-5678" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-lg" />
-        </div>
-
-        <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Fecha de Nacimiento</label>
-          <input name="fechaNacimiento" value={formData.fechaNacimiento} onChange={handleChange} type="date" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-lg text-white" />
-        </div>
-
+        {/* APODO FUTBOLERO */}
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase">Apodo Futbolero (En la Carta)</label>
-          <input name="apodo" value={formData.apodo} onChange={handleChange} type="text" placeholder="Ej: El Rústico" className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-lg text-amber-500" />
+          <input 
+            value={apodo} 
+            onChange={e => setApodo(e.target.value)} 
+            type="text" 
+            placeholder="Ej: El Rústico, Lio, La Fiera" 
+            className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-emerald-500 outline-none font-bold text-lg text-amber-500" 
+          />
+        </div>
+
+        {/* FECHA DE NACIMIENTO */}
+        <div>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-xs font-bold text-zinc-500 uppercase">Fecha de Nacimiento</label>
+            <span className="text-[11px] text-zinc-400">Calcula tu edad en la ficha</span>
+          </div>
+          <input 
+            value={fechaNacimiento} 
+            onChange={e => setFechaNacimiento(e.target.value)} 
+            type="date" 
+            max={new Date().toISOString().slice(0, 10)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 [color-scheme:dark] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition font-bold" 
+          />
+        </div>
+
+        {/* TELÉFONO */}
+        <div>
+          <label className="text-xs font-bold text-zinc-500 uppercase">Número de Teléfono (WhatsApp / Opcional)</label>
+          <input 
+            value={telefono} 
+            onChange={e => setTelefono(e.target.value)} 
+            type="tel" 
+            placeholder="+54 11 1234-5678" 
+            className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-emerald-500 outline-none font-bold text-lg" 
+          />
         </div>
         
         {/* SELECTOR ZONA + BUSCADOR DE LOCALIDADES */}
@@ -278,7 +403,7 @@ export const Screen3PlayerOnboarding = () => {
                 setZonaSeleccionada(e.target.value); 
                 setLocalidadElegida(''); // Resetear localidad al cambiar de zona
               }}
-              className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-blue-500 outline-none font-bold text-sm text-white appearance-none"
+              className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-emerald-500 outline-none font-bold text-sm text-white appearance-none"
             >
               {Object.keys(ZONAS_OPERATIVAS).map(zona => (
                 <option key={zona} value={zona} className="bg-zinc-900">{zona}</option>
@@ -304,7 +429,7 @@ export const Screen3PlayerOnboarding = () => {
                   placeholder="Escribí tu barrio..." 
                   value={localidadQuery}
                   onChange={(e) => setLocalidadQuery(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500 mb-2"
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 mb-2"
                 />
                 <div className="max-h-48 overflow-y-auto no-scrollbar">
                   {localidadesFiltradas.length > 0 ? (
@@ -332,11 +457,17 @@ export const Screen3PlayerOnboarding = () => {
           </div>
         </div>
 
+        {/* POSICIÓN EN LA CANCHA */}
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase mb-3 block">Posición en la Cancha</label>
           <div className="flex gap-2">
-            {['ARQ', 'DEF', 'MED', 'DEL'].map(p => (
-              <button key={p} onClick={() => setPos(p)} className={`flex-1 py-3 rounded-xl font-black ${pos === p ? 'bg-blue-500 text-zinc-950 shadow-[0_0_15px_rgba(37,99,235,0.4)]' : 'bg-zinc-900 text-zinc-400'}`}>
+            {(['ARQ', 'DEF', 'MED', 'DEL'] as const).map(p => (
+              <button 
+                key={p} 
+                type="button"
+                onClick={() => setPos(p)} 
+                className={`flex-1 py-3 rounded-xl font-black transition-all ${pos === p ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}
+              >
                 {p}
               </button>
             ))}
@@ -344,8 +475,12 @@ export const Screen3PlayerOnboarding = () => {
         </div>
       </div>
 
-      <button onClick={() => navigate('/perfil')} className="w-full bg-white text-zinc-950 font-black py-4 rounded-xl mt-6 active:scale-95 transition">
-        GENERAR MI CARTA
+      <button 
+        onClick={handleGenerarCarta} 
+        disabled={cargando}
+        className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-6 active:scale-95 transition disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+      >
+        {cargando ? 'CREANDO TU CARTA...' : 'GENERAR MI CARTA'}
       </button>
     </div>
   );
@@ -357,17 +492,30 @@ export const Screen3PlayerOnboarding = () => {
 export const Screen4WelcomeCard = () => {
   const navigate = useNavigate();
   const sesion = useSesion();
-  const [mostrarConfig, setMostrarConfig] = useState(false);
-  const [apodo, setApodo] = useState(sesion.usuario?.nombre || 'EL RÚSTICO');
-  const [username, setUsername] = useState(sesion.user?.email?.split('@')[0] || 'el_rustico');
-  const [emojiFoto, setEmojiFoto] = useState('⚽');
+  const apodo = sesion.usuario?.nombre || 'EL RÚSTICO';
+  const emojiFoto = sesion.usuario?.fotoUrl || '⚽';
+  const [equipoJugador, setEquipoJugador] = useState<any>(null);
 
   React.useEffect(() => {
-    if (sesion.usuario?.nombre) setApodo(sesion.usuario.nombre);
-    if (sesion.user?.email) setUsername(sesion.user.email.split('@')[0] ?? 'jugador');
-  }, [sesion.usuario, sesion.user]);
+    if (sesion.user) {
+      obtenerEquiposDeUsuario(sesion.user.uid).then(t => {
+        if (t.length > 0) setEquipoJugador(t[0]);
+      }).catch(console.error);
+    }
+  }, [sesion.user]);
   
   const { isInstallable, promptInstall } = useInstallPrompt();
+
+  // Edad derivada de la fecha de nacimiento: se calcula en lectura, sin escrituras.
+  const edad = (sesion.usuario ? edadDe(sesion.usuario) : null) ?? '--';
+  const posicion = sesion.usuario?.perfilDeportivo?.posicion;
+  const pos = posicion ? posicion.slice(0, 3).toUpperCase() : '--';
+  const piernaHabil = sesion.usuario?.perfilDeportivo?.piernaHabil;
+  const pierna = piernaHabil ? piernaHabil.slice(0, 3).toUpperCase() : '--';
+  // GOL / PAR / ASI y el promedio quedan RESERVADOS hasta que exista historial
+  // de partidos: los numeros del seed son de prueba y no van en la ficha.
+  const reservado = '--';
+  const equipoNombre = equipoJugador?.name ?? '';
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
@@ -382,48 +530,114 @@ export const Screen4WelcomeCard = () => {
               <Download className="w-4 h-4" /> Instalar
             </button>
           )}
-          <button onClick={() => setMostrarConfig(true)} className="text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-900 p-2 rounded-full">
+          <button onClick={() => navigate('/ajustes')} className="text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-900 p-2 rounded-full">
             <Settings className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min mt-8">
-        <div className="relative w-64 h-96 shrink-0 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 rounded-3xl p-1 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
-          <div className="relative h-full w-full bg-zinc-900 rounded-[22px] flex flex-col items-center p-6 text-white border-4 border-amber-400/30">
-            <div className="absolute top-4 left-4 text-3xl font-black text-amber-400">50</div>
-            <div className="absolute top-12 left-5 text-sm font-bold text-zinc-400">DEL</div>
-            <div className="mt-8 mb-4 w-32 h-32 rounded-full bg-zinc-800 border-4 border-amber-400 flex items-center justify-center text-5xl shrink-0 overflow-hidden">
-              {emojiFoto}
-            </div>
-            <h2 className="text-2xl font-black uppercase text-center line-clamp-2 w-full leading-tight">{apodo}</h2>
-            <div className="text-amber-400/80 font-bold text-sm mt-1 mb-2 tracking-wide">@{username}</div>
+        <div className="relative w-64 h-[24rem] shrink-0 drop-shadow-[0_15px_25px_rgba(245,158,11,0.4)]" style={{ clipPath: "url(#ficha-dorada)" }}>
+          {/* La misma silueta del polygon de siempre (15% 0 / 85% 0 / ... /
+              50% 100%) pero con cada vertice redondeado. Esta en SVG (no en
+              clip-path: path()) porque Safari no soporta path(). Con
+              objectBoundingBox la forma se escala sola: si cambia el ancho o
+              el alto de la ficha, no hay que recalcular nada. */}
+          <svg width="0" height="0" className="absolute" aria-hidden="true">
+            <defs>
+              <clipPath id="ficha-dorada" clipPathUnits="objectBoundingBox">
+                <path d="M .2047 0 L .7953 0 Q .85 0 .8887 .0258 L .9613 .0742 Q 1 .1 1 .1365 L 1 .8135 Q 1 .85 .95 .8648 L .55 .9852 Q .5 1 .45 .9852 L .05 .8648 Q 0 .85 0 .8135 L 0 .1365 Q 0 .1 .0387 .0742 L .1113 .0258 Q .15 0 .2047 0 Z" />
+              </clipPath>
+            </defs>
+          </svg>
+          <div className="relative h-full w-full bg-gradient-to-br from-[#f9d976] via-[#e6b741] to-[#b38020] flex flex-col p-4 text-[#2c2005] font-sans">
+            {/* Background Texture/Shines */}
+            <div className="absolute top-0 right-0 w-full h-1/2 bg-gradient-to-bl from-white/30 to-transparent pointer-events-none" style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}></div>
+            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" style={{ clipPath: "polygon(0 100%, 0 0, 100% 100%)" }}></div>
             
-            <div className="w-full border-t border-zinc-800 mt-auto pt-4 grid grid-cols-2 gap-4 text-center">
-              <div>
-                <div className="text-xl font-black text-amber-400">0</div>
-                <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Partidos</div>
+            {/* Top Left Stats & Position */}
+            <div className="absolute top-6 left-5 flex flex-col items-center z-10">
+              <div className="text-5xl font-black tracking-tighter leading-none opacity-40" title="Próximamente: promedio de la temporada">{reservado}</div>
+              <div className="text-xl font-bold uppercase tracking-widest mt-1">{pos}</div>
+              <div className="w-8 h-[2px] bg-[#5c4a1e] mt-1 mb-1"></div>
+              <div className="w-8 h-6 flex items-center justify-center">
+                <span className="text-2xl">🇦🇷</span>
               </div>
-              <div>
-                <div className="text-xl font-black text-amber-400">0</div>
-                <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Goles</div>
+              {equipoJugador?.shieldUrl && (
+                <div className="mt-1 w-8 h-8 flex items-center justify-center text-xl bg-zinc-900/10 rounded-full overflow-hidden">
+                  <img src={equipoJugador.shieldUrl} alt={`Escudo de ${equipoJugador.name}`} className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+
+            {/* Player Image / Emoji */}
+            <div className="mt-2 w-full h-40 flex items-end justify-center z-0">
+              <div className="w-32 h-32 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center border-4 border-[#e6b741] drop-shadow-lg">
+                {emojiFoto?.startsWith('http') ? (
+                  <img src={emojiFoto} alt="Perfil" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-5xl">{emojiFoto}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Name */}
+            <div className="mt-1 w-full text-center z-10 flex flex-col items-center">
+              <div className="w-48 h-[1px] bg-[#7a6427]/60 mb-1"></div>
+              <h2 className="text-2xl font-black uppercase tracking-widest text-[#1a1303] truncate w-full px-2">{apodo}</h2>
+              <div className="w-48 h-[1px] bg-[#7a6427]/60 mt-1"></div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="w-full mt-2 grid grid-cols-[1fr_auto_1fr] gap-x-2 text-[#2c2005] font-bold text-sm px-4 z-10">
+              {/* Left Column */}
+              <div className="flex flex-col gap-1 items-start pl-2">
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">EDAD</span>
+                  <span className="text-lg font-black leading-none w-8 text-right">{edad}</span>
+                </div>
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">GOL</span>
+                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
+                </div>
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">PAR</span>
+                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="w-[1px] bg-[#7a6427]/40 h-full"></div>
+
+              {/* Right Column */}
+              <div className="flex flex-col gap-1 items-start pl-2">
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">PIE</span>
+                  <span className="text-lg font-black leading-none w-8 text-right">{pierna}</span>
+                </div>
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">ASI</span>
+                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
+                </div>
+                <div className="flex gap-2 justify-start items-center">
+                  <span className="uppercase w-8 text-left text-xs">POS</span>
+                  <span className="text-lg font-black leading-none w-8 text-right">{pos}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer: el equipo del jugador; sin equipo, la marca. Con mb-16
+                sube fuera de la punta de la ficha: abajo del todo el clip lo
+                comia y el nombre del equipo se cortaba. */}
+            <div className="mt-auto mb-16 pt-2 w-full flex flex-col items-center justify-center opacity-80 z-10">
+              <div className="text-[10px] font-black tracking-[0.2em] uppercase truncate w-full text-center">
+                {equipoNombre || 'Fulbeando'}
               </div>
             </div>
           </div>
         </div>
+        </div>
 
         <div className="w-full max-w-sm mt-8 space-y-3 shrink-0">
-          <button onClick={() => navigate('/equipo')} className="w-full flex items-center justify-center gap-2 bg-amber-500 text-zinc-950 font-black py-4 rounded-xl shadow-lg">
-            <Users className="w-5 h-5" /> Crear mi Equipo
-          </button>
-          <button onClick={() => navigate('/radar')} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-xl">
-            <MapPinned className="w-5 h-5" /> Explorar Radar
-          </button>
-          {/* Ajustes reales: disponibilidad para el radar, notificaciones y
-              solicitud de duelo de predio. El modal de arriba solo edita estado
-              local, asi que este boton es el que persiste de verdad. */}
-          <button onClick={() => navigate('/ajustes')} className="w-full flex items-center justify-center gap-2 bg-zinc-800 text-zinc-200 font-bold py-3.5 rounded-xl active:scale-95 transition-transform">
-            <Settings className="w-4 h-4" /> Ajustes y disponibilidad
-          </button>
           <button 
             onClick={async () => {
               if (navigator.share) {
@@ -448,65 +662,11 @@ export const Screen4WelcomeCard = () => {
         </div>
       </div>
 
-      {/* Modal Configuración */}
-      {mostrarConfig && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
-             <h3 className="text-xl font-black mb-6">Configurar Perfil</h3>
-             
-             <label className="text-xs font-bold text-zinc-500 uppercase">Apodo</label>
-             <input 
-               type="text" 
-               value={apodo}
-               onChange={(e) => setApodo(e.target.value)}
-               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 mt-2 mb-4 text-white font-black uppercase outline-none focus:border-amber-500"
-             />
-
-             <label className="text-xs font-bold text-zinc-500 uppercase">Nombre de Usuario (@)</label>
-             <div className="flex items-center w-full bg-zinc-950 border border-zinc-800 rounded-xl mt-2 mb-6 focus-within:border-amber-500 transition-colors overflow-hidden">
-               <span className="pl-4 text-zinc-500 font-black">@</span>
-               <input 
-                 type="text" 
-                 value={username}
-                 onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                 className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
-                 placeholder="tu_usuario"
-               />
-             </div>
-
-             <label className="text-xs font-bold text-zinc-500 uppercase">Foto (Emoji temporal)</label>
-             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
-               {['⚽', '🏃‍♂️', '🔥', '🧤', '🏆'].map(emoji => (
-                 <button key={emoji} onClick={() => setEmojiFoto(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${emojiFoto === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
-               ))}
-             </div>
-
-             <button onClick={() => {
-               if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid)
-             }} className="w-full flex items-center justify-center gap-2 bg-blue-500 text-white py-3 rounded-xl font-bold mb-4 active:scale-95 transition-transform">
-               <Bell className="w-5 h-5" /> Activar Alertas Push
-             </button>
-             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform mb-4">Guardar Cambios</button>
-             
-             <button onClick={async () => {
-               await cerrarSesion();
-               navigate('/login');
-             }} className="w-full border border-red-500/50 text-red-500 font-bold py-3 rounded-xl active:scale-95 transition-transform hover:bg-red-500/10">
-               Cerrar Sesión
-             </button>
-          </div>
-        </div>
-      )}
-
-      </div>
 
       <MenuNavegacion />
     </div>
   );
 };
-
-// Screen5Radar ha sido reemplazado por MapaRadarUnificado en src/modules/radar/pantallas/MapaRadarUnificado.tsx
-
 // ==========================================
 // PANTALLA 5: Tus Reservas / Turnos
 // ==========================================
@@ -690,94 +850,279 @@ export const Screen7MyTeam = () => {
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const [mostrarModalConvocatoria, setMostrarModalConvocatoria] = useState(false);
+  const [mostrarModalEstadisticas, setMostrarModalEstadisticas] = useState(false);
+  const [statsPartido, setStatsPartido] = useState<Record<string, { goles: number, asistencias: number }>>({});
+  const [mvpId, setMvpId] = useState<string | null>(null);
   const [convFecha, setConvFecha] = useState('Jueves 21:00hs');
   const [inviteUsername, setInviteUsername] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
-  // Mock list of users
-  const mockUsuarios = [
-    { username: 'el_rustico', apodo: 'El Rústico', emoji: '⚽' },
-    { username: 'mati_goleador', apodo: 'Matias', emoji: '🔥' },
-    { username: 'juan_perez', apodo: 'Juan Pérez', emoji: '🏃‍♂️' },
-    { username: 'lio_messi', apodo: 'Lio', emoji: '⭐' }
-  ];
+  // Busqueda de jugadores REAL (Firestore). Antes había un `mockUsuarios`
+  // inventado: "Enviar Notificación" no escribía nada en ninguna parte.
+  const [usuariosBuscados, setUsuariosBuscados] = useState<
+    Array<{ uid: string; username: string; apodo: string; emoji: string }>
+  >([]);
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<
+    { uid: string; username: string; apodo: string; emoji: string } | null
+  >(null);
+  const [buscando, setBuscando] = useState(false);
+  const busquedaRef = React.useRef(0);
 
-  const buscarUsuario = (username: string) => {
-    return mockUsuarios.filter(u => u.username.includes(username) || u.apodo.toLowerCase().includes(username));
-  };
-
-  const [usuariosBuscados, setUsuariosBuscados] = useState(mockUsuarios.slice(0,0));
-  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<{username:string, apodo:string, emoji:string} | null>(null);
-  
-
-  // State for config
+  // Modal de configuración: se cargan del equipo activo al abrirlo.
   const [formato, setFormato] = useState('F5');
   const [genero, setGenero] = useState('Masculino');
+  const [escudoSel, setEscudoSel] = useState('🛡️');
 
-  const currentUser = 'mi_usuario';
+  // Alta de equipo (máx. MAX_EQUIPOS_POR_JUGADOR por jugador).
+  const [mostrarCrear, setMostrarCrear] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoFormato, setNuevoFormato] = useState('F5');
+  const [nuevoGenero, setNuevoGenero] = useState<'Masculino' | 'Femenino' | 'Mixto'>('Masculino');
 
-  const [equipos, setEquipos] = useState([
-    { 
-      id: 1, nombre: 'La Scaloneta F5', capitan: 'mi_usuario', w: 45, d: 10, l: 5, emoji: '🛡️', isCapitan: true,
-      plantel: [
-        { id: 101, username: 'mi_usuario', apodo: 'Yo', emoji: '👑', isCapitan: true },
-        { id: 102, username: 'juan_perez', apodo: 'Juan Pérez', emoji: '🏃‍♂️', isCapitan: false },
-        { id: 103, username: 'mati_goleador', apodo: 'Matias', emoji: '🔥', isCapitan: false },
-      ],
-      convocatoria: null as { fecha: string, confirmados: number[], bajas: number[] } | null
-    },
-    { 
-      id: 2, nombre: 'Los Galácticos F7', capitan: 'Cristiano', w: 20, d: 2, l: 1, emoji: '⚡', isCapitan: false,
-      plantel: [
-        { id: 201, username: 'cristiano', apodo: 'Cristiano', emoji: '⚡', isCapitan: true },
-        { id: 101, username: 'mi_usuario', apodo: 'Yo', emoji: '🏃‍♂️', isCapitan: false },
-        { id: 202, username: 'el_rustico', apodo: 'El Rústico', emoji: '⚽', isCapitan: false },
-      ],
-      convocatoria: { fecha: 'Jueves 21:00hs', confirmados: [201], bajas: [202] }
-    },
-  ]);
+  const sesion = useSesion();
+  // La identidad es el `uid`: comparar por parte del email no matchea contra
+  // `members[].uid` ni contra `members[].name`.
+  const currentUid = sesion.user?.uid ?? null;
+
+  // Invitación por link: /equipo?unirse=<teamId>
+  const [params] = useSearchParams();
+  const equipoInvitadoId = params.get('unirse');
+  const [equipoInvitado, setEquipoInvitado] = useState<{ id: string; nombre: string } | null>(null);
+  const [uniendose, setUniendose] = useState(false);
+
+  const [equipos, setEquipos] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  const aviso = (mensaje: string) => {
+    setToastMessage(mensaje);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
+
+  const mapearEquipo = React.useCallback(
+    (t: any) => ({
+      id: t.id,
+      nombre: t.name,
+      capitan: t.captainId,
+      // `captainId` es un uid: para mostrarlo hace falta el nombre del miembro.
+      capitanNombre: t.members.find((m: any) => m.uid === t.captainId)?.name ?? 'Sin capitán',
+      formato: t.modalidadBase || 'F5',
+      genero: t.genero || 'Masculino',
+      w: t.stats?.wins || 0,
+      d: t.stats?.draws || 0,
+      l: t.stats?.losses || 0,
+      emoji: t.shieldUrl || '🛡️',
+      isCapitan: t.captainId === sesion.user?.uid,
+      soyMiembro: t.members.some((m: any) => m.uid === sesion.user?.uid),
+      plantel: t.members.map((m: any) => ({
+        id: m.uid,
+        username: m.name,
+        apodo: m.name,
+        emoji: m.uid === t.captainId ? '👑' : '🏃‍♂️',
+        // Fuente estructural de la capitania: `captainId`. El `role` del
+        // documento puede traer datos viejos y no tiene por que coincidir.
+        isCapitan: m.uid === t.captainId,
+      })),
+      convocatoria: null,
+    }),
+    [sesion.user?.uid],
+  );
+
+  /** Vuelve a leer "mis equipos" y devuelve cuántos hay. */
+  const recargarEquipos = React.useCallback(async (): Promise<number> => {
+    if (!sesion.user) return 0;
+    const dbTeams = await obtenerEquiposDeUsuario(sesion.user.uid);
+    setEquipos(dbTeams.map(mapearEquipo));
+    setCargando(false);
+    return dbTeams.length;
+  }, [sesion.user, mapearEquipo]);
+
+  React.useEffect(() => {
+    if (!sesion.user) return;
+    setCargando(true);
+    recargarEquipos().catch((err) => {
+      console.error(err);
+      setCargando(false);
+    });
+  }, [sesion.user, recargarEquipos]);
+
+  // Banner de invitación: una sola lectura, y solo cuando se abre un link.
+  React.useEffect(() => {
+    if (!equipoInvitadoId || !sesion.user) {
+      setEquipoInvitado(null);
+      return;
+    }
+    let vivo = true;
+    obtenerEquipoPorId(equipoInvitadoId)
+      .then((t) => { if (vivo) setEquipoInvitado(t ? { id: t.id, nombre: t.name } : null); })
+      .catch(() => { if (vivo) setEquipoInvitado(null); });
+    return () => { vivo = false; };
+  }, [equipoInvitadoId, sesion.user]);
 
   const equipo = equipos[equipoActivo];
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleUpdateEmoji = (newEmoji: string) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !equipo) return;
+
+    try {
+      setToastMessage('Subiendo imagen...');
+      const optimizedBlob = await optimizeAvatarImage(file, { maxSize: 300, quality: 0.8 });
+      // `teams/{teamId}` y no `teams`: storage.rules exige ser el capitan del
+      // equipo que se nombra en el path.
+      const result = await uploadImageToR2(optimizedBlob, file.name, `teams/${equipo.id}`, () => {});
+      await handleUpdateEmoji(result.publicUrl);
+    } catch (err) {
+       console.error(err);
+       setToastMessage('Error al subir la imagen');
+       setTimeout(() => setToastMessage(''), 3000);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  /** Escribe `shieldUrl` en `teams/{id}`: solo el capitan pasa la regla. */
+  const handleUpdateEmoji = async (newEmoji: string) => {
+    if (!equipo || !sesion.user) return;
+    try {
+      await actualizarEquipo(equipo.id, sesion.user.uid, { shieldUrl: newEmoji });
+      setEquipos((prev) => prev.map((eq, i) => (i === equipoActivo ? { ...eq, emoji: newEmoji } : eq)));
+      aviso('Escudo actualizado');
+    } catch (err) {
+      console.error(err);
+      aviso('No se pudo actualizar el escudo (¿sos el capitán?)');
+    }
+  };
+
+  /** Abre la configuración con los datos ACTUALES del equipo. */
+  const abrirConfig = () => {
     if (!equipo) return;
-    const nuevosEquipos = [...equipos];
-    nuevosEquipos[equipoActivo] = { ...equipo, emoji: newEmoji };
-    setEquipos(nuevosEquipos);
+    setFormato(equipo.formato);
+    setGenero(equipo.genero);
+    setEscudoSel(equipo.emoji);
+    setMostrarConfig(true);
   };
 
-  const handleRemovePlayer = (teamId: number, playerId: number, isSelf: boolean) => {
-    if(window.confirm(isSelf ? '¿Estás seguro que querés salir del equipo?' : '¿Estás seguro que querés liberar a este jugador?')) {
-      const nuevosEquipos = equipos.map(eq => {
-        if(eq.id === teamId) {
-           return { ...eq, plantel: eq.plantel.filter(p => p.id !== playerId) };
-        }
-        return eq;
+  /** Un solo write: formato, categoría y escudo se guardan juntos. */
+  const handleGuardarConfig = async () => {
+    if (!equipo || !sesion.user) {
+      setMostrarConfig(false);
+      return;
+    }
+    try {
+      await actualizarEquipo(equipo.id, sesion.user.uid, {
+        modalidadBase: formato,
+        genero: genero as 'Masculino' | 'Femenino' | 'Mixto',
+        shieldUrl: escudoSel,
       });
-      setEquipos(nuevosEquipos);
-      setToastMessage(isSelf ? 'Saliste del equipo' : 'Jugador liberado del equipo');
-      setTimeout(() => setToastMessage(''), 3000);
+      await recargarEquipos();
+      setMostrarConfig(false);
+      aviso('Equipo actualizado');
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No se pudieron guardar los cambios');
     }
   };
 
-  const handleDelegateCaptain = (teamId: number, playerId: number) => {
-    if(window.confirm('¿Estás seguro que querés cederle la capitanía a este jugador? Vos pasarás a ser un jugador normal.')) {
-      const nuevosEquipos = equipos.map(eq => {
-        if(eq.id === teamId) {
-           const newPlantel = eq.plantel.map(p => {
-             if(p.id === playerId) return { ...p, isCapitan: true, emoji: '👑' };
-             if(p.username === currentUser) return { ...p, isCapitan: false, emoji: '🏃‍♂️' };
-             return p;
-           });
-           const newCapitan = newPlantel.find(p => p.id === playerId)?.username || eq.capitan;
-           return { ...eq, isCapitan: false, capitan: newCapitan, plantel: newPlantel };
-        }
-        return eq;
-      });
-      setEquipos(nuevosEquipos);
-      setToastMessage('Has delegado la capitanía');
-      setTimeout(() => setToastMessage(''), 3000);
+  /**
+   * Baja real: `salirDelEquipo` (por cuenta propia) o `liberarMiembro` (desde
+   * la capitanía). Ambos escriben `teams.members` y el `teamIds` del jugador.
+   */
+  const handleRemovePlayer = async (teamId: string, playerId: string, isSelf: boolean) => {
+    if (!sesion.user) return;
+    const pregunta = isSelf
+      ? '¿Estás seguro que querés salir del equipo?'
+      : '¿Estás seguro que querés liberar a este jugador?';
+    if (!window.confirm(pregunta)) return;
+
+    try {
+      if (isSelf) await salirDelEquipo(teamId, sesion.user.uid);
+      else await liberarMiembro(teamId, sesion.user.uid, playerId);
+      await recargarEquipos();
+      aviso(isSelf ? 'Saliste del equipo' : 'Jugador liberado del equipo');
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No se pudo completar la operación');
     }
+  };
+
+  /** Cede la capitanía y la administración a otro integrante del plantel. */
+  const handleDelegateCaptain = async (teamId: string, playerId: string) => {
+    if (!sesion.user) return;
+    if (!window.confirm('¿Cederle la capitanía a este jugador? Vos pasás a ser un jugador normal.')) return;
+
+    try {
+      await delegarCapitania(teamId, sesion.user.uid, playerId);
+      await recargarEquipos();
+      aviso('Capitanía delegada');
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No se pudo delegar la capitanía');
+    }
+  };
+
+  /** Alta de equipo: el creador queda como capitán (lo exige también la regla). */
+  const handleCrearEquipo = async () => {
+    if (!sesion.user) return;
+    const nombre = nuevoNombre.trim();
+    if (!nombre) {
+      aviso('Poné un nombre para el equipo');
+      return;
+    }
+    try {
+      await crearEquipo(
+        sesion.user.uid,
+        sesion.usuario ? nombreCompleto(sesion.usuario) : sesion.user.displayName || 'Jugador',
+        { nombre, modalidadBase: nuevoFormato, genero: nuevoGenero },
+      );
+      const total = await recargarEquipos();
+      setEquipoActivo(Math.max(0, total - 1));
+      setMostrarCrear(false);
+      setNuevoNombre('');
+      aviso(`Equipo "${nombre}" creado`);
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No se pudo crear el equipo');
+    }
+  };
+
+  /** El que recibe el link se suma a sí mismo: es la única vía que dejan las reglas. */
+  const handleUnirse = async () => {
+    if (!sesion.user || !equipoInvitadoId) return;
+    setUniendose(true);
+    try {
+      await unirseAEquipo(equipoInvitadoId, sesion.user.uid);
+      await recargarEquipos();
+      setEquipoInvitado(null);
+      aviso('Te sumaste al equipo');
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No te pudiste sumar al equipo');
+    } finally {
+      setUniendose(false);
+    }
+  };
+
+  /** Busca jugadores reales. El contador evita que respuestas viejas pisen a las nuevas. */
+  const buscarInvitados = (valor: string) => {
+    const token = ++busquedaRef.current;
+    const termino = valor.trim();
+    if (termino.length < 2) {
+      setUsuariosBuscados([]);
+      setBuscando(false);
+      return;
+    }
+    setBuscando(true);
+    buscarJugadores(termino)
+      .then((r) => {
+        if (token !== busquedaRef.current) return;
+        setUsuariosBuscados(
+          r.map((m) => ({ uid: m.uid, username: m.username, apodo: m.name, emoji: m.avatarUrl || '⚽' })),
+        );
+      })
+      .catch((err) => {
+        console.error(err);
+        if (token !== busquedaRef.current) return;
+        setUsuariosBuscados([]);
+      })
+      .finally(() => {
+        if (token === busquedaRef.current) setBuscando(false);
+      });
   };
 
   const handleCreateConvocatoria = () => {
@@ -797,14 +1142,14 @@ export const Screen7MyTeam = () => {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  const handleResponderConvocatoria = (teamId: number, status: 'voy' | 'bajo') => {
+  const handleResponderConvocatoria = (teamId: string, status: 'voy' | 'bajo') => {
     const nuevosEquipos = equipos.map(eq => {
       if(eq.id === teamId && eq.convocatoria) {
-         const myPlayerId = eq.plantel.find(p => p.username === currentUser)?.id;
+         const myPlayerId = eq.plantel.find((p: any) => p.id === currentUid)?.id;
          if(!myPlayerId) return eq;
          
-         const newConf = eq.convocatoria.confirmados.filter(id => id !== myPlayerId);
-         const newBajas = eq.convocatoria.bajas.filter(id => id !== myPlayerId);
+         const newConf = eq.convocatoria.confirmados.filter((id: any) => id !== myPlayerId);
+         const newBajas = eq.convocatoria.bajas.filter((id: any) => id !== myPlayerId);
          
          if(status === 'voy') newConf.push(myPlayerId);
          if(status === 'bajo') newBajas.push(myPlayerId);
@@ -816,35 +1161,158 @@ export const Screen7MyTeam = () => {
     setEquipos(nuevosEquipos);
   };
 
+  /** Link de invitación: lleva al equipo, no a la pantalla de siempre. */
+  const linkDeInvitacion = (teamId: string) => `${window.location.origin}/equipo?unirse=${teamId}`;
+
   const handleShareLink = async () => {
     if (!equipo) return;
+    const url = linkDeInvitacion(equipo.id);
     if (navigator.share) {
       try {
         await navigator.share({
           title: '¡Unite a mi equipo en Fulbeando!',
           text: `¡Sumate a ${equipo.nombre} y rompela con nosotros!`,
-          url: window.location.href,
+          url,
         });
+        return;
       } catch (err) {
         console.error('Error sharing:', err);
       }
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('¡Enlace copiado al portapapeles!');
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      aviso('Link de invitación copiado');
+    } catch {
+      aviso(url);
     }
   };
 
-  const handleSendInvite = () => {
-    if (!usuarioSeleccionado) return;
-    setToastMessage(`¡Invitación enviada a @${usuarioSeleccionado.username}!`);
-    setTimeout(() => setToastMessage(''), 3000);
+  /**
+   * El equipo se arma con el link: las reglas de `usuarios/{uid}` no dejan que
+   * el capitan escriba el perfil de un tercero, así que lo único honesto que
+   * podemos hacer desde acá es dejar el link en el portapapeles.
+   */
+  const handleSendInvite = async () => {
+    if (!usuarioSeleccionado || !equipo) return;
+    try {
+      await navigator.clipboard.writeText(linkDeInvitacion(equipo.id));
+      aviso(`Link de invitación para ${usuarioSeleccionado.apodo} copiado`);
+    } catch {
+      aviso(linkDeInvitacion(equipo.id));
+    }
     setInviteUsername('');
     setUsuarioSeleccionado(null);
     setUsuariosBuscados([]);
     setMostrarInvitar(false);
   };
 
-  if (!equipo) return <div className="h-full bg-zinc-950 flex justify-center items-center text-white">Cargando...</div>;
+  const bannerInvitacion = equipoInvitado ? (
+    <div className="mx-6 mt-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-4">
+      <div className="flex-1">
+        <p className="text-xs font-black uppercase text-amber-500">Te invitaron a</p>
+        <p className="font-bold text-white">{equipoInvitado.nombre}</p>
+      </div>
+      <button
+        onClick={handleUnirse}
+        disabled={uniendose}
+        className="bg-amber-500 text-zinc-950 font-black text-sm px-4 py-2 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
+      >
+        {uniendose ? '...' : 'Unirse'}
+      </button>
+      <button
+        onClick={() => setEquipoInvitado(null)}
+        className="text-zinc-500 hover:text-white text-lg px-1"
+        aria-label="Descartar invitación"
+      >
+        ✕
+      </button>
+    </div>
+  ) : null;
+
+  const modalCrearEquipo = mostrarCrear && (
+    <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+        <button onClick={() => setMostrarCrear(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+        <h3 className="text-xl font-black mb-1">Crear equipo</h3>
+        <p className="text-sm text-zinc-400 mb-6">
+          Quedás como capitán. Podés tener hasta {MAX_EQUIPOS_POR_JUGADOR} equipos a la vez.
+        </p>
+
+        <label className="text-xs font-bold text-zinc-500 uppercase">Nombre del equipo</label>
+        <input
+          type="text"
+          value={nuevoNombre}
+          onChange={(e) => setNuevoNombre(e.target.value)}
+          maxLength={60}
+          placeholder="Los Pibes de Lomas"
+          className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+        />
+
+        <label className="text-xs font-bold text-zinc-500 uppercase">Formato de juego</label>
+        <div className="flex flex-wrap gap-2 mt-2 mb-6">
+          {['F5', 'F7', 'F11'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setNuevoFormato(f)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${nuevoFormato === f ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+
+        <label className="text-xs font-bold text-zinc-500 uppercase">Categoría</label>
+        <div className="flex gap-2 mt-2 mb-8">
+          {(['Masculino', 'Femenino', 'Mixto'] as const).map((g) => (
+            <button
+              key={g}
+              onClick={() => setNuevoGenero(g)}
+              className={`flex-1 py-3 rounded-xl text-xs font-bold transition-colors ${nuevoGenero === g ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleCrearEquipo}
+          className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform"
+        >
+          Crear equipo
+        </button>
+      </div>
+    </div>
+  );
+
+  if (cargando) return <div className="h-full bg-zinc-950 flex justify-center items-center text-white">Cargando equipos...</div>;
+
+  if (equipos.length === 0 || !equipo) {
+    return (
+      <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+        {toastMessage && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
+            {toastMessage}
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto">
+          {bannerInvitacion}
+          <div className="flex flex-col justify-center items-center p-6 text-center min-h-[60vh]">
+            <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center text-3xl mb-4 border border-zinc-800">🛡️</div>
+            <h2 className="text-2xl font-black text-amber-500 mb-2">No tenés equipo</h2>
+            <p className="text-zinc-400 mb-8">Creá un equipo para empezar a sumar estadísticas, armar convocatorias y lanzar desafíos al Radar.</p>
+            <button
+              onClick={() => setMostrarCrear(true)}
+              className="bg-amber-500 text-zinc-950 font-black px-8 py-4 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.3)] hover:scale-105 active:scale-95 transition-transform"
+            >
+              CREAR EQUIPO
+            </button>
+          </div>
+        </div>
+        {modalCrearEquipo}
+        <MenuNavegacion />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
@@ -855,6 +1323,8 @@ export const Screen7MyTeam = () => {
             {toastMessage}
           </div>
         )}
+
+        {bannerInvitacion}
 
       {/* Selector de equipos (Tabs) */}
       <div className="flex bg-zinc-900 border-b border-zinc-800 pt-8">
@@ -867,16 +1337,52 @@ export const Screen7MyTeam = () => {
             {eq.nombre}
           </button>
         ))}
+        {equipos.length < MAX_EQUIPOS_POR_JUGADOR && (
+          <button
+            onClick={() => setMostrarCrear(true)}
+            className="px-4 py-4 text-sm font-bold text-zinc-500 hover:text-amber-500 transition"
+            title="Crear otro equipo"
+          >
+            +
+          </button>
+        )}
       </div>
 
       {/* Header Equipo */}
       <div className="bg-zinc-900 p-6 pt-12 rounded-b-[40px] text-center relative border-b border-zinc-800">
-        <button onClick={() => setMostrarConfig(true)} className="absolute top-8 right-6 text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-800 p-3 rounded-full">
-          <Settings className="w-5 h-5" />
-        </button>
-        <div className="w-24 h-24 bg-zinc-800 mx-auto rounded-full border-4 border-amber-500 flex items-center justify-center text-4xl mb-4 overflow-hidden">{equipo.emoji}</div>
+        {equipo.isCapitan && (
+          <button onClick={abrirConfig} className="absolute top-8 right-6 text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-800 p-3 rounded-full">
+            <Settings className="w-5 h-5" />
+          </button>
+        )}
+        <div 
+          className={`w-24 h-24 bg-zinc-800 mx-auto rounded-full border-4 border-amber-500 flex items-center justify-center text-4xl mb-4 overflow-hidden relative group ${equipo.isCapitan ? 'cursor-pointer' : ''}`}
+          onClick={() => {
+            if (equipo.isCapitan && fileInputRef.current) {
+              fileInputRef.current.click();
+            }
+          }}
+        >
+          {equipo.emoji?.startsWith('http') ? (
+             <img src={equipo.emoji} alt="Escudo" className="w-full h-full object-cover" />
+          ) : (
+             equipo.emoji
+          )}
+          {equipo.isCapitan && (
+            <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-xs font-bold text-white uppercase backdrop-blur-sm">
+              Cambiar
+            </div>
+          )}
+        </div>
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          className="hidden" 
+          accept="image/*" 
+          onChange={handleImageUpload} 
+        />
         <h2 className="text-2xl font-black uppercase">{equipo.nombre}</h2>
-        <p className="text-zinc-400 text-sm mt-1">Capitán: {equipo.capitan}</p>
+            <p className="text-zinc-400 text-sm mt-1">Capitán: {equipo.capitanNombre}</p>
         <div className="flex justify-center gap-4 mt-4 text-sm font-bold">
           <div className="text-emerald-500">{equipo.w} PG</div>
           <div className="text-zinc-500">{equipo.d} PE</div>
@@ -900,6 +1406,15 @@ export const Screen7MyTeam = () => {
               )}
             </div>
             
+            {equipo.isCapitan && equipo.convocatoria.confirmados.length > 0 && (
+              <button 
+                onClick={() => setMostrarModalEstadisticas(true)}
+                className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl active:scale-95 transition-transform mb-4"
+              >
+                Cargar Estadísticas del Partido
+              </button>
+            )}
+
             <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-3">
               <div className="text-center flex-1">
                 <div className="text-xl font-black text-emerald-500">{equipo.convocatoria.confirmados.length}</div>
@@ -914,7 +1429,7 @@ export const Screen7MyTeam = () => {
 
             <div className="flex gap-2">
               {(() => {
-                const myId = equipo.plantel.find(p => p.username === currentUser)?.id;
+                const myId = equipo.plantel.find((p: any) => p.id === currentUid)?.id;
                 const confirmó = myId && equipo.convocatoria.confirmados.includes(myId);
                 const seBajó = myId && equipo.convocatoria.bajas.includes(myId);
                 return (
@@ -955,19 +1470,25 @@ export const Screen7MyTeam = () => {
       {/* Lista de Jugadores */}
       <div className="p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase">Plantel (5/10)</h3>
+          <h3 className="text-sm font-bold text-zinc-500 uppercase">Plantel ({equipo.plantel.length}/{MAX_MEMBROS_EQUIPO})</h3>
           <button onClick={() => setMostrarInvitar(true)} className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform">+ Invitar</button>
         </div>
         
         <div className="space-y-3">
-          {equipo.plantel.map((jugador) => {
-            const isMe = jugador.username === currentUser;
+          {equipo.plantel.map((jugador: any) => {
+            const isMe = jugador.id === currentUid;
             const canRemove = equipo.isCapitan && !isMe;
             const canLeave = isMe && !equipo.isCapitan;
 
             return (
               <div key={jugador.id} className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
-                <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center font-bold text-amber-500">{jugador.emoji}</div>
+                <div className="w-10 h-10 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center font-bold text-amber-500">
+                  {jugador.emoji?.startsWith('http') ? (
+                    <img src={jugador.emoji} alt={jugador.apodo} className="w-full h-full object-cover" />
+                  ) : (
+                    jugador.emoji
+                  )}
+                </div>
                 <div className="flex-1">
                   <h4 className="font-bold text-sm">{jugador.apodo}</h4>
                   <p className="text-xs text-zinc-500 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : 'JUGADOR'}</p>
@@ -1023,14 +1544,15 @@ export const Screen7MyTeam = () => {
                ))}
              </div>
 
-             <label className="text-xs font-bold text-zinc-500 uppercase">Escudo (Emoji temporal)</label>
+             <label className="text-xs font-bold text-zinc-500 uppercase">Escudo</label>
+             <p className="text-[11px] text-zinc-600 mb-2">Tocá la foto del equipo en el encabezado para subir una imagen.</p>
              <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
                {['🛡️', '⚔️', '🦅', '🦁', '⭐'].map(emoji => (
-                 <button key={emoji} onClick={() => handleUpdateEmoji(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${equipo.emoji === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
+                 <button key={emoji} onClick={() => setEscudoSel(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${escudoSel === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
                ))}
              </div>
 
-             <button onClick={() => setMostrarConfig(false)} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
+             <button onClick={handleGuardarConfig} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
           </div>
         </div>
       )}
@@ -1050,45 +1572,49 @@ export const Screen7MyTeam = () => {
 
              <div className="relative flex py-2 items-center mb-6">
                <div className="flex-grow border-t border-zinc-800"></div>
-               <span className="shrink-0 px-4 text-zinc-600 text-xs font-bold uppercase">o invitar por usuario</span>
+               <span className="shrink-0 px-4 text-zinc-600 text-xs font-bold uppercase">o buscar por nombre</span>
                <div className="flex-grow border-t border-zinc-800"></div>
              </div>
 
              <div className={`flex items-center w-full bg-zinc-950 border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
-               <span className="pl-4 text-zinc-500 font-black">@</span>
-               <input 
-                 type="text" 
-                 value={inviteUsername}
-                 onChange={(e) => {
-                   const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
-                   setInviteUsername(val);
-                   setUsuarioSeleccionado(null);
-                   if (val.length > 0) {
-                     setUsuariosBuscados(buscarUsuario(val));
-                   } else {
-                     setUsuariosBuscados([]);
-                   }
-                 }}
-                 className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
-                 placeholder="usuario"
-               />
-               {usuarioSeleccionado && <span className="pr-4 text-emerald-500">✓</span>}
+               <Search className="w-4 h-4 ml-4 text-zinc-500 shrink-0" />
+                <input 
+                  type="text" 
+                  value={inviteUsername}
+                  onChange={(e) => {
+                    // Sin pasar a minúsculas: el rango de Firestore compara por
+                    // code point y "lio" no matchearía contra "Lionel".
+                    const val = e.target.value.slice(0, 40);
+                    setInviteUsername(val);
+                    setUsuarioSeleccionado(null);
+                    buscarInvitados(val);
+                  }}
+                  className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
+                  placeholder="buscar por nombre o apellido"
+                />
+                {usuarioSeleccionado && <span className="pr-4 text-emerald-500">✓</span>}
              </div>
 
              {/* Resultados de Búsqueda */}
              {!usuarioSeleccionado && usuariosBuscados.length > 0 && (
                <div className="bg-zinc-950 border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
-                 {usuariosBuscados.map(u => (
-                   <div 
-                     key={u.username}
-                     onClick={() => {
-                       setUsuarioSeleccionado(u);
-                       setInviteUsername(u.username);
-                       setUsuariosBuscados([]);
-                     }}
+                  {usuariosBuscados.map(u => (
+                    <div 
+                      key={u.uid}
+                      onClick={() => {
+                        setUsuarioSeleccionado(u);
+                        setInviteUsername(u.apodo);
+                        setUsuariosBuscados([]);
+                      }}
                      className="flex items-center gap-3 p-3 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors last:border-0"
                    >
-                     <div className="w-8 h-8 bg-zinc-800 rounded-full flex items-center justify-center text-sm">{u.emoji}</div>
+                     <div className="w-8 h-8 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center text-sm">
+                        {u.emoji?.startsWith('http') ? (
+                          <img src={u.emoji} alt={u.apodo} className="w-full h-full object-cover" />
+                        ) : (
+                          u.emoji
+                        )}
+                     </div>
                      <div>
                        <div className="text-sm font-bold text-white">{u.apodo}</div>
                        <div className="text-xs text-zinc-500 font-medium">@{u.username}</div>
@@ -1097,20 +1623,22 @@ export const Screen7MyTeam = () => {
                  ))}
                </div>
              )}
-             {!usuarioSeleccionado && inviteUsername.length > 0 && usuariosBuscados.length === 0 && (
-               <div className="text-xs text-red-400 font-bold mb-4 px-2">Usuario no encontrado</div>
-             )}
-             {usuarioSeleccionado && (
-               <div className="text-xs text-emerald-400 font-bold mb-4 px-2">¡Usuario válido! Listo para invitar.</div>
-             )}
+              {!usuarioSeleccionado && inviteUsername.trim().length >= 2 && usuariosBuscados.length === 0 && !buscando && (
+                <div className="text-xs text-red-400 font-bold mb-4 px-2">No encontramos a nadie con ese nombre</div>
+              )}
+              {usuarioSeleccionado && (
+                <div className="text-xs text-emerald-400 font-bold mb-4 px-2">
+                  Invitás a {usuarioSeleccionado.apodo}. El equipo se arma con el link.
+                </div>
+              )}
 
-             <button 
-               onClick={handleSendInvite} 
-               disabled={!usuarioSeleccionado}
-               className={`w-full font-black py-4 rounded-xl transition-all mt-2 ${usuarioSeleccionado ? 'bg-amber-500 text-zinc-950 active:scale-95' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
-             >
-               Enviar Notificación
-             </button>
+              <button 
+                onClick={handleSendInvite} 
+                disabled={!usuarioSeleccionado}
+                className={`w-full font-black py-4 rounded-xl transition-all mt-2 ${usuarioSeleccionado ? 'bg-amber-500 text-zinc-950 active:scale-95' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
+              >
+                Copiar link de invitación
+              </button>
           </div>
         </div>
       )}
@@ -1142,7 +1670,86 @@ export const Screen7MyTeam = () => {
       )}
       </div>
 
+      {modalCrearEquipo}
       <MenuNavegacion />
+      {/* Modal Cargar Estadísticas */}
+      {mostrarModalEstadisticas && equipo && (
+        <div className="fixed inset-0 z-[200] bg-zinc-950/90 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-black italic text-emerald-500">3er TIEMPO</h2>
+            <button onClick={() => setMostrarModalEstadisticas(false)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto space-y-6">
+            <div>
+              <h3 className="font-bold text-amber-500 mb-4">Elegir MVP del Partido ⭐</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {equipo.plantel.filter((p: any) => equipo.convocatoria?.confirmados.includes(p.id)).map((p: any) => (
+                  <button 
+                    key={p.id}
+                    onClick={() => setMvpId(p.id)}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${mvpId === p.id ? 'border-amber-500 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xl">{p.emoji}</div>
+                    <span className="text-xs font-bold text-white truncate w-full text-center">{p.apodo}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-emerald-500 mb-4">Goles y Asistencias</h3>
+              <div className="space-y-2">
+                {equipo.plantel.filter((p: any) => equipo.convocatoria?.confirmados.includes(p.id)).map((p: any) => {
+                  const s = statsPartido[p.id] || { goles: 0, asistencias: 0 };
+                  const updateStats = (field: 'goles'|'asistencias', val: number) => {
+                    setStatsPartido(prev => ({...prev, [p.id]: { ...s, [field]: Math.max(0, s[field] + val) }}));
+                  };
+                  return (
+                    <div key={p.id} className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">{p.emoji}</div>
+                      <div className="flex-1 truncate">
+                        <span className="text-sm font-bold text-white block truncate">{p.apodo}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] uppercase font-bold text-zinc-500">Goles</span>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => updateStats('goles', -1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-red-500">-</button>
+                            <span className="font-black w-3 text-center">{s.goles}</span>
+                            <button onClick={() => updateStats('goles', 1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-emerald-500">+</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] uppercase font-bold text-zinc-500">Asist.</span>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => updateStats('asistencias', -1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-red-500">-</button>
+                            <span className="font-black w-3 text-center">{s.asistencias}</span>
+                            <button onClick={() => updateStats('asistencias', 1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-amber-500">+</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => {
+              setToastMessage('Estadísticas guardadas con éxito');
+              setTimeout(() => setToastMessage(''), 3000);
+              setMostrarModalEstadisticas(false);
+            }}
+            className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-4 active:scale-95 transition-transform"
+          >
+            Confirmar Carga
+          </button>
+        </div>
+      )}
+      
+      {/* Cierre de Screen7MyTeam */}
     </div>
   );
 };

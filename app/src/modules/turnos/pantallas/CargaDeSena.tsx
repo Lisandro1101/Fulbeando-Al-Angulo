@@ -277,8 +277,10 @@ export default function CargaDeSena() {
   const listoParaEnviar = seleccion !== null && archivo !== null && sesion.user !== null
 
   return (
-    <div className="h-full bg-canvas pb-safe">
-      <NavegacionHeader />
+    <div className="h-full flex flex-col bg-canvas pb-safe">
+      <div className="shrink-0">
+        <NavegacionHeader />
+      </div>
       {contextState?.teamName && (
         <div className="bg-amber-500/10 text-amber-500 font-bold text-sm px-4 py-3 border-b border-amber-500/20 text-center animate-pulse">
           ⚽ Reservando turno para el partido de <span className="text-white">{contextState.teamName}</span>

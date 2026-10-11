@@ -49,6 +49,7 @@ export interface CrearEquipoInput {
   nombre: string
   escudoUrl?: string | null
   modalidadBase: string
+  genero?: 'Masculino' | 'Femenino' | 'Mixto'
 }
 
 export class ErrorEquipo extends Error {
@@ -121,6 +122,7 @@ export const crearEquipo = async (
       name: input.nombre,
       shieldUrl: input.escudoUrl ?? null,
       modalidadBase: input.modalidadBase,
+      genero: input.genero || 'Masculino',
       captainId: uid,
       members: [capitan],
       stats: { wins: 0, draws: 0, losses: 0 },
@@ -256,6 +258,53 @@ export const delegarCapitania = async (
   })
 }
 
+/**
+ * El capitan saca a un integrante del plantel.
+ *
+ * Escribe DOS documentos en la MISMA transaccion:
+ *   1. `teams/{id}.members`                         → se va el miembro;
+ *   2. `usuarios/{uid}.perfilDeportivo.teamIds`     → se desvincula el equipo.
+ *
+ * La segunda escritura es la que habilita `capitanDesvinculaSuEquipo()` en
+ * `firestore.rules`. Sin ella, el jugador liberado se quedaria con un id
+ * huerfano en `teamIds` y gastaria una de sus 2 fichas de equipo sin tener
+ * equipo visible. Sale con `arrayRemove` sobre el miembro leido del documento,
+ * asi que tambien funciona si el plantel tiene `dorsal` o `position` cargados.
+ */
+export const liberarMiembro = async (
+  equipoId: string,
+  capitanUid: string,
+  uidMiembro: string,
+): Promise<void> => {
+  if (capitanUid === uidMiembro) {
+    throw new ErrorEquipo(
+      'NO_LIBERA_A_SI_MISMO',
+      'Delega la capitania antes de salir del equipo',
+    )
+  }
+
+  const equipoRef = doc(db, COLECCIONES.equipos, equipoId)
+  const miembroRef = refUsuario(uidMiembro)
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(equipoRef)
+    if (!snap.exists()) {
+      throw new ErrorEquipo('EQUIPO_NO_EXISTE', `El equipo ${equipoId} no existe`)
+    }
+    const equipo = { ...snap.data(), id: snap.id } as Equipo
+    if (equipo.captainId !== capitanUid) {
+      throw new ErrorEquipo('SIN_PERMISO', 'Solo el capitan puede liberar jugadores')
+    }
+    const miembro = equipo.members.find((m) => m.uid === uidMiembro)
+    if (!miembro) {
+      throw new ErrorEquipo('NO_ES_MIEMBRO', 'Ese jugador no esta en el plantel')
+    }
+
+    tx.update(equipoRef, { members: arrayRemove(miembro) })
+    tx.set(miembroRef, { perfilDeportivo: { teamIds: arrayRemove(equipoId) } }, { merge: true })
+  })
+}
+
 /** El capitan edita datos del jugador: dorsal, posicion, rol. */
 export const editarMiembro = async (
   equipoId: string,
@@ -295,6 +344,19 @@ export const obtenerEquiposDeUsuario = async (uid: string): Promise<Equipo[]> =>
 }
 
 /**
+ * Un equipo puntual, para el banner de invitacion `?unirse=<id>`.
+ *
+ * Devuelve `null` en vez de tirar: un link viejo no tiene por que romper la
+ * pantalla. Se lee SOLO cuando se abre una invitacion, asi que el costo es
+ * una lectura y solo en ese caso.
+ */
+export const obtenerEquipoPorId = async (equipoId: string): Promise<Equipo | null> => {
+  const snap = await getDoc(doc(db, COLECCIONES.equipos, equipoId))
+  if (!snap.exists()) return null
+  return { ...snap.data(), id: snap.id } as Equipo
+}
+
+/**
  * Busca jugadores por nombre o apellido. Reemplaza el array `mockUsuarios` que
  * tenia la pantalla de "Mi Equipo": la invitacion sale de datos reales.
  *
@@ -306,7 +368,7 @@ export const obtenerEquiposDeUsuario = async (uid: string): Promise<Equipo[]> =>
 export const buscarJugadores = async (
   termino: string,
   limite = 10,
-): Promise<MiembroEquipo[]> => {
+): Promise<Array<MiembroEquipo & { username: string }>> => {
   const prefijo = termino.trim()
   if (prefijo.length < 2) return []
 
@@ -315,7 +377,6 @@ export const buscarJugadores = async (
       collection(db, COLECCIONES.usuarios),
       where('nombre', '>=', prefijo),
       where('nombre', '<=', `${prefijo}\uf8ff`),
-      where('estado', '==', 'activo'),
       limit(limite * 3),
     ),
   )
@@ -332,9 +393,13 @@ export const buscarJugadores = async (
     .slice(0, limite)
     .map((d) => {
       const data = d.data()
+      const nombre = `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim() || 'Jugador'
       return {
         uid: d.id,
-        name: `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim() || 'Jugador',
+        name: nombre,
+        // El `@` de la app es el prefijo del email: sale del MISMO documento,
+        // no de una consulta extra.
+        username: `${data.email ?? ''}`.split('@')[0] || d.id,
         role: 'PLAYER' as RolEquipo,
         avatarUrl: data.fotoUrl ?? null,
       }
@@ -382,16 +447,22 @@ export const listarEquiposCercanos = async (
   punto: Punto,
   radioKm: number = appEnv().radarRadioKm,
 ): Promise<Array<Equipo & { distanciaKm: number }>> => {
-  const prefijos = prefijosQueCubren(punto, radioKm, 5)
-  if (prefijos.length === 0) return []
+  const esRadioGrande = radioKm > 50
+  const prefijos = esRadioGrande ? [] : prefijosQueCubren(punto, radioKm, 5)
+  if (!esRadioGrande && prefijos.length === 0) return []
 
-  const snap = await getDocs(
-    query(
-      collection(db, COLECCIONES.equipos),
-      where('geo.prefijos', 'array-contains-any', prefijos),
-      limit(30),
-    ),
-  )
+  const q = esRadioGrande
+    ? query(
+        collection(db, COLECCIONES.equipos),
+        limit(50)
+      )
+    : query(
+        collection(db, COLECCIONES.equipos),
+        where('geo.prefijos', 'array-contains-any', prefijos),
+        limit(30)
+      )
+
+  const snap = await getDocs(q)
 
   return snap.docs
     .map((d) => ({ ...(d.data() as Equipo), id: d.id }))
@@ -399,4 +470,28 @@ export const listarEquiposCercanos = async (
     .map((e) => ({ ...e, distanciaKm: haversineKm(punto, e.geo as GeoIndex) }))
     .filter((e) => e.distanciaKm <= radioKm)
     .sort((a, b) => a.distanciaKm - b.distanciaKm)
+}
+
+/**
+ * Actualiza los datos basicos de un equipo.
+ * Solo puede ser ejecutado por el capitan.
+ */
+export const actualizarEquipo = async (
+  equipoId: string,
+  uid: string,
+  cambios: { nombre?: string; modalidadBase?: string; genero?: 'Masculino' | 'Femenino' | 'Mixto'; shieldUrl?: string | null }
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, equipoId)
+  const snap = await getDoc(eqRef)
+  if (!snap.exists()) throw new Error('Equipo no encontrado')
+  
+  const eqData = snap.data()
+  if (eqData.captainId !== uid) throw new Error('Solo el capitan puede editar el equipo')
+  
+  await updateDoc(eqRef, {
+    ...(cambios.nombre ? { name: cambios.nombre } : {}),
+    ...(cambios.modalidadBase ? { modalidadBase: cambios.modalidadBase } : {}),
+    ...(cambios.genero ? { genero: cambios.genero } : {}),
+    ...(cambios.shieldUrl !== undefined ? { shieldUrl: cambios.shieldUrl } : {})
+  })
 }

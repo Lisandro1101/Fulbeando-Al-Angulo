@@ -84,7 +84,7 @@ async function main() {
   for (const d of equipos.docs) {
     const e = d.data()
     const capitan = e.members?.find((m: any) => m.uid === e.captainId)
-    check(`  ${e.name}`, e.members?.length > 0 && capitan?.role === 'CAPTAIN', `${e.members.length} miembros`)
+    check(`  ${e.name}`, e.members?.length > 0 && capitan?.role === 'CAPITAN', `${e.members.length} miembros`)
   }
 
   // Capa de equipos del area: misma query que listarEquiposCercanos
@@ -155,6 +155,19 @@ for (const d of equipos.docs) {
     'hay al menos una cuenta jugador',
     (porRol.get('jugador') ?? 0) > 0,
   )
+
+  // Los duenos del seed arrancan con el plan abonado: si quedaran en
+  // `pendiente`, `/venue-dashboard` los manda al cartel de contacto y el
+  // desarrollo se traba sin ningun error visible.
+  for (const d of roles.docs) {
+    const u = d.data()
+    if (u.rol !== 'dueno_predio') continue
+    check(
+      `${u.nombre} ${u.apellido}: plan de dueno activo`,
+      u.planDueno === 'activo',
+      `planDueno=${u.planDueno === undefined ? '(sin campo)' : u.planDueno}`,
+    )
+  }
 
   const prediosDb = await db.collection('predios').get()
   const uids = new Set(roles.docs.map((d) => d.id))

@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { UserPlus, X, Search, Phone, Clock, Target, User } from 'lucide-react';
 import { listarDesafiosCercanos } from '../radarService';
 import { listarPrediosPublicos } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
 import { listarEquiposCercanos } from '@/modules/teams/teamService';
-import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto } from '@/domain';
-import { appEnv } from '@/core/config';
 import { haversineKm, type Punto } from '@/core/geo/geohash';
+import { separarPisados } from '../separacion';
 import { useGeolocation } from '@/hooks/useGeolocation';
 
 const LOCALIDADES_FALLBACK = [
@@ -29,24 +28,23 @@ const iconoPredio = L.divIcon({
   iconAnchor: [14, 14]
 });
 
-// 🔷 Pin Celeste: Equipos del area. Es la capa que mira el dueno de cancha
-// para saber a quien le puede ofrecer sus canchas.
+// 🟣 Pin Violeta: Equipos del area
 const iconoEquipo = L.divIcon({
   className: 'marcador-equipo',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #0EA5E9; border: 3px solid #0F172A; box-shadow: 0 0 15px #0EA5E9; display: flex; align-items: center; justify-content: center; font-size: 14px;">🧢</div>`,
+  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #8B5CF6; border: 3px solid #0F172A; box-shadow: 0 0 15px #8B5CF6; display: flex; align-items: center; justify-content: center; font-size: 14px;">🧢</div>`,
   iconSize: [28, 28],
   iconAnchor: [14, 14]
 });
 
-// 🟠 Pin Ámbar/Naranja: Desafíos
+// 🔴 Pin Rojo Fuego: Desafíos
 const iconoDesafio = L.divIcon({
   className: 'marcador-desafio',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #F59E0B; border: 3px solid #0F172A; box-shadow: 0 0 15px #F59E0B; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛡️</div>`,
+  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #EF4444; border: 3px solid #0F172A; box-shadow: 0 0 15px #EF4444; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛡️</div>`,
   iconSize: [28, 28],
   iconAnchor: [14, 14]
 });
 
-// 🔵 Pin Celeste/Azul Neón: Jugador Libre
+// 🔵 Pin Azul: Jugador Libre
 const iconoJugadorLibre = L.divIcon({
   className: 'marcador-jugador',
   html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #3B82F6; border: 3px solid #0F172A; box-shadow: 0 0 15px #3B82F6; display: flex; align-items: center; justify-content: center; font-size: 14px;">🏃</div>`,
@@ -58,7 +56,17 @@ const iconoJugadorLibre = L.divIcon({
 // COMPONENTES AUXILIARES
 // ==========================================
 
-function MapEventsListener({ onMove }: { onMove: (lat: number, lng: number, radiusKm: number) => void }) {
+function MapEventsListener({
+  onMove,
+  listo,
+  centroEsperado,
+}: {
+  onMove: (lat: number, lng: number, radiusKm: number) => void;
+  /** La sesion ya resolvio: recien ahi vale la pena consultar. */
+  listo: boolean;
+  /** Centro al que el mapa tiende (llegada de la sesion o de la ubicacion). */
+  centroEsperado: { lat: number; lng: number };
+}) {
   const map = useMapEvents({
     moveend: () => {
       const center = map.getCenter();
@@ -67,6 +75,28 @@ function MapEventsListener({ onMove }: { onMove: (lat: number, lng: number, radi
       onMove(center.lat, center.lng, radiusKm);
     }
   });
+
+  // La carga inicial tambien pasa por aqui, con el MISMO criterio que al
+  // mover el mapa: radio del viewport (lo que se ve), no un radio fijo.
+  // Antes de `listo` no emitimos: el centro todavia puede ser el fallback
+  // CABA y saldria una consulta a una zona que el usuario no esta viendo.
+  // Lo mismo si el mapa esta camino a `centroEsperado` (flyTo en curso):
+  // quien cierra esa carga es el moveend del vuelo.
+  const emitido = useRef(false);
+  useEffect(() => {
+    if (!listo || emitido.current) return;
+    const center = map.getCenter();
+    if (
+      Math.abs(center.lat - centroEsperado.lat) > 1e-6 ||
+      Math.abs(center.lng - centroEsperado.lng) > 1e-6
+    ) {
+      return;
+    }
+    const bounds = map.getBounds();
+    emitido.current = true;
+    onMove(center.lat, center.lng, center.distanceTo(bounds.getNorthEast()) / 1000);
+  }, [listo, map, onMove, centroEsperado]);
+
   return null;
 }
 
@@ -74,7 +104,13 @@ function FlyToLocation({ lat, lng }: { lat: number | null, lng: number | null })
   const map = useMapEvents({});
   useEffect(() => {
     if (lat && lng) {
-      map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+      // Solo si el centro cambio de verdad (llego la sesion o la ubicacion):
+      // volar al mismo punto no aporta y dispara un moveend innecesario.
+      const actual = map.getCenter();
+      if (Math.abs(actual.lat - lat) < 1e-6 && Math.abs(actual.lng - lng) < 1e-6) return;
+      // Conserva el zoom actual: la vista es la que se esta viendo, y de ahi
+      // sale el radio de la proxima carga.
+      map.flyTo([lat, lng], map.getZoom(), { animate: true, duration: 1.5 });
     }
   }, [lat, lng, map]);
   return null;
@@ -150,11 +186,58 @@ const ETIQUETA_POSICION: Record<string, string> = {
   DT: 'DT',
 };
 
+/**
+ * Los markers los pinta este componente y no el cuerpo del mapa porque
+ * `separarPisados` necesita el zoom vigente: agrupar es una decision visual en
+ * pixeles y hay que recalcular cada vez que cambia la escala. Sin esto, una
+ * cancha, un equipo y un desafio en la misma coordenada quedarian apilados y
+ * solo se veria el color del ultimo.
+ */
+function MarcadoresRadar({
+  entidades,
+  onSeleccionar,
+}: {
+  entidades: RadarEntity[];
+  onSeleccionar: (e: RadarEntity) => void;
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+
+  useEffect(() => {
+    const alHacerZoom = () => setZoom(map.getZoom());
+    map.on('zoomend', alHacerZoom);
+    return () => {
+      map.off('zoomend', alHacerZoom);
+    };
+  }, [map]);
+
+  const posiciones = useMemo(() => separarPisados(entidades, zoom), [entidades, zoom]);
+
+  return (
+    <>
+      {entidades.map((entidad) => (
+        <Marker
+          key={entidad.id}
+          position={posiciones.get(entidad.id) ?? [entidad.lat, entidad.lng]}
+          icon={
+            entidad.type === 'cancha' ? iconoPredio :
+            entidad.type === 'equipo' ? iconoEquipo :
+            entidad.type === 'desafio' ? iconoDesafio :
+            iconoJugadorLibre
+          }
+          eventHandlers={{ click: () => onSeleccionar(entidad) }}
+        />
+      ))}
+    </>
+  );
+}
+
 // ==========================================
 // MAPA RADAR UNIFICADO
 // ==========================================
 export const MapaRadarUnificado: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Estado de Filtros
   const [filtroActivo, setFiltroActivo] = useState<FiltroRadar>('todos');
@@ -168,7 +251,7 @@ export const MapaRadarUnificado: React.FC = () => {
 
   const [toastMessage, setToastMessage] = useState('');
   
-  const { usuario } = useSesion();
+  const { usuario, cargando: cargandoSesion } = useSesion();
   const { location: geoLoc, requestLocation, setLocation } = useGeolocation(
     usuario?.geo ? { lat: usuario.geo.lat, lng: usuario.geo.lng } : undefined
   );
@@ -186,10 +269,10 @@ export const MapaRadarUnificado: React.FC = () => {
   // modulos.
   const cargarRadar = useCallback(async (punto: Punto, radioKm: number) => {
     const [predios, desafios, jugadores, equipos] = await Promise.all([
-      listarPrediosPublicos('').catch(() => []),
-      listarDesafiosCercanos(punto, radioKm).catch(() => []),
-      listarCandidatosRadar(punto, radioKm).catch(() => []),
-      listarEquiposCercanos(punto, radioKm).catch(() => []),
+      listarPrediosPublicos('').catch((e) => { console.error('Error predios:', e); return []; }),
+      listarDesafiosCercanos(punto, radioKm).catch((e) => { console.error('Error desafios:', e); return []; }),
+      listarCandidatosRadar(punto, radioKm).catch((e) => { console.error('Error candidatos:', e); return []; }),
+      listarEquiposCercanos(punto, radioKm).catch((e) => { console.error('Error equipos:', e); return []; }),
     ]);
 
     const canchasEntities: CanchaEntity[] = predios
@@ -235,8 +318,8 @@ export const MapaRadarUnificado: React.FC = () => {
         uid: u.uid,
         apodo: nombreCompleto(u) || 'Jugador',
         posicion: ETIQUETA_POSICION[u.perfilDeportivo!.playerRole ?? ''] ?? 'Cualquiera',
-        media: u.perfilDeportivo!.rating,
-        fairPlay: Math.round(u.perfilDeportivo!.stats.fairPlayIndex),
+        media: u.perfilDeportivo!.rating ?? 5.0,
+        fairPlay: Math.round(u.perfilDeportivo!.stats?.fairPlayIndex ?? 100),
       }));
 
     const equiposEntities: EquipoEntity[] = equipos.map(e => ({
@@ -253,35 +336,27 @@ export const MapaRadarUnificado: React.FC = () => {
     }));
 
     setEntidades([
-      ...canchasEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
-      ...equiposEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
-      ...desafiosEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
-      ...jugadoresEntities.sort((a, b) => a.distanciaKm - b.distanciaKm),
-    ]);
+      ...canchasEntities,
+      ...equiposEntities,
+      ...desafiosEntities,
+      ...jugadoresEntities,
+    ].sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 100));
   }, []);
 
-  // Carga inicial, centrada donde el usuario esta.
-  useEffect(() => {
-    let vigente = true;
-    (async () => {
-      try {
-        await cargarRadar({ lat: mapCenter.lat, lng: mapCenter.lng }, appEnv().radarRadioKm);
-      } catch (err) {
-        console.error('Error al cargar el radar:', err);
-      } finally {
-        if (vigente) setCargando(false);
-      }
-    })();
-    return () => { vigente = false; };
-  }, [cargarRadar]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // La carga inicial no vive en un efecto aparte: la dispara
+  // `MapEventsListener` cuando la sesion esta lista, con el radio del
+  // viewport. Asi toda consulta del radar pasa por `vista` y su debounce,
+  // y una sola decision gobierna el radio (lo que se esta viendo).
+  //
   // Al mover el mapa se recalcula el radio y se recarga. El debounce va aqui (y
   // no en el servicio) para que un solo timer gobierne las TRES fuentes: si
   // cada servicio trajera el suyo, un mismo gesto dispararia tres timers.
   const [vista, setVista] = useState<{ punto: Punto; radioKm: number } | null>(null);
 
   const handleMapMove = useCallback((lat: number, lng: number, radiusKm: number) => {
-    const radioKm = Math.min(Math.max(radiusKm, 1), 50);
+    // Se elimina el limite estricto de 50km para que los puntos sigan viendose
+    // al alejar el mapa. El limite ahora es por multitud (slice de 100 entidades maximo).
+    const radioKm = Math.min(Math.max(radiusKm, 1), 5000);
     setVista({ punto: { lat, lng }, radioKm });
   }, []);
 
@@ -348,22 +423,14 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             className="mapa-oscuro-filtro"
           />
-          <MapEventsListener onMove={handleMapMove} />
-          {geoLoc.latitude && geoLoc.longitude && <FlyToLocation lat={geoLoc.latitude} lng={geoLoc.longitude} />}
+          <MapEventsListener
+            onMove={handleMapMove}
+            listo={!cargandoSesion}
+            centroEsperado={mapCenter}
+          />
+          <FlyToLocation lat={mapCenter.lat} lng={mapCenter.lng} />
 
-          {entidadesVisibles.map(entidad => (
-            <Marker 
-              key={entidad.id}
-              position={[entidad.lat, entidad.lng]} 
-              icon={
-                entidad.type === 'cancha' ? iconoPredio :
-                entidad.type === 'equipo' ? iconoEquipo :
-                entidad.type === 'desafio' ? iconoDesafio :
-                iconoJugadorLibre
-              }
-              eventHandlers={{ click: () => setSeleccionado(entidad) }}
-            />
-          ))}
+          <MarcadoresRadar entidades={entidadesVisibles} onSeleccionar={setSeleccionado} />
         </MapContainer>
       </div>
 
@@ -439,13 +506,13 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             <Target className="w-6 h-6" />
           </button>
           
-          <button onClick={() => navigate('/partidos')} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
+          <button onClick={() => navigate('/partidos', { state: { backgroundLocation: location } })} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
             <Search className="w-6 h-6" />
           </button>
         </>
       )}
 
-      <MenuNavegacion />
+
 
       {/* BOTTOM SHEET UNIFICADA */}
       {seleccionado && (
@@ -471,7 +538,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                   <Phone className="w-4 h-4" /> WhatsApp
                 </button>
                 <button 
-                  onClick={() => navigate(`/reservar/${seleccionado.id}`)}
+                  onClick={() => navigate(`/reservar/${seleccionado.id}`, { state: { backgroundLocation: location } })}
                   className="bg-emerald-500 text-zinc-950 py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(16,185,129,0.3)] flex justify-center items-center gap-2 active:scale-95 transition"
                 >
                   <Clock className="w-4 h-4" /> Ver canchas y reservar

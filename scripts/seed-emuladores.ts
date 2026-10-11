@@ -23,7 +23,7 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
 // Importamos el MISMO codigo de geohash que usa la app, en vez de inventar
 // prefijos a mano. `geohash.ts` no tiene imports, asi que tsx lo resuelve bien
 // desde aca sin necesitar el alias `@/`.
-import { encodeGeohash, prefijosQueCubren } from '../app/src/core/geo/geohash'
+import { encodeGeohash, prefijosQueCubrenBD } from '../app/src/core/geo/geohash'
 
 // El projectId tiene que ser EXACTAMENTE el que usa el bundle de la app:
 // los emuladores guardan los datos en un namespace por proyecto y, si
@@ -35,12 +35,21 @@ const auth = admin.auth()
 const db = admin.firestore()
 const serverTimestamp = admin.firestore.FieldValue.serverTimestamp()
 
-/** Espejo de `core/geo/index.ts` → `aGeoIndex`. */
+/**
+ * Espejo de `core/geo/index.ts` → `aGeoIndex`.
+ *
+ * `prefijos` tiene que salir de `prefijosQueCubrenBD`, igual que en la app:
+ * la query del radar hace `array-contains-any`, que compara los prefijos ENTEROS,
+ * y `prefijosQueCubren` (sin BD) baja a precision 4 cuando el radio pide mas de
+ * `MAX_PREFIJOS` celdas. Guardar solo prefijos de 5 caracteres y preguntar por
+ * prefijos de 4 da cero resultados: el radar aparecia vacio con datos "verdes".
+ * `prefijosQueCubrenBD` guarda todos los ancestros, de 1 a 5 caracteres.
+ */
 const geo = (lat: number, lng: number, radioKm = 5) => ({
   lat: Number(lat.toFixed(4)),
   lng: Number(lng.toFixed(4)),
   prefijo: encodeGeohash(lat, lng, 5),
-  prefijos: prefijosQueCubren({ lat, lng }, radioKm, 5),
+  prefijos: prefijosQueCubrenBD({ lat, lng }, radioKm),
 })
 
 const texto = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -87,6 +96,8 @@ async function seedData() {
         stats: { goals: 210, matchesPlayed: 80, mvpCount: 31, fairPlayIndex: 9.8 },
         rating: 9.4,
         teamIds: ['team-scaloneta-f5'],
+        // Fuente de la edad de la ficha: se calcula en lectura, cero escrituras.
+        fechaNacimiento: '1987-06-24',
         disponible: false,
       },
       {
@@ -275,9 +286,14 @@ async function seedData() {
       nombre: u.nombre,
       apellido: u.apellido,
       email: u.email,
+      fechaNacimiento: u.fechaNacimiento ?? null,
       telefono: u.telefono,
       whatsappVerificado: false,
       rol: u.rol ?? 'jugador',
+      // MODO DESARROLLO: los duenos del seed arrancan con el plan abonado, asi
+      // el panel sigue operable sin pasar por el cartel de contacto. Una alta
+      // real (role-selector) nace en `pendiente`.
+      ...(esDueño ? { planDueno: 'activo' as const } : {}),
       perfilDeportivo: esDueño
         ? null
         : {
@@ -290,7 +306,9 @@ async function seedData() {
             rating: u.rating ?? 5,
             teamIds: u.teamIds ?? [],
           },
-      geo: u.punto ? geo(u.punto.lat, u.punto.lng, 2) : null,
+      // Mismo radio que `aGeoIndex` (RADAR_RADIO_KM = 5): un prefijo de 2 km
+      // y una query de 5 km se pisan, pero no cubren igual.
+      geo: u.punto ? geo(u.punto.lat, u.punto.lng) : null,
       zona: u.zona ?? null,
       fotoUrl: u.fotoUrl ?? null,
       estado: 'activo',
@@ -316,7 +334,7 @@ async function seedData() {
         stats: { wins: 45, draws: 10, losses: 5 },
         punto: LANUS,
         members: [
-          { uid: 'user-lio-10', name: 'Lionel Andrés', role: 'CAPTAIN' as const, dorsal: 10, position: 'FWD' as const },
+          { uid: 'user-lio-10', name: 'Lionel Andrés', role: 'CAPITAN' as const, dorsal: 10, position: 'FWD' as const },
           { uid: 'user-diego-10', name: 'Diego Armando', role: 'PLAYER' as const, dorsal: 5, position: 'MID' as const },
           { uid: 'user-dibu-1', name: 'Dibu Martinez', role: 'PLAYER' as const, dorsal: 1, position: 'GK' as const },
           { uid: 'user-fideo-11', name: 'Angel Di Maria', role: 'PLAYER' as const, dorsal: 7, position: 'DEF' as const },
@@ -332,7 +350,7 @@ async function seedData() {
         stats: { wins: 12, draws: 4, losses: 9 },
         punto: LOMAS,
         members: [
-          { uid: 'user-libre-1', name: 'Matías El Rústico', role: 'CAPTAIN' as const, dorsal: 2, position: 'DEF' as const },
+          { uid: 'user-libre-1', name: 'Matías El Rústico', role: 'CAPITAN' as const, dorsal: 2, position: 'DEF' as const },
           { uid: 'user-libre-2', name: 'Nicolás El Distinto', role: 'PLAYER' as const, dorsal: 8, position: 'MID' as const },
         ],
       },

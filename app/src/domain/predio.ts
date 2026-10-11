@@ -1,5 +1,6 @@
 import type { Auditoria, GeoIndex } from './comun'
 import type { TipoCancha } from './cancha'
+import type { Franja } from './turno'
 
 export type EstadoPredio = 'activo' | 'inactivo'
 
@@ -36,8 +37,11 @@ export interface Predio extends Auditoria {
   fotos: string[]
   cobro: DatosDeCobro
   duenoUid: string
-  /** Copia de solo lectura de las canchas activas (ver `sincronizarResumenCanchas`). */
   canchasResumen: CanchaResumen[]
+  /** Franjas horarias por defecto para el generador de turnos. */
+  franjasBase?: Franja[]
+  /** Dias de la semana por defecto para el generador de turnos (1=Lun, 7=Dom). */
+  diasBase?: number[]
   verificado: boolean
   estado: EstadoPredio
 }

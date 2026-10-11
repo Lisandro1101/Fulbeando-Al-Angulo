@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Clock } from 'lucide-react'
+import { CalendarDays } from 'lucide-react'
 import type { CanchaResumen, Predio, Turno } from '@/domain'
 import { bloqueoVencio } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'
@@ -78,118 +78,169 @@ export function SelectorFranja({
   alSeleccionar: (seleccion: Seleccion | null) => void
   cargando: boolean
 }) {
-  const [canchaActiva, setCanchaActiva] = useState(canchas[0]?.id ?? '')
-  const [fechaActiva, setFechaActiva] = useState(fechas[0] ?? aFechaISO())
-
-  // Las franjas ya pastidas desaparecen de la oferta; se refleja solo.
-  const franjas = useMemo(() => {
+  const [autoSeleccionado, setAutoSeleccionado] = useState(false)
+  const [fechaBusqueda, setFechaBusqueda] = useState(fechas[0] ?? aFechaISO())
+  const [horaBusqueda, setHoraBusqueda] = useState('18:00')
+  const [resultadoBusqueda, setResultadoBusqueda] = useState<Turno[] | null>(null)
+  
+  // Encontrar el turno más próximo disponible en general
+  const turnoSugerido = useMemo(() => {
     return turnos
-      .filter((t) => t.canchaId === canchaActiva && t.fecha === fechaActiva)
+      .filter(estaTomable)
+      .sort((a, b) => {
+        if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha)
+        return a.horaInicio.localeCompare(b.horaInicio)
+      })[0]
+  }, [turnos])
+
+  useEffect(() => {
+    if (cargando || turnos.length === 0 || autoSeleccionado) return
+    if (turnoSugerido && !seleccion) {
+      alSeleccionar({
+        canchaId: turnoSugerido.canchaId,
+        fecha: turnoSugerido.fecha,
+        horaInicio: turnoSugerido.horaInicio,
+        horaFin: turnoSugerido.horaFin,
+        precioTotal: turnoSugerido.precioTotal,
+      })
+      setAutoSeleccionado(true)
+    }
+  }, [cargando, turnos, autoSeleccionado, alSeleccionar, seleccion, turnoSugerido])
+
+  const buscarTurno = () => {
+    // Buscamos turnos disponibles en la fecha seleccionada
+    // Y que la horaInicio sea igual o cercana (ej: despues de esa hora)
+    const disponibles = turnos
+      .filter(t => estaTomable(t) && t.fecha === fechaBusqueda && t.horaInicio >= horaBusqueda)
       .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio))
-  }, [turnos, canchaActiva, fechaActiva])
+    
+    setResultadoBusqueda(disponibles.slice(0, 3)) // Mostrar hasta 3 opciones cercanas
+  }
 
   if (canchas.length === 0) {
-    return (
-      <p className="text-sm text-ink-muted">Este predio todavia no publico canchas.</p>
-    )
+    return <p className="text-sm text-ink-muted">Este predio todavia no publico canchas.</p>
   }
 
   return (
-    <div className="space-y-4">
-      {canchas.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {canchas.map((cancha) => (
-            <button
-              key={cancha.id}
-              type="button"
-              onClick={() => setCanchaActiva(cancha.id)}
-              className={`badge ${
-                canchaActiva === cancha.id
-                  ? 'bg-pitch-faint/60 text-pitch'
-                  : 'bg-ink-faint/20 text-ink-muted'
-              }`}
-            >
-              {cancha.nombre} · {cancha.tipo}
-              {cancha.techada ? ' · Techada' : ''}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {fechas.map((fecha) => (
-          <button
-            key={fecha}
-            type="button"
-            onClick={() => setFechaActiva(fecha)}
-            className={`flex min-w-[64px] shrink-0 flex-col items-center rounded-xl border px-3 py-2 text-sm transition-colors ${
-              fechaActiva === fecha
-                ? 'border-pitch bg-pitch-faint/30 text-pitch'
-                : 'border-ink-faint/25 text-ink-muted'
-            }`}
-          >
-            <span className="font-semibold">{esHoy(fecha) ? 'Hoy' : formatearFechaCorta(fecha)}</span>
-          </button>
-        ))}
-      </div>
-
+    <div className="space-y-6">
       {cargando ? (
-        <p className="text-sm text-ink-muted">Buscando horarios...</p>
-      ) : franjas.length === 0 ? (
-        <p className="text-sm text-ink-muted">
-          No hay turnos cargados para esta fecha. Proba con otro dia.
-        </p>
+        <p className="text-sm text-ink-muted animate-pulse">Buscando horarios...</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {franjas.map((turno) => {
-            const tomable = estaTomable(turno)
-            const elegido =
-              seleccion?.canchaId === turno.canchaId &&
-              seleccion.fecha === turno.fecha &&
-              seleccion.horaInicio === turno.horaInicio
-
-            return (
-              <li key={turno.id}>
+        <>
+          {/* SECCIÓN 1: SUGERENCIA */}
+          {turnoSugerido ? (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
+              <h3 className="text-emerald-500 font-black text-sm uppercase tracking-wider mb-2">
+                Sugerencia: Turno más próximo
+              </h3>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-white font-bold">{formatearFechaCorta(turnoSugerido.fecha)}</p>
+                  <p className="text-zinc-400 text-sm">
+                    {turnoSugerido.horaInicio} a {turnoSugerido.horaFin}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Cancha {canchas.find(c => c.id === turnoSugerido.canchaId)?.nombre}
+                  </p>
+                </div>
                 <button
-                  type="button"
-                  disabled={!tomable}
                   onClick={() =>
-                    alSeleccionar(
-                      elegido
-                        ? null
-                        : {
-                            canchaId: turno.canchaId,
-                            fecha: turno.fecha,
-                            horaInicio: turno.horaInicio,
-                            horaFin: turno.horaFin,
-                            precioTotal: turno.precioTotal,
-                          },
-                    )
+                    alSeleccionar({
+                      canchaId: turnoSugerido.canchaId,
+                      fecha: turnoSugerido.fecha,
+                      horaInicio: turnoSugerido.horaInicio,
+                      horaFin: turnoSugerido.horaFin,
+                      precioTotal: turnoSugerido.precioTotal,
+                    })
                   }
-                  className={`w-full rounded-xl border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed ${
-                    elegido
-                      ? 'border-pitch bg-pitch-faint/30'
-                      : tomable
-                        ? 'border-ink-faint/25 hover:border-pitch'
-                        : 'border-transparent bg-ink-faint/10'
+                  className={`px-4 py-2 rounded-xl font-bold transition-all ${
+                    seleccion?.horaInicio === turnoSugerido.horaInicio && seleccion?.fecha === turnoSugerido.fecha
+                      ? 'bg-emerald-500 text-zinc-950'
+                      : 'bg-zinc-800 text-white hover:bg-zinc-700'
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                    <Clock className="h-4 w-4 shrink-0" />
-                    {turno.horaInicio}
-                  </span>
-                  <span className="mt-1 block text-xs text-ink-muted">
-                    {tomable ? `hasta ${turno.horaFin}` : 'Ocupado'}
-                  </span>
+                  {seleccion?.horaInicio === turnoSugerido.horaInicio && seleccion?.fecha === turnoSugerido.fecha ? 'Seleccionado' : 'Elegir'}
                 </button>
-              </li>
-            )
-          })}
-        </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-center">
+              <p className="text-red-400 font-bold">No hay turnos disponibles para los próximos 7 días.</p>
+            </div>
+          )}
+
+          {/* SECCIÓN 2: BUSCADOR MANUAL */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <h3 className="text-white font-bold mb-4">Buscar otro turno</h3>
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1">
+                <label className="block text-xs text-zinc-500 mb-1">Fecha</label>
+                <select 
+                  value={fechaBusqueda}
+                  onChange={(e) => setFechaBusqueda(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-500"
+                >
+                  {fechas.map(f => (
+                    <option key={f} value={f}>{esHoy(f) ? 'Hoy' : formatearFechaCorta(f)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs text-zinc-500 mb-1">A partir de las</label>
+                <input 
+                  type="time" 
+                  value={horaBusqueda}
+                  onChange={(e) => setHoraBusqueda(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+            <button 
+              onClick={buscarTurno}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2 rounded-xl transition"
+            >
+              Buscar disponibilidad
+            </button>
+          </div>
+
+          {/* RESULTADOS BÚSQUEDA */}
+          {resultadoBusqueda !== null && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-bold text-zinc-400">Resultados:</h4>
+              {resultadoBusqueda.length > 0 ? (
+                resultadoBusqueda.map((t) => {
+                  const elegido = seleccion?.horaInicio === t.horaInicio && seleccion?.fecha === t.fecha && seleccion?.canchaId === t.canchaId;
+                  return (
+                    <div key={t.id} className={`flex justify-between items-center p-3 rounded-xl border ${elegido ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
+                      <div>
+                        <p className="text-white font-bold">{t.horaInicio} a {t.horaFin}</p>
+                        <p className="text-xs text-zinc-500">Cancha {canchas.find(c => c.id === t.canchaId)?.nombre}</p>
+                      </div>
+                      <button
+                        onClick={() => alSeleccionar({
+                          canchaId: t.canchaId,
+                          fecha: t.fecha,
+                          horaInicio: t.horaInicio,
+                          horaFin: t.horaFin,
+                          precioTotal: t.precioTotal,
+                        })}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${elegido ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-white'}`}
+                      >
+                        {elegido ? 'Seleccionado' : 'Elegir'}
+                      </button>
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-zinc-500 text-sm text-center py-2">No hay turnos disponibles desde esa hora.</p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {seleccion && (
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-muted">
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-muted border-t border-zinc-800 pt-4">
           <CalendarDays className="h-4 w-4" />
           {formatearFechaCorta(seleccion.fecha)} · {seleccion.horaInicio} a {seleccion.horaFin} ·{' '}
           seña {formatearMoneda(predio.cobro.montoSena)}
