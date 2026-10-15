@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "firebase": "^11.0.2",
+    "framer-motion": "^14.3.0",
     "geofire-common": "^6.0.0",
     "html-to-image": "^1.11.13",
     "leaflet": "^1.9.4",

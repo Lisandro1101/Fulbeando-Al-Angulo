@@ -448,6 +448,8 @@ export const AdminDashboard = () => {
             </ul>
           )}
         </section>
+
+        <ImportadorDatos />
       </main>
     </div>
   )

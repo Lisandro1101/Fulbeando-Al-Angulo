@@ -953,44 +953,64 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
       </div>
 
       {/* HEADER FLOTANTE / FILTROS RAPIDOS */}
-      <div className="absolute top-safe pt-3 md:pt-4 w-full flex justify-center z-10 pointer-events-none px-3">
-        <div className="bg-zinc-900/90 backdrop-blur-md p-1.5 rounded-full border border-zinc-800 flex items-center shadow-xl pointer-events-auto max-w-full overflow-x-auto hide-scrollbar gap-1">
+      <div className="absolute top-safe pt-2 md:pt-4 w-full flex justify-center z-10 pointer-events-none px-2 sm:px-4">
+        <div className="bg-gradient-to-r from-[#361982]/95 via-[#281165]/95 to-[#1c0a48]/95 backdrop-blur-xl p-1 sm:p-1.5 rounded-full border border-[#4c24b2]/50 shadow-2xl shadow-[#1c0a48]/50 flex items-center pointer-events-auto max-w-full overflow-x-auto hide-scrollbar gap-1 touch-pan-x">
           <button 
             onClick={() => setFiltroActivo('todos')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'todos' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer ${
+              filtroActivo === 'todos' 
+                ? 'bg-white/25 text-white border border-white/30 shadow-[0_0_12px_rgba(255,255,255,0.25)]' 
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
           >
             Todos
           </button>
           <button
             onClick={() => setFiltroActivo('canchas')}
-            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_12px_rgba(16,185,129,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
+              filtroActivo === 'canchas' 
+                ? 'bg-emerald-500 text-emerald-950 font-black shadow-[0_0_12px_rgba(16,185,129,0.5)]' 
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
           >
-            <IconoCancha className="w-3.5 h-3.5" />
-            <span>Canchas / Predios</span>
+            <IconoCancha className="w-3.5 h-3.5 shrink-0" />
+            <span>Canchas<span className="hidden sm:inline"> / Predios</span></span>
           </button>
           <button
             onClick={() => setFiltroActivo('equipos')}
-            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white shadow-[0_0_12px_rgba(14,165,233,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
+              filtroActivo === 'equipos' 
+                ? 'bg-sky-500 text-white font-black shadow-[0_0_12px_rgba(14,165,233,0.5)]' 
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
           >
-            <IconoEquipo className="w-3.5 h-3.5" />
+            <IconoEquipo className="w-3.5 h-3.5 shrink-0" />
             <span>Equipos</span>
           </button>
           <button
             onClick={() => setFiltroActivo('desafios')}
-            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950 shadow-[0_0_12px_rgba(245,158,11,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
+              filtroActivo === 'desafios' 
+                ? 'bg-amber-500 text-amber-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.5)]' 
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
           >
-            <IconoDesafio className="w-3.5 h-3.5" />
+            <IconoDesafio className="w-3.5 h-3.5 shrink-0" />
             <span>Desafíos</span>
           </button>
           <button 
             onClick={() => setFiltroActivo('jugadores')}
-            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
+              filtroActivo === 'jugadores' 
+                ? 'bg-blue-500 text-white font-black shadow-[0_0_12px_rgba(37,99,235,0.5)]' 
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
           >
-            <IconoJugador className="w-3.5 h-3.5" />
-            <span>Jugadores Libres</span>
+            <IconoJugador className="w-3.5 h-3.5 shrink-0" />
+            <span>Jugadores<span className="hidden sm:inline"> Libres</span></span>
           </button>
           {cargando && (
-            <span className="px-3 py-2 text-[11px] font-bold text-zinc-500 whitespace-nowrap animate-pulse">
+            <span className="px-2 py-1 sm:px-3 sm:py-2 text-[10px] sm:text-[11px] font-bold text-indigo-300 whitespace-nowrap animate-pulse">
               Buscando…
             </span>
           )}

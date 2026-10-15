@@ -16,7 +16,7 @@
   }
 
   body {
-    @apply bg-canvas text-ink;
+    @apply bg-[#0B0F19] text-white;
   }
 
   * {
@@ -25,37 +25,37 @@
 }
 
 @layer components {
-  /* Superficie estandar del PRD: "Slate Card" #1E293B */
+  /* Superficie estandar del PRD: Tarjeta limpia con degradé sutil y sombra refinada */
   .surface {
-    @apply rounded-card bg-canvas-raised p-4 shadow-lg shadow-black/20;
+    @apply rounded-2xl bg-gradient-to-b from-white via-white/95 to-slate-50/90 p-4 border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.03)] text-slate-800;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99];
   }
 
   .btn-primary {
-    @apply btn bg-pitch text-canvas hover:bg-pitch-muted focus-visible:outline-pitch;
+    @apply btn bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 shadow-md shadow-emerald-600/20;
   }
 
   .btn-urgent {
-    @apply btn bg-urgent text-canvas hover:bg-urgent-muted focus-visible:outline-urgent;
+    @apply btn bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-md shadow-amber-500/20;
   }
 
   .btn-danger {
-    @apply btn bg-occupied text-ink hover:bg-occupied-muted focus-visible:outline-occupied;
+    @apply btn bg-gradient-to-r from-rose-500 to-red-600 text-white hover:from-rose-600 hover:to-red-700 shadow-md shadow-rose-500/20;
   }
 
   .btn-ghost {
-    @apply btn border border-ink-faint/40 text-ink hover:bg-canvas-raised focus-visible:outline-ink-muted;
+    @apply btn bg-gradient-to-b from-white to-slate-100 hover:from-slate-50 hover:to-slate-200 text-slate-700 border border-slate-200/90 shadow-sm;
   }
 
   .field {
-    @apply w-full rounded-xl border border-ink-faint/30 bg-canvas px-3 py-3 text-base text-ink placeholder:text-ink-faint focus:border-pitch focus:outline-none;
+    @apply w-full rounded-xl border border-zinc-700 bg-zinc-900/90 px-3 py-3 text-base text-white placeholder:text-zinc-500 focus:border-pitch focus:outline-none;
   }
 
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold;
   }
 }
 
@@ -74,17 +74,17 @@
     display: none;
   }
 
-  /* Estados de la grilla del dueno de predio (semaforo del PRD) */
+  /* Estados de la grilla del dueno de predio (semaforo del PRD con degrades modernos) */
   .slot-libre {
-    @apply bg-pitch-faint/60 text-pitch;
+    @apply bg-gradient-to-br from-emerald-50 to-green-100 text-emerald-800 font-bold border border-emerald-300/80 shadow-sm;
   }
 
   .slot-pendiente {
-    @apply bg-urgent-faint/70 text-urgent;
+    @apply bg-gradient-to-br from-amber-50 to-amber-100 text-amber-800 font-bold border border-amber-300/80 shadow-sm;
   }
 
   .slot-ocupado {
-    @apply bg-occupied-faint/70 text-occupied;
+    @apply bg-gradient-to-br from-rose-50 to-rose-100 text-rose-800 font-bold border border-rose-300/80 shadow-sm;
   }
 }
 

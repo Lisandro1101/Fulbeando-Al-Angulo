@@ -10,46 +10,49 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Paleta base heredada (Fulbeando) adaptada al dark mode Al Ángulo
+        // Paleta base dark para la app con variantes
         canvas: {
-          DEFAULT: '#0B0F19', // Asfalto / Dark Canvas - fondo general de la PWA (pitch-900)
-          raised: '#141B2D', // Slate Card - tarjetas, modales (pitch-800)
-          sunken: '#05080E', // separadores y wells
+          DEFAULT: '#0B0F19', // Fondo base dark de la app
+          raised: '#111827',  // Card y panel oscuro
+          sunken: '#070B12',  // Fondo profundo
+          light: '#FFFFFF',
+          'light-raised': '#F8FAFC',
+          'light-sunken': '#F1F5F9',
         },
         pitch: {
-          900: '#0B0F19', // Fondo app (Ultra oscuro)
-          800: '#141B2D', // Tarjetas y paneles
-          700: '#1F2937', // Bordes y divisores
-          // Heredado Fulbeando
-          DEFAULT: '#22C55E', 
-          muted: '#16A34A',
-          faint: '#14532D',
+          900: '#F8FAFC',
+          800: '#F1F5F9',
+          700: '#E2E8F0',
+          // Acentos verdes para fútbol
+          DEFAULT: '#16A34A', 
+          muted: '#15803D',
+          faint: '#DCFCE7',
         },
         // Acentos "FUT" enérgicos de Al Ángulo
         neon: {
-          green: '#00FF66', // Éxito, confirmación, status 'open'
-          orange: '#FF5C00', // Alertas, CTAs principales
-          gold: '#FFD700', // MVP, Premium, Fichas estelares
+          green: '#16A34A', // Éxito, confirmación, status 'open'
+          orange: '#EA580C', // Alertas, CTAs principales
+          gold: '#CA8A04', // MVP, Premium, Fichas estelares
         },
         urgent: {
-          DEFAULT: '#F59E0B', 
+          DEFAULT: '#D97706', 
           muted: '#B45309',
-          faint: '#78350F',
+          faint: '#FEF3C7',
         },
         occupied: {
-          DEFAULT: '#EF4444', 
-          muted: '#DC2626',
-          faint: '#7F1D1D',
+          DEFAULT: '#DC2626', 
+          muted: '#B91C1C',
+          faint: '#FEE2E2',
         },
         ink: {
-          DEFAULT: '#F8FAFC', 
-          muted: '#94A3B8', 
-          faint: '#475569',
+          DEFAULT: '#0F172A', // Texto principal oscuro de alto contraste
+          muted: '#475569', // Texto secundario
+          faint: '#94A3B8', // Bordes sutiles y placeholders
         },
         freemium: {
-          banner: '#000000' // Fondo ads nativos
+          banner: '#F1F5F9'
         },
-        border: '#1F2937' // Bordes y divisores (pitch-700)
+        border: '#E2E8F0' // Bordes y divisores claros
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

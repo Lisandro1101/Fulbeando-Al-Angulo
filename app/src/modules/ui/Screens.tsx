@@ -101,7 +101,7 @@ export const Screen1Login = () => {
       <CargandoFulbeando visible={cargando} />
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <img src="/logo.svg" alt="Al Ángulo" className="w-full h-40 object-cover object-center mx-auto" />
+          <img src="/logo-anterior.svg" alt="Al Ángulo" className="w-full h-40 object-cover object-center mx-auto" />
           <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mt-2">La red futbolera</p>
         </div>
         

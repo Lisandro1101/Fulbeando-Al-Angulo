@@ -38,7 +38,7 @@ const str = (v) => (typeof v === 'string' ? v : '');
 const strOrNull = (v) => (typeof v === 'string' ? v : null);
 /** Convierte un documento crudo en pin del radar (o `null` si no es visible/esta fuera). */
 function aPin(tipo, id, raw, punto, radioKm) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     const geo = raw.geo;
     if (!geo || typeof geo.lat !== 'number' || typeof geo.lng !== 'number')
         return null;
@@ -52,21 +52,37 @@ function aPin(tipo, id, raw, punto, radioKm) {
                 return null;
             const canchas = Array.isArray(raw.canchasResumen) ? raw.canchasResumen : [];
             const primera = canchas[0];
-            return Object.assign(Object.assign({}, base), { t: 'cancha', nombre: str(raw.nombre), tipo: str(primera === null || primera === void 0 ? void 0 : primera.tipo) || 'Sintetico', cantidadCanchas: canchas.length });
+            return Object.assign(Object.assign({}, base), { t: 'cancha', nombre: str(raw.nombre), direccion: str(raw.direccion), barrio: str(raw.barrio), ciudad: str(raw.ciudad), telefono: str(raw.telefono), tipo: str(primera === null || primera === void 0 ? void 0 : primera.tipo) || 'Sintetico', cantidadCanchas: canchas.length });
         }
         case 'equipo': {
             const members = Array.isArray(raw.members) ? raw.members : [];
-            return Object.assign(Object.assign({}, base), { t: 'equipo', nombre: str(raw.name), modalidad: str(raw.modalidadBase), cantidadJugadores: members.length, escudoUrl: strOrNull(raw.shieldUrl) });
+            const rawFp = (_a = raw.reputation) === null || _a === void 0 ? void 0 : _a.fairPlayScore;
+            const fairPlayScore = typeof rawFp === 'number' ? Math.round(rawFp) : 100;
+            const rawStats = raw.stats;
+            const stats = rawStats ? {
+                wins: typeof rawStats.wins === 'number' ? rawStats.wins : 0,
+                draws: typeof rawStats.draws === 'number' ? rawStats.draws : 0,
+                losses: typeof rawStats.losses === 'number' ? rawStats.losses : 0,
+            } : undefined;
+            return Object.assign(Object.assign({}, base), { t: 'equipo', nombre: str(raw.name), modalidad: str(raw.modalidadBase), cantidadJugadores: members.length, escudoUrl: strOrNull(raw.shieldUrl), fairPlayScore,
+                stats });
         }
         case 'desafio': {
-            return Object.assign(Object.assign({}, base), { t: 'desafio', creatorId: str(raw.creatorId), equipoId: strOrNull(raw.equipoId), equipo: str(raw.equipoNombre), modalidad: str(raw.modalidad), fechaUnix: num(raw.fechaUnix), conCancha: raw.turnoId != null, descripcion: strOrNull(raw.descripcion) });
+            const rawFaltantes = num(raw.jugadoresFaltantes, 0);
+            const posicionBuscada = strOrNull(raw.posicionBuscada);
+            const esBusqueda = raw.tipoDesafio === 'busqueda_jugador' || rawFaltantes > 0 || posicionBuscada !== null || ((_c = (_b = strOrNull(raw.descripcion)) === null || _b === void 0 ? void 0 : _b.startsWith('¡No completamos!')) !== null && _c !== void 0 ? _c : false);
+            return Object.assign(Object.assign({}, base), { t: 'desafio', creatorId: str(raw.creatorId), equipoId: strOrNull(raw.equipoId), equipo: str(raw.equipoNombre), modalidad: str(raw.modalidad), fechaUnix: num(raw.fechaUnix), conCancha: raw.turnoId != null, descripcion: strOrNull(raw.descripcion), tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo', posicionBuscada, jugadoresFaltantes: rawFaltantes > 0 ? rawFaltantes : (esBusqueda ? 1 : undefined) });
         }
         case 'jugador': {
             if (raw.rol !== 'jugador' || raw.deletedAt)
                 return null;
-            const perfil = ((_a = raw.perfilDeportivo) !== null && _a !== void 0 ? _a : {});
-            const stats = ((_b = perfil.stats) !== null && _b !== void 0 ? _b : {});
-            return Object.assign(Object.assign({}, base), { t: 'jugador', uid: id, nombre: str(raw.nombre), apellido: str(raw.apellido), playerRole: strOrNull(perfil.playerRole), media: num(perfil.rating, 5), fairPlay: Math.round(num(stats.fairPlayIndex, 100)) });
+            const perfil = ((_d = raw.perfilDeportivo) !== null && _d !== void 0 ? _d : {});
+            const stats = ((_e = perfil.stats) !== null && _e !== void 0 ? _e : {});
+            const rawRating = num(perfil.rating, 5);
+            const mediaFifa = rawRating <= 10 && rawRating > 0 ? Math.round(rawRating * 10) : Math.round(rawRating);
+            const rawFp = num(stats.fairPlayIndex, 100);
+            const fairPlay = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
+            return Object.assign(Object.assign({}, base), { t: 'jugador', uid: id, nombre: str(raw.nombre), apellido: str(raw.apellido), playerRole: strOrNull(perfil.playerRole), media: mediaFifa, fairPlay: Math.round(fairPlay) });
         }
     }
 }

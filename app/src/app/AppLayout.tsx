@@ -38,22 +38,26 @@ export const AppLayout = () => {
   const esModal = Boolean(state?.backgroundLocation);
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-canvas text-white font-sans">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-[#0B0F19] text-white font-sans">
       {/* Alerta Push de Invitaciones en tiempo real para el jugador */}
       <AlertaInvitacionPush />
 
       {/* Sidebar (Desktop) / Bottom Nav (Mobile) */}
       <MenuNavegacion />
 
-      {/* Cabecera mobile: el logo (en desktop lo muestra el sidebar). */}
-      <header className="md:hidden fixed inset-x-0 top-0 z-[90] border-b border-zinc-800 bg-canvas/90 backdrop-blur-md">
-        <div className="flex h-14 items-center px-2">
-          <img src="/logo.svg" alt="Al Ángulo" className="h-14 w-48 object-cover object-center" />
+      {/* Cabecera mobile: solo el logo SVG oficial con tamaño y proporción correcta */}
+      <header className="md:hidden fixed inset-x-0 top-0 z-[90] border-b border-[#4c24b2]/40 bg-gradient-to-r from-[#361982] via-[#281165] to-[#361982] backdrop-blur-md shadow-md">
+        <div className="flex h-16 items-center px-4">
+          <img 
+            src="/logo-anterior.svg" 
+            alt="Al Ángulo" 
+            className="h-12 w-auto max-w-[220px] object-contain object-left drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]" 
+          />
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 h-full relative overflow-hidden pt-14 md:pt-0 md:pl-64">
+      <main className="flex-1 h-full relative overflow-hidden pt-16 md:pt-0 md:pl-64">
         {/* We use React Router's trick to render the background if state.backgroundLocation exists */}
         {esModal ? (
           <Routes location={state.backgroundLocation}>

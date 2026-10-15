@@ -79,6 +79,9 @@
     "functions": {
       "port": 5001
     },
+    "hosting": {
+      "port": 5137
+    },
     "ui": {
       "enabled": true,
       "port": 4000

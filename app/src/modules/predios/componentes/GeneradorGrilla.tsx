@@ -189,20 +189,20 @@ export function GeneradorGrilla({
   return (
     <div className="space-y-5">
       {/* SECCIÓN 1: HORARIOS DE APERTURA DEL COMPLEJO */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 space-y-4">
+      <div className="rounded-2xl border border-ink-faint/25 bg-canvas-raised p-4 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-emerald-400" /> Horario de Apertura del Predio
+            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+              <Clock className="w-4 h-4 text-pitch" /> Horario de Apertura del Predio
             </h3>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-ink-muted mt-0.5">
               Definí el horario de corrido o cortado en partes (ej: mañana y tarde).
             </p>
           </div>
           <button
             type="button"
             onClick={agregarFranjaApertura}
-            className="text-xs bg-zinc-800 hover:bg-zinc-700 text-emerald-400 font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1"
+            className="text-xs bg-canvas hover:bg-canvas-raised text-pitch border border-pitch/30 font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1 shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" /> Agregar otra parte
           </button>
@@ -210,8 +210,8 @@ export function GeneradorGrilla({
 
         <div className="space-y-3">
           {aperturas.map((ap, idx) => (
-            <div key={idx} className="flex items-center gap-3 bg-canvas/60 p-3 rounded-xl border border-zinc-800/80">
-              <span className="text-xs font-bold text-zinc-400 shrink-0">
+            <div key={idx} className="flex items-center gap-3 bg-canvas p-3 rounded-xl border border-ink-faint/20 shadow-sm">
+              <span className="text-xs font-bold text-ink-muted shrink-0">
                 {aperturas.length > 1 ? `Parte ${idx + 1}:` : 'Horario:'}
               </span>
               <div className="flex items-center gap-2 flex-1">
@@ -220,22 +220,22 @@ export function GeneradorGrilla({
                   type="time"
                   value={ap.desde}
                   onChange={(e) => cambiarApertura(idx, 'desde', e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white font-bold outline-none focus:border-emerald-500 w-28 text-center"
+                  className="bg-canvas-raised border border-ink-faint/30 rounded-lg px-2.5 py-1.5 text-sm text-ink font-bold outline-none focus:border-pitch w-28 text-center"
                 />
-                <span className="text-zinc-500 text-xs font-bold">hasta</span>
+                <span className="text-ink-muted text-xs font-bold">hasta</span>
                 <input
                   aria-label="Hora de apertura (hasta)"
                   type="time"
                   value={ap.hasta}
                   onChange={(e) => cambiarApertura(idx, 'hasta', e.target.value)}
-                  className="bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-white font-bold outline-none focus:border-emerald-500 w-28 text-center"
+                  className="bg-canvas-raised border border-ink-faint/30 rounded-lg px-2.5 py-1.5 text-sm text-ink font-bold outline-none focus:border-pitch w-28 text-center"
                 />
               </div>
               {aperturas.length > 1 && (
                 <button
                   type="button"
                   onClick={() => quitarFranjaApertura(idx)}
-                  className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg transition"
+                  className="text-ink-muted hover:text-occupied p-1.5 rounded-lg transition"
                   title="Eliminar franja"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -246,8 +246,8 @@ export function GeneradorGrilla({
         </div>
 
         {/* SELECTOR DE DURACIÓN DE PARTIDO */}
-        <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
-          <label className="text-xs font-bold text-zinc-300">
+        <div className="pt-2 border-t border-ink-faint/20 flex items-center justify-between">
+          <label className="text-xs font-bold text-ink">
             Duración de cada partido / turno:
           </label>
           <div className="flex gap-2">
@@ -256,10 +256,10 @@ export function GeneradorGrilla({
                 key={min}
                 type="button"
                 onClick={() => setDuracionTurno(min)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
                   duracionTurno === min
-                    ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    ? 'bg-pitch text-white border-pitch shadow-sm'
+                    : 'bg-canvas border-ink-faint/30 text-ink-muted hover:text-ink'
                 }`}
               >
                 {min} min
@@ -270,25 +270,25 @@ export function GeneradorGrilla({
       </div>
 
       {/* VISTA PREVIA DE TURNOS QUE SE VAN A GENERAR */}
-      <div className="rounded-2xl border border-zinc-800 bg-canvas p-4 space-y-3">
+      <div className="rounded-2xl border border-ink-faint/25 bg-canvas-raised p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+            <Sparkles className="w-4 h-4 text-pitch" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink">
               Turnos calculados automáticamente ({franjas.length} por cancha)
             </h4>
           </div>
           <button
             type="button"
             onClick={() => setModoAvanzado(!modoAvanzado)}
-            className="text-[11px] text-zinc-400 hover:text-emerald-400 underline font-semibold"
+            className="text-[11px] text-ink-muted hover:text-pitch underline font-semibold"
           >
             {modoAvanzado ? 'Volver a modo apertura' : 'Ajustar turnos a mano'}
           </button>
         </div>
 
         {franjas.length === 0 ? (
-          <p className="text-xs text-amber-500 font-semibold p-2">
+          <p className="text-xs text-urgent font-semibold p-2">
             ⚠️ No hay turnos generados. Verificá que la hora de cierre sea posterior a la apertura.
           </p>
         ) : (
@@ -296,9 +296,9 @@ export function GeneradorGrilla({
             {franjas.map((f, i) => (
               <span
                 key={i}
-                className="bg-zinc-900 border border-zinc-800 text-zinc-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="bg-canvas border border-ink-faint/30 text-ink px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
-                <span className="text-emerald-500 font-mono">#{i + 1}</span>
+                <span className="text-pitch font-mono">#{i + 1}</span>
                 {f.horaInicio} - {f.horaFin}
               </span>
             ))}
@@ -307,11 +307,11 @@ export function GeneradorGrilla({
       </div>
 
       {/* SECCIÓN 2: OPCIONES DE REPETICIÓN (FECHAS Y DÍAS) */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-4">
-        <h3 className="text-sm font-bold text-white">Días y Rango de Fechas</h3>
+      <div className="rounded-2xl border border-ink-faint/25 bg-canvas-raised p-4 space-y-4 shadow-sm">
+        <h3 className="text-sm font-bold text-ink">Días y Rango de Fechas</h3>
 
         <div>
-          <label className="mb-1 block text-xs font-bold text-zinc-400 uppercase" htmlFor="gen-hasta">
+          <label className="mb-1 block text-xs font-bold text-ink-muted uppercase" htmlFor="gen-hasta">
             Generar desde el {fecha.split('-').reverse().join('/')} hasta el:
           </label>
           <input
@@ -320,12 +320,12 @@ export function GeneradorGrilla({
             value={hasta}
             min={fecha}
             onChange={(e) => setHasta(e.target.value)}
-            className="w-full bg-canvas border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-emerald-500 [color-scheme:dark]"
+            className="w-full bg-canvas border border-ink-faint/30 rounded-xl px-4 py-2.5 text-sm text-ink font-bold outline-none focus:border-pitch"
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-xs font-bold text-zinc-400 uppercase">
+          <label className="mb-2 block text-xs font-bold text-ink-muted uppercase">
             Días de la semana a generar
           </label>
           <div className="flex flex-wrap gap-2">
@@ -342,8 +342,8 @@ export function GeneradorGrilla({
                 key={val}
                 className={`flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
                   dias.includes(val)
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
-                    : 'border-zinc-800 bg-canvas text-zinc-500 hover:text-zinc-300'
+                    ? 'border-pitch bg-pitch-faint text-pitch'
+                    : 'border-ink-faint/30 bg-canvas text-ink-muted hover:text-ink'
                 }`}
               >
                 <input
@@ -364,16 +364,16 @@ export function GeneradorGrilla({
 
       {/* RESUMEN Y ACCIÓN */}
       <div className="space-y-3 pt-2">
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-ink-muted">
           {cargandoCanchas ? (
             'Cargando canchas...'
           ) : canchas.length === 0 ? (
             '⚠️ Este predio no tiene canchas activas. Creá al menos una cancha para generar la grilla.'
           ) : (
             <>
-              Total estimado: <span className="font-bold text-white">{canchas.length} cancha{canchas.length === 1 ? '' : 's'}</span> ×{' '}
-              <span className="font-bold text-white">{franjas.length} turnos diarios</span> ={' '}
-              <span className="font-bold text-emerald-400">{total} turnos por día seleccionado</span>.
+              Total estimado: <span className="font-bold text-ink">{canchas.length} cancha{canchas.length === 1 ? '' : 's'}</span> ×{' '}
+              <span className="font-bold text-ink">{franjas.length} turnos diarios</span> ={' '}
+              <span className="font-bold text-pitch">{total} turnos por día seleccionado</span>.
             </>
           )}
         </p>

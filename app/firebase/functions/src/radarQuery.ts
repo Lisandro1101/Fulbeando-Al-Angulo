@@ -53,6 +53,10 @@ interface PinBase {
 interface PinCancha extends PinBase {
   t: 'cancha'
   nombre: string
+  direccion?: string
+  barrio?: string
+  ciudad?: string
+  telefono?: string
   tipo: string
   cantidadCanchas: number
 }
@@ -74,6 +78,9 @@ interface PinDesafio extends PinBase {
   fechaUnix: number
   conCancha: boolean
   descripcion: string | null
+  tipoDesafio?: 'busqueda_jugador' | 'partido_equipo'
+  posicionBuscada?: string | null
+  jugadoresFaltantes?: number
 }
 interface PinJugador extends PinBase {
   t: 'jugador'

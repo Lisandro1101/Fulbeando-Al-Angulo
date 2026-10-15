@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { Plus } from 'lucide-react'
+import { motion } from 'framer-motion'
 import type { CanchaResumen, SemaforoTurno, Turno } from '@/domain'
 import { semaforo } from '@/domain'
 
@@ -11,6 +13,11 @@ const CLASE_SEMAFORO: Record<SemaforoTurno, string> = {
 export interface CeldaSeleccionada {
   turno: Turno
   semaforo: SemaforoTurno
+}
+
+export interface SlotVacioSeleccionado {
+  cancha: CanchaResumen
+  hora: string
 }
 
 const etiquetaEstado: Record<SemaforoTurno, string> = {
@@ -27,19 +34,23 @@ export function GrillaSemaforo({
   canchas,
   turnos,
   alSeleccionar,
+  alSeleccionarVacio,
+  franjasBase = [],
   seleccionadoId,
 }: {
   canchas: CanchaResumen[]
   turnos: Turno[]
   alSeleccionar: (celda: CeldaSeleccionada | null) => void
+  alSeleccionarVacio?: (slot: SlotVacioSeleccionado) => void
+  franjasBase?: string[]
   seleccionadoId: string | null
 }) {
   const ahoraMs = Date.now()
 
-  const franjas = useMemo(
-    () => [...new Set(turnos.map((t) => t.horaInicio))].sort(),
-    [turnos],
-  )
+  const franjas = useMemo(() => {
+    const horasTurnos = turnos.map((t) => t.horaInicio)
+    return [...new Set([...horasTurnos, ...franjasBase])].sort()
+  }, [turnos, franjasBase])
 
   const turnoDe = (canchaId: string, horaInicio: string): Turno | undefined =>
     turnos.find((t) => t.canchaId === canchaId && t.horaInicio === horaInicio)
@@ -62,7 +73,7 @@ export function GrillaSemaforo({
         <tbody>
           {canchas.map((cancha) => (
             <tr key={cancha.id}>
-              <th className="sticky left-0 z-10 max-w-28 truncate bg-canvas-raised pr-2 text-left text-xs font-medium text-ink">
+              <th className="sticky left-0 z-10 max-w-28 truncate bg-white/95 backdrop-blur-sm pr-2 text-left text-xs font-bold text-slate-800">
                 {cancha.nombre}
               </th>
               {franjas.map((hora) => {
@@ -70,7 +81,21 @@ export function GrillaSemaforo({
                 if (!turno) {
                   return (
                     <td key={hora}>
-                      <span className="block h-11 rounded-lg border border-dashed border-ink-faint/20" />
+                      {alSeleccionarVacio ? (
+                        <motion.button
+                          type="button"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          title={`Habilitar turno ${hora} en ${cancha.nombre}`}
+                          aria-label={`Habilitar turno ${hora} en ${cancha.nombre}`}
+                          onClick={() => alSeleccionarVacio({ cancha, hora })}
+                          className="group flex h-11 w-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/60 hover:border-emerald-500 hover:bg-emerald-50/30 transition-colors cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5 text-slate-400 group-hover:text-emerald-600 group-hover:scale-110 transition-all" />
+                        </motion.button>
+                      ) : (
+                        <span className="block h-11 rounded-lg border border-dashed border-slate-200" />
+                      )}
                     </td>
                   )
                 }
@@ -80,8 +105,10 @@ export function GrillaSemaforo({
 
                 return (
                   <td key={hora}>
-                    <button
+                    <motion.button
                       type="button"
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
                       title={`${turno.horaInicio} - ${turno.horaFin}: ${etiquetaEstado[estado]}`}
                       aria-label={`${cancha.nombre} ${turno.horaInicio}: ${etiquetaEstado[estado]}`}
                       onClick={() =>
@@ -89,12 +116,12 @@ export function GrillaSemaforo({
                           seleccionado ? null : { turno, semaforo: estado },
                         )
                       }
-                      className={`h-11 w-full rounded-lg border text-[11px] font-semibold transition-transform ${
+                      className={`h-11 w-full rounded-lg border text-[11px] font-bold transition-all shadow-sm cursor-pointer ${
                         CLASE_SEMAFORO[estado]
-                      } ${seleccionado ? 'scale-[1.04] ring-2 ring-ink' : ''}`}
+                      } ${seleccionado ? 'scale-[1.04] ring-2 ring-emerald-500 shadow-md' : ''}`}
                     >
                       {estado === 'pendiente' ? 'Revisar' : turno.horaInicio}
-                    </button>
+                    </motion.button>
                   </td>
                 )
               })}
@@ -103,16 +130,16 @@ export function GrillaSemaforo({
         </tbody>
       </table>
 
-      <ul className="mt-3 flex flex-wrap gap-3 text-xs text-ink-muted">
+      <ul className="mt-3.5 flex flex-wrap gap-4 text-xs font-semibold text-slate-600">
         <li className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-pitch-faint ring-1 ring-pitch/40" /> Libre
+          <span className="h-3.5 w-3.5 rounded bg-gradient-to-br from-emerald-100 to-green-200 border border-emerald-400/80 shadow-sm" /> Libre
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-urgent-faint ring-1 ring-urgent/50" /> Comprobante
+          <span className="h-3.5 w-3.5 rounded bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-400/80 shadow-sm" /> Comprobante
           pendiente
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-occupied-faint ring-1 ring-occupied/40" /> Reservado
+          <span className="h-3.5 w-3.5 rounded bg-gradient-to-br from-rose-100 to-rose-200 border border-rose-400/80 shadow-sm" /> Reservado
         </li>
       </ul>
     </div>

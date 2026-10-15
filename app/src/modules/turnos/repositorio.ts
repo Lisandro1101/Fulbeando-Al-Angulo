@@ -536,3 +536,66 @@ export const contarTurnosPorEstado = async (estado: EstadoTurno): Promise<number
   const snap = await getDocs(query(col(), where('estado', '==', estado)))
   return snap.size
 }
+
+/**
+ * Habilitar turno individual desde la grilla del dueño (alta puntual de un horario).
+ */
+export const habilitarTurnoIndividual = async (
+  predio: Pick<Predio, 'id' | 'geo' | 'cobro'>,
+  cancha: { id: string; precioHora: number },
+  fecha: string,
+  horaInicio: string,
+  horaFin?: string,
+): Promise<Turno> => {
+  const [hStr, mStr] = horaInicio.split(':')
+  const totalMin = (parseInt(hStr ?? '0', 10) * 60 + parseInt(mStr ?? '0', 10) + 60) % 1440
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  const fin = horaFin ?? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+
+  const geo = aGeoIndex({ lat: predio.geo.lat, lng: predio.geo.lng })
+  const id = turnoId({
+    predioId: predio.id,
+    canchaId: cancha.id,
+    fecha,
+    horaInicio,
+  })
+
+  const turnoData: Turno = {
+    id,
+    predioId: predio.id,
+    canchaId: cancha.id,
+    fecha,
+    horaInicio,
+    horaFin: fin,
+    estado: 'disponible',
+    origen: 'carga_manual_dueno',
+    precioTotal: cancha.precioHora,
+    montoSena: calcularMontoSena(predio.cobro, cancha.precioHora),
+    organizadorUid: null,
+    organizadorNombre: null,
+    organizadorTelefono: null,
+    comprobantePendiente: false,
+    motivoRechazo: null,
+    bloqueadoHasta: null,
+    expiracionNotificada: false,
+    canceladoPor: null,
+    geo,
+    partidoId: null,
+    deletedAt: null,
+    ...auditoriaInicial(),
+  }
+
+  await setDoc(ref(id), turnoData)
+  return turnoData
+}
+
+/**
+ * Desactiva un turno de la grilla (baja lógica).
+ */
+export const desactivarTurno = async (turnoDocId: string): Promise<void> => {
+  await updateDoc(ref(turnoDocId), {
+    deletedAt: ts(new Date()),
+    ...auditoriaUpdate(),
+  })
+}

@@ -31,9 +31,8 @@ interface ResumenImportacion {
   errores: string[]
 }
 
-async function parsearArchivo(archivo: File): Promise<Hojas> {
+async function parsearBuffer(buffer: ArrayBuffer): Promise<Hojas> {
   const XLSX = await import('xlsx')
-  const buffer = await archivo.arrayBuffer()
   const wb = XLSX.read(buffer, { type: 'array' })
   const hojas: Hojas = {}
   for (const nombre of wb.SheetNames) {
@@ -44,6 +43,10 @@ async function parsearArchivo(archivo: File): Promise<Hojas> {
   return hojas
 }
 
+async function parsearArchivo(archivo: File): Promise<Hojas> {
+  return parsearBuffer(await archivo.arrayBuffer())
+}
+
 export const ImportadorDatos = () => {
   const inputRef = useRef<HTMLInputElement>(null)
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null)
@@ -51,6 +54,27 @@ export const ImportadorDatos = () => {
   const [resumen, setResumen] = useState<ResumenImportacion | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const cargarPredeterminado = async () => {
+    setOcupado(true)
+    setError(null)
+    setResumen(null)
+    try {
+      const resp = await fetch('/datos-prueba.xlsx')
+      if (!resp.ok) throw new Error('No se pudo descargar el archivo de datos de prueba predeterminado.')
+      const buf = await resp.arrayBuffer()
+      const parseadas = await parsearBuffer(buf)
+      setHojas(parseadas)
+      setNombreArchivo('datos-prueba.xlsx (incluido)')
+    } catch (err) {
+      console.error('No pude cargar el Excel predeterminado:', err)
+      setError(err instanceof Error ? err.message : 'No pude cargar el archivo predeterminado.')
+      setHojas(null)
+      setNombreArchivo(null)
+    } finally {
+      setOcupado(false)
+    }
+  }
 
   const elegir = async (evento: React.ChangeEvent<HTMLInputElement>) => {
     const archivo = evento.target.files?.[0]
@@ -124,16 +148,34 @@ export const ImportadorDatos = () => {
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
+          onClick={() => void cargarPredeterminado()}
+          disabled={ocupado}
+          className="border border-neon-green/40 bg-neon-green/10 px-4 py-2 text-sm font-semibold text-neon-green transition-colors hover:bg-neon-green hover:text-black disabled:opacity-50"
+        >
+          <FileSpreadsheet className="mr-2 inline h-4 w-4" />
+          Cargar datos-prueba.xlsx incluido
+        </button>
+
+        <button
+          type="button"
           onClick={() => inputRef.current?.click()}
           disabled={ocupado}
           className="border border-pitch-700 px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-pitch-800 hover:text-white disabled:opacity-50"
         >
           <Upload className="mr-2 inline h-4 w-4" />
-          Elegir Excel
+          Elegir otro archivo Excel
         </button>
 
+        <a
+          href="/datos-prueba.xlsx"
+          download="datos-prueba.xlsx"
+          className="text-xs text-gray-400 underline hover:text-white"
+        >
+          Descargar copia (.xlsx)
+        </a>
+
         {nombreArchivo && (
-          <span className="font-mono text-xs text-gray-400">
+          <span className="font-mono text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800 px-2 py-1 rounded">
             {nombreArchivo} · {totalFilas} filas en {hojas ? Object.keys(hojas).length : 0} hojas
           </span>
         )}
