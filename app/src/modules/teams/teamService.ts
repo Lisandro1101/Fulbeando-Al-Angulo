@@ -27,6 +27,10 @@ import {
   type MiembroEquipo,
   type RolEquipo,
   type Usuario,
+  type PropuestaPactoPartido,
+  type PingTactico,
+  type EstadoPacto,
+  type ModalidadDesafio,
 } from '@/domain'
 
 /**
@@ -641,7 +645,11 @@ export const actualizarEquipo = async (
 // Invitaciones a Equipos con Alerta Push
 // -------------------------------------------------------------------------
 
-export type TipoInvitacion = 'invitacion_equipo' | 'desafio_aceptado' | 'postulacion_partido'
+export type TipoInvitacion =
+  | 'invitacion_equipo'
+  | 'desafio_aceptado'
+  | 'postulacion_partido'
+  | 'desafio_equipo'
 
 export interface InvitacionEquipo {
   id: string
@@ -661,6 +669,7 @@ export interface InvitacionEquipo {
   desafioId?: string
   alertaId?: string
   posicion?: string | null
+  pactoPartido?: PropuestaPactoPartido
 }
 
 /**
@@ -816,6 +825,241 @@ export const escucharInvitacionesPendientes = (
 }
 
 /**
+ * Envía un desafío táctico directo entre capitanes de equipos.
+ * Se guarda como un solo documento en `invitaciones` con la propuesta completa
+ * para evitar costos innecesarios en Firestore y permitir negociación ágil.
+ */
+export const enviarDesafioDirectoEquipo = async (
+  remitenteUid: string,
+  remitenteNombre: string,
+  equipoDesafiante: {
+    id: string
+    nombre: string
+    escudoUrl?: string | null
+    division?: string
+  },
+  equipoRival: {
+    id: string
+    nombre: string
+    escudoUrl?: string | null
+    captainId: string
+  },
+  detalles: {
+    modalidad: ModalidadDesafio
+    fechaTentativa: string
+    fechaUnix: number
+    canchaOpcion: 'con_cancha' | 'busca_cancha' | 'rival_propone'
+    predioNombre?: string
+    predioId?: string
+    pingInicial?: string
+  },
+): Promise<string> => {
+  const invRef = doc(collection(db, COLECCIONES.invitaciones))
+  const ahora = Date.now()
+
+  const pings: PingTactico[] = detalles.pingInicial
+    ? [
+        {
+          emisorUid: remitenteUid,
+          emisorNombre: remitenteNombre,
+          equipoNombre: equipoDesafiante.nombre,
+          texto: detalles.pingInicial.slice(0, 100),
+          fecha: ahora,
+        },
+      ]
+    : []
+
+  const pactoPartido: PropuestaPactoPartido = {
+    id: invRef.id,
+    modalidad: detalles.modalidad,
+    fechaTentativa: detalles.fechaTentativa,
+    fechaUnix: detalles.fechaUnix,
+    canchaOpcion: detalles.canchaOpcion,
+    predioNombre: detalles.predioNombre,
+    predioId: detalles.predioId,
+    pingsTacticos: pings,
+    estado: 'propuesto',
+    equipoDesafianteId: equipoDesafiante.id,
+    equipoDesafianteNombre: equipoDesafiante.nombre,
+    equipoDesafianteEscudoUrl: equipoDesafiante.escudoUrl ?? null,
+    equipoDesafianteDivision: equipoDesafiante.division,
+    equipoRivalId: equipoRival.id,
+    equipoRivalNombre: equipoRival.nombre,
+    equipoRivalEscudoUrl: equipoRival.escudoUrl ?? null,
+    creadoPorUid: remitenteUid,
+    destinatarioUid: equipoRival.captainId,
+    creadoEn: ahora,
+    actualizadoEn: ahora,
+  }
+
+  const canchaTexto =
+    detalles.canchaOpcion === 'con_cancha'
+      ? `en ${detalles.predioNombre || 'cancha reservada'}`
+      : detalles.canchaOpcion === 'busca_cancha'
+      ? '(buscamos cancha a medias)'
+      : '(a convenir)'
+
+  const invData: InvitacionEquipo = {
+    id: invRef.id,
+    tipo: 'desafio_equipo',
+    equipoId: equipoDesafiante.id,
+    equipoNombre: equipoDesafiante.nombre,
+    equipoEscudoUrl: equipoDesafiante.escudoUrl ?? null,
+    remitenteUid,
+    remitenteNombre,
+    capitanNombre: remitenteNombre,
+    destinatarioUid: equipoRival.captainId,
+    destinatarioNombre: equipoRival.nombre,
+    mensaje: `¡${equipoDesafiante.nombre} los desafió a un ${detalles.modalidad} para ${detalles.fechaTentativa} ${canchaTexto}!`,
+    estado: 'pendiente',
+    creadaEn: serverTimestamp(),
+    leida: false,
+    pactoPartido,
+  }
+
+  await setDoc(invRef, invData)
+  return invRef.id
+}
+
+/**
+ * Responde a un desafío táctico directo entre equipos.
+ * - 'pactado': Cierra el partido y actualiza la convocatoria de ambos equipos automáticamente.
+ * - 'contraoferta': Modifica detalles y agrega ping táctico sin crear nuevos documentos.
+ * - 'rechazado': Marca la propuesta como rechazada.
+ */
+export const responderDesafioEquipo = async (
+  invitacionId: string,
+  accion: 'pactado' | 'contraoferta' | 'rechazado',
+  opciones?: {
+    emisorUid?: string
+    emisorNombre?: string
+    equipoNombre?: string
+    pingTexto?: string
+    nuevaFechaTentativa?: string
+    nuevoPredioNombre?: string
+  },
+): Promise<void> => {
+  const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
+  const snap = await getDoc(invRef)
+  if (!snap.exists()) return
+
+  const data = snap.data() as InvitacionEquipo
+  const pacto = data.pactoPartido
+  if (!pacto) {
+    await updateDoc(invRef, {
+      estado: accion === 'pactado' ? 'aceptada' : 'rechazada',
+      leida: true,
+      updatedAt: serverTimestamp(),
+    })
+    return
+  }
+
+  const ahora = Date.now()
+  const nuevosPings = [...(pacto.pingsTacticos || [])]
+  if (opciones?.pingTexto && opciones.emisorUid && opciones.emisorNombre && opciones.equipoNombre) {
+    if (nuevosPings.length < 5) {
+      nuevosPings.push({
+        emisorUid: opciones.emisorUid,
+        emisorNombre: opciones.emisorNombre,
+        equipoNombre: opciones.equipoNombre,
+        texto: opciones.pingTexto.slice(0, 100),
+        fecha: ahora,
+      })
+    }
+  }
+
+  if (accion === 'pactado') {
+    const pactoActualizado: PropuestaPactoPartido = {
+      ...pacto,
+      estado: 'pactado',
+      pingsTacticos: nuevosPings,
+      actualizadoEn: ahora,
+    }
+    await updateDoc(invRef, {
+      estado: 'aceptada',
+      leida: true,
+      pactoPartido: pactoActualizado,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Actualizamos la convocatoria de ambos equipos
+    try {
+      const convDesafiante: Partial<ConvocatoriaEquipo> = {
+        fecha: pacto.fechaTentativa,
+        predioNombre: pacto.predioNombre || 'A convenir',
+        equipoRivalId: pacto.equipoRivalId,
+      }
+      const convRival: Partial<ConvocatoriaEquipo> = {
+        fecha: pacto.fechaTentativa,
+        predioNombre: pacto.predioNombre || 'A convenir',
+        equipoRivalId: pacto.equipoDesafianteId,
+      }
+      await actualizarConvocatoriaEquipo(pacto.equipoDesafianteId, convDesafiante as any)
+      await actualizarConvocatoriaEquipo(pacto.equipoRivalId, convRival as any)
+    } catch (e) {
+      console.warn('Error vinculando convocatoria tras pactar partido:', e)
+    }
+  } else if (accion === 'contraoferta') {
+    const pactoActualizado: PropuestaPactoPartido = {
+      ...pacto,
+      estado: 'contraoferta',
+      fechaTentativa: opciones?.nuevaFechaTentativa || pacto.fechaTentativa,
+      predioNombre: opciones?.nuevoPredioNombre || pacto.predioNombre,
+      pingsTacticos: nuevosPings,
+      actualizadoEn: ahora,
+    }
+    await updateDoc(invRef, {
+      pactoPartido: pactoActualizado,
+      updatedAt: serverTimestamp(),
+    })
+  } else {
+    // rechazado
+    const pactoActualizado: PropuestaPactoPartido = {
+      ...pacto,
+      estado: 'rechazado',
+      pingsTacticos: nuevosPings,
+      actualizadoEn: ahora,
+    }
+    await updateDoc(invRef, {
+      estado: 'rechazada',
+      leida: true,
+      pactoPartido: pactoActualizado,
+      updatedAt: serverTimestamp(),
+    })
+  }
+}
+
+/**
+ * Agrega un ping táctico breve (máx 5 en todo el acuerdo) al documento del desafío.
+ */
+export const agregarPingTacticoDesafio = async (
+  invitacionId: string,
+  ping: PingTactico,
+): Promise<void> => {
+  const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
+  const snap = await getDoc(invRef)
+  if (!snap.exists()) return
+
+  const data = snap.data() as InvitacionEquipo
+  if (!data.pactoPartido) return
+
+  const pingsActuales = data.pactoPartido.pingsTacticos || []
+  if (pingsActuales.length >= 5) {
+    throw new Error('Límite de mensajes alcanzado para este desafío.')
+  }
+
+  await updateDoc(invRef, {
+    'pactoPartido.pingsTacticos': arrayUnion({
+      ...ping,
+      texto: ping.texto.slice(0, 100),
+      fecha: Date.now(),
+    }),
+    'pactoPartido.actualizadoEn': Date.now(),
+    updatedAt: serverTimestamp(),
+  })
+}
+
+/**
  * Actualiza la convocatoria de un equipo en Firestore para que todo el plantel
  * vea el partido programado y pueda confirmar o bajarse.
  */
@@ -835,6 +1079,98 @@ export const actualizarConvocatoriaEquipo = async (
     convocatoria,
   })
 }
+
+/**
+ * Cierra o reabre la convocatoria de un partido.
+ * Si se cierra, además desactiva y finaliza cualquier alerta activa en el Radar.
+ */
+export const alternarCierreConvocatoria = async (
+  teamId: string,
+  cerrar: boolean,
+  alertaRadarId?: string | null,
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, teamId)
+  const snap = await getDoc(eqRef)
+  if (!snap.exists()) return
+  const eq = snap.data()
+  if (!eq.convocatoria) return
+
+  const convActualizada = {
+    ...eq.convocatoria,
+    cerrada: cerrar,
+    alertaRadarEnviada: cerrar ? false : eq.convocatoria.alertaRadarEnviada,
+  }
+
+  await updateDoc(eqRef, {
+    convocatoria: convActualizada,
+  })
+
+  if (cerrar && alertaRadarId) {
+    try {
+      const desafioRef = doc(db, COLECCIONES.desafios, alertaRadarId)
+      await updateDoc(desafioRef, {
+        estado: 'ACEPTADO',
+      })
+    } catch (e) {
+      console.warn('Error actualizando alerta del radar al cerrar convocatoria:', e)
+    }
+  }
+}
+
+/**
+ * Cancela y elimina la convocatoria activa del equipo.
+ */
+export const cancelarConvocatoriaEquipo = async (
+  teamId: string,
+  alertaRadarId?: string | null,
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, teamId)
+  await updateDoc(eqRef, {
+    convocatoria: null,
+  })
+
+  if (alertaRadarId) {
+    try {
+      const desafioRef = doc(db, COLECCIONES.desafios, alertaRadarId)
+      await updateDoc(desafioRef, {
+        estado: 'CANCELADO',
+      })
+    } catch (e) {
+      console.warn('Error cancelando alerta del radar:', e)
+    }
+  }
+}
+
+/**
+ * Emite o actualiza el voto de un jugador para el MVP del partido.
+ * Guarda en `convocatoria.votosMvp.[votanteUid] = candidatoUid`.
+ */
+export const emitirVotoMvp = async (
+  equipoId: string,
+  votanteUid: string,
+  candidatoUid: string,
+  equipoRivalId?: string | null,
+): Promise<void> => {
+  if (votanteUid === candidatoUid) {
+    throw new Error('No podés votarte a vos mismo');
+  }
+
+  const eqRef = doc(db, COLECCIONES.equipos, equipoId);
+  await updateDoc(eqRef, {
+    [`convocatoria.votosMvp.${votanteUid}`]: candidatoUid,
+  });
+
+  if (equipoRivalId && equipoRivalId !== equipoId) {
+    try {
+      const rivalRef = doc(db, COLECCIONES.equipos, equipoRivalId);
+      await updateDoc(rivalRef, {
+        [`convocatoria.votosMvp.${votanteUid}`]: candidatoUid,
+      });
+    } catch (e) {
+      console.warn('No se pudo replicar voto en equipo rival:', e);
+    }
+  }
+};
 
 /**
  * Incorpora a un jugador externo como refuerzo temporal del equipo para el partido.
@@ -899,12 +1235,22 @@ export const incorporarRefuerzoAEquipo = async (
  * Guarda estadísticas (MVP, goles, asistencias) y desvincula los refuerzos temporales
  * de la convocatoria activa.
  */
+export interface FinalizarPartidoInput {
+  mvpId: string | null
+  stats: Record<string, { goles: number; asistencias: number }>
+  ausentesIds?: string[]
+  calificacionPredio?: {
+    predioId?: string | null
+    predioNombre?: string | null
+    estrellas: number
+  } | null
+  fairPlayRival?: 'BUEN_RIVAL' | 'CONFLICTIVO' | null
+  equipoRivalId?: string | null
+}
+
 export const finalizarTercerTiempoYPartido = async (
   equipoId: string,
-  partidoData: {
-    mvpId: string | null
-    stats: Record<string, { goles: number; asistencias: number }>
-  },
+  partidoData: FinalizarPartidoInput,
 ): Promise<void> => {
   const eqRef = doc(db, COLECCIONES.equipos, equipoId)
   const snap = await getDoc(eqRef)
@@ -925,6 +1271,9 @@ export const finalizarTercerTiempoYPartido = async (
       mvpId: partidoData.mvpId,
       stats: partidoData.stats,
       finalizadoEn: Date.now(),
+      predioNombre: conv?.predioNombre || conv?.predio || null,
+      calificacionPredio: partidoData.calificacionPredio?.estrellas ?? null,
+      fairPlayRival: partidoData.fairPlayRival ?? null,
     },
   ]
 
@@ -934,15 +1283,20 @@ export const finalizarTercerTiempoYPartido = async (
     { goles: number; asistencias: number; partidosJugados: number; mvpCount: number }
   > = { ...(equipoData.estadisticasJugadores || {}) }
 
-  const jugadoresQueJugaron = new Set<string>([
-    ...(Array.isArray(conv?.confirmados) ? conv.confirmados : []),
-    ...Object.keys(partidoData.stats || {}),
-  ])
+  const ausentesSet = new Set<string>(partidoData.ausentesIds || [])
+  const confirmados = Array.isArray(conv?.confirmados) ? conv.confirmados : []
+  const jugadoresConStats = Object.keys(partidoData.stats || {})
+  const todosAnotados = new Set<string>([...confirmados, ...jugadoresConStats])
+  
+  // Los que realmente jugaron son los que no fueron marcados como ausentes
+  const jugadoresQueJugaron = new Set<string>(
+    Array.from(todosAnotados).filter((uid) => !ausentesSet.has(uid))
+  )
 
-  // Identificar datos del MVP si fue seleccionado
+  // Identificar datos del MVP si fue seleccionado y estuvo presente
   let mvpNombre: string | null = null
   let mvpEmoji: string | null = null
-  if (partidoData.mvpId) {
+  if (partidoData.mvpId && !ausentesSet.has(partidoData.mvpId)) {
     const m = members.find((x: any) => x.uid === partidoData.mvpId)
     if (m) {
       mvpNombre = m.name
@@ -958,6 +1312,7 @@ export const finalizarTercerTiempoYPartido = async (
     }
   }
 
+  // Acumular stats individuales del equipo solo para los que jugaron
   jugadoresQueJugaron.forEach((uid) => {
     const prev = statsJugadoresActuales[uid] || {
       goles: 0,
@@ -974,6 +1329,95 @@ export const finalizarTercerTiempoYPartido = async (
     }
   })
 
+  // Penalizar ausentes ("fantasma") en su Fair Play (-15%)
+  for (const ausenteUid of Array.from(ausentesSet)) {
+    try {
+      const uRef = doc(db, COLECCIONES.usuarios, ausenteUid)
+      const uSnap = await getDoc(uRef)
+      if (uSnap.exists()) {
+        const uData = uSnap.data()
+        const currentFp = uData.perfilDeportivo?.stats?.fairPlayIndex ?? 100
+        const normalizedFp = currentFp <= 10 ? currentFp * 10 : currentFp
+        const newFp = Math.max(0, normalizedFp - 15)
+        await updateDoc(uRef, {
+          'perfilDeportivo.stats.fairPlayIndex': newFp,
+        })
+      }
+    } catch (err) {
+      console.warn('Error al penalizar ausencia de jugador:', err)
+    }
+  }
+
+  // Premiar a los que asistieron (recuperan +2 de Fair Play hasta 100%)
+  for (const jugoUid of Array.from(jugadoresQueJugaron)) {
+    try {
+      const uRef = doc(db, COLECCIONES.usuarios, jugoUid)
+      const uSnap = await getDoc(uRef)
+      if (uSnap.exists()) {
+        const uData = uSnap.data()
+        const currentFp = uData.perfilDeportivo?.stats?.fairPlayIndex ?? 100
+        const normalizedFp = currentFp <= 10 ? currentFp * 10 : currentFp
+        if (normalizedFp < 100) {
+          await updateDoc(uRef, {
+            'perfilDeportivo.stats.fairPlayIndex': Math.min(100, normalizedFp + 2),
+          })
+        }
+      }
+    } catch (err) {
+      console.warn('Error al actualizar fair play de jugador presente:', err)
+    }
+  }
+
+  // Calificación del Predio (si fue provista)
+  if (partidoData.calificacionPredio && partidoData.calificacionPredio.estrellas > 0) {
+    const estrellas = Math.min(5, Math.max(1, Math.round(partidoData.calificacionPredio.estrellas)))
+    const targetPredioId = partidoData.calificacionPredio.predioId || conv?.predioId
+    if (targetPredioId) {
+      try {
+        const pRef = doc(db, COLECCIONES.predios, targetPredioId)
+        const pSnap = await getDoc(pRef)
+        if (pSnap.exists()) {
+          const pData = pSnap.data()
+          const rep = pData.reputation || { ratingCount: 0, ratingSum: 0, promedio: 5 }
+          const nextCount = (rep.ratingCount || 0) + 1
+          const nextSum = (rep.ratingSum || 0) + estrellas
+          const nextPromedio = Math.round((nextSum / nextCount) * 10) / 10
+          await updateDoc(pRef, {
+            'reputation.ratingCount': nextCount,
+            'reputation.ratingSum': nextSum,
+            'reputation.promedio': nextPromedio,
+          })
+        }
+      } catch (err) {
+        console.warn('Error al calificar predio:', err)
+      }
+    }
+  }
+
+  // Calificación del Rival (si hubo desafío contra otro equipo)
+  if (partidoData.fairPlayRival && partidoData.equipoRivalId) {
+    try {
+      const rivalRef = doc(db, COLECCIONES.equipos, partidoData.equipoRivalId)
+      const rivalSnap = await getDoc(rivalRef)
+      if (rivalSnap.exists()) {
+        const rData = rivalSnap.data()
+        const rep = rData.reputation || { partidosJugados: 0, buenRivalCount: 0, conflictivoCount: 0, fairPlayScore: 100 }
+        const nextPartidos = (rep.partidosJugados || 0) + 1
+        const nextBuenRival = (rep.buenRivalCount || 0) + (partidoData.fairPlayRival === 'BUEN_RIVAL' ? 1 : 0)
+        const nextConflictivo = (rep.conflictivoCount || 0) + (partidoData.fairPlayRival === 'CONFLICTIVO' ? 1 : 0)
+        const fairPlayScore = Math.round((nextBuenRival / Math.max(1, nextBuenRival + nextConflictivo)) * 100)
+        await updateDoc(rivalRef, {
+          'reputation.partidosJugados': nextPartidos,
+          'reputation.buenRivalCount': nextBuenRival,
+          'reputation.conflictivoCount': nextConflictivo,
+          'reputation.fairPlayScore': fairPlayScore,
+        })
+      }
+    } catch (err) {
+      console.warn('Error al calificar rival:', err)
+    }
+  }
+
   // Guardar resumen del último partido para que la UI no quede vacía
   const ultimoPartido = {
     fecha: conv?.fecha || 'Último partido jugado',
@@ -986,7 +1430,7 @@ export const finalizarTercerTiempoYPartido = async (
     finalizadoEn: Date.now(),
   }
 
-  // Guardar documento individual en `estadisticas_partido` para cada jugador
+  // Guardar documento individual en `estadisticas_partido` para cada jugador presente
   for (const uid of Array.from(jugadoresQueJugaron)) {
     const s = partidoData.stats?.[uid] || { goles: 0, asistencias: 0 }
     try {

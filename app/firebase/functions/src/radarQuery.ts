@@ -62,6 +62,8 @@ interface PinEquipo extends PinBase {
   modalidad: string
   cantidadJugadores: number
   escudoUrl: string | null
+  fairPlayScore?: number
+  stats?: { wins: number; draws: number; losses: number }
 }
 interface PinDesafio extends PinBase {
   t: 'desafio'
@@ -118,6 +120,15 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
     }
     case 'equipo': {
       const members: unknown[] = Array.isArray(raw.members) ? raw.members : []
+      const rawFp = (raw.reputation as Record<string, unknown> | undefined)?.fairPlayScore
+      const fairPlayScore = typeof rawFp === 'number' ? Math.round(rawFp) : 100
+      const rawStats = (raw.stats as Record<string, unknown> | undefined)
+      const stats = rawStats ? {
+        wins: typeof rawStats.wins === 'number' ? rawStats.wins : 0,
+        draws: typeof rawStats.draws === 'number' ? rawStats.draws : 0,
+        losses: typeof rawStats.losses === 'number' ? rawStats.losses : 0,
+      } : undefined
+
       return {
         ...base,
         t: 'equipo',
@@ -125,9 +136,15 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         modalidad: str(raw.modalidadBase),
         cantidadJugadores: members.length,
         escudoUrl: strOrNull(raw.shieldUrl),
+        fairPlayScore,
+        stats,
       }
     }
     case 'desafio': {
+      const rawFaltantes = num(raw.jugadoresFaltantes, 0)
+      const posicionBuscada = strOrNull(raw.posicionBuscada)
+      const esBusqueda = raw.tipoDesafio === 'busqueda_jugador' || rawFaltantes > 0 || posicionBuscada !== null || (strOrNull(raw.descripcion)?.startsWith('¡No completamos!') ?? false)
+
       return {
         ...base,
         t: 'desafio',
@@ -138,12 +155,19 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         fechaUnix: num(raw.fechaUnix),
         conCancha: raw.turnoId != null,
         descripcion: strOrNull(raw.descripcion),
+        tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
+        posicionBuscada,
+        jugadoresFaltantes: rawFaltantes > 0 ? rawFaltantes : (esBusqueda ? 1 : undefined),
       }
     }
     case 'jugador': {
       if (raw.rol !== 'jugador' || raw.deletedAt) return null
       const perfil = (raw.perfilDeportivo ?? {}) as DocumentData
       const stats = (perfil.stats ?? {}) as DocumentData
+      const rawRating = num(perfil.rating, 5)
+      const mediaFifa = rawRating <= 10 && rawRating > 0 ? Math.round(rawRating * 10) : Math.round(rawRating)
+      const rawFp = num(stats.fairPlayIndex, 100)
+      const fairPlay = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp))
       return {
         ...base,
         t: 'jugador',
@@ -151,8 +175,8 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         nombre: str(raw.nombre),
         apellido: str(raw.apellido),
         playerRole: strOrNull(perfil.playerRole),
-        media: num(perfil.rating, 5),
-        fairPlay: Math.round(num(stats.fairPlayIndex, 100)),
+        media: mediaFifa,
+        fairPlay: Math.round(fairPlay),
       }
     }
   }

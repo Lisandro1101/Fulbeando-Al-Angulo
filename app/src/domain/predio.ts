@@ -49,6 +49,12 @@ export interface CanchaResumen {
   precioHora: number
 }
 
+export interface ReputacionPredio {
+  ratingCount: number
+  ratingSum: number
+  promedio: number
+}
+
 export interface Predio extends Auditoria {
   id: string
   nombre: string
@@ -69,6 +75,7 @@ export interface Predio extends Auditoria {
   diasBase?: number[]
   verificado: boolean
   estado: EstadoPredio
+  reputation?: ReputacionPredio
 }
 
 /** Solo los predios verificados y activos son visibles publicamente. */

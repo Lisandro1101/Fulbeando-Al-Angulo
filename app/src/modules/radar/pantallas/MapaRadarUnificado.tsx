@@ -2,19 +2,21 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation } from 'lucide-react';
-import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha } from '../radarService';
+import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, Swords } from 'lucide-react';
+import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha, type RadarPinDesafio } from '../radarService';
 import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
-import { listarEquiposCercanos, notificarAceptacionDesafio } from '@/modules/teams/teamService';
+import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId } from '@/modules/teams/teamService';
+import { ModalProponerDesafio } from '../componentes/ModalProponerDesafio';
 import { useSesion } from '@/modules/auth/useSesion';
-import { canchasDe, nombreCompleto } from '@/domain';
+import { canchasDe, nombreCompleto, calcularMediaJugador, calcularDivisionEquipo, type DivisionEquipoInfo } from '@/domain';
 import { type Punto } from '@/core/geo/geohash';
 import { appEnv } from '@/core/config';
 import Supercluster from 'supercluster';
 import type { ClusterFeature, PointFeature } from 'supercluster';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { Toast } from '@/modules/ui/overlays';
+import { obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
 
 const LOCALIDADES_FALLBACK = [
   { nombre: 'CABA', lat: -34.6037, lng: -58.3816 },
@@ -96,13 +98,25 @@ const iconoEquipo = L.divIcon({
   iconAnchor: [16, 16]
 });
 
-// 🔴 Pin Rojo Fuego: Desafíos (Pelota de Fútbol)
+// 🔴 Pin Rojo Fuego: Desafíos entre equipos (Pelota de Fútbol)
 const iconoDesafio = L.divIcon({
   className: 'marcador-desafio',
   html: `<div style="width: 32px; height: 32px; border-radius: 50%; background: #EF4444; border: 3px solid #0F172A; box-shadow: 0 0 15px #EF4444; display: flex; align-items: center; justify-content: center; color: #fff;">${SVG_DESAFIO_HTML}</div>`,
   iconSize: [32, 32],
   iconAnchor: [16, 16]
 });
+
+// 🟡/🟠 Pin Ámbar: Búsqueda Urgente de Jugador Faltante (Convocatoria)
+const iconoAlertaJugador = (faltan: number = 1) =>
+  L.divIcon({
+    className: 'marcador-alerta-jugador',
+    html: `<div style="position:relative; width: 34px; height: 34px; border-radius: 50%; background: #F59E0B; border: 3px solid #0F172A; box-shadow: 0 0 18px #F59E0B; display: flex; align-items: center; justify-content: center; color: #0F172A; font-weight:900;">
+      <span style="font-size: 16px;">🧤</span>
+      <span style="position:absolute; top:-7px; right:-9px; background:#EF4444; color:#fff; font-size:10px; font-weight:900; padding:1px 5px; border-radius:9999px; border:2px solid #0F172A; box-shadow: 0 2px 5px rgba(0,0,0,0.5); white-space:nowrap;">-${faltan}</span>
+    </div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
 
 // 🔵 Pin Azul: Jugador Libre (Jugador de Fútbol)
 const iconoJugadorLibre = L.divIcon({
@@ -113,10 +127,15 @@ const iconoJugadorLibre = L.divIcon({
 });
 
 /** Icono de pin segun el tipo de entidad del radar. */
-function iconoDe(tipo: RadarEntityType): L.DivIcon {
-  if (tipo === 'cancha') return iconoPredio;
-  if (tipo === 'equipo') return iconoEquipo;
-  if (tipo === 'desafio') return iconoDesafio;
+function iconoDe(entidad: RadarEntity): L.DivIcon {
+  if (entidad.type === 'cancha') return iconoPredio;
+  if (entidad.type === 'equipo') return iconoEquipo;
+  if (entidad.type === 'desafio') {
+    if (entidad.tipoDesafio === 'busqueda_jugador') {
+      return iconoAlertaJugador(entidad.jugadoresFaltantes || 1);
+    }
+    return iconoDesafio;
+  }
   return iconoJugadorLibre;
 }
 
@@ -271,6 +290,8 @@ interface CanchaEntity extends BaseEntity {
   telefono?: string;
   tipo: string;
   cantidadCanchas: number;
+  promedioRating?: number;
+  ratingCount?: number;
 }
 
 /** Capa de equipos del area: la que mira el dueno de cancha para ofrecerles canchas. */
@@ -281,6 +302,10 @@ interface EquipoEntity extends BaseEntity {
   modalidad: string;
   cantidadJugadores: number;
   escudoUrl: string | null;
+  captainId?: string;
+  fairPlayScore?: number;
+  stats?: { wins: number; draws: number; losses: number };
+  divisionInfo?: DivisionEquipoInfo;
 }
 
 interface DesafioEntity extends BaseEntity {
@@ -294,6 +319,9 @@ interface DesafioEntity extends BaseEntity {
   fechaUnix: number;
   conCancha: boolean;
   descripcion: string | null;
+  tipoDesafio?: 'partido_equipo' | 'busqueda_jugador';
+  posicionBuscada?: string | null;
+  jugadoresFaltantes?: number;
 }
 
 interface JugadorEntity extends BaseEntity {
@@ -395,12 +423,58 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
         cantidadCanchas: p.cantidadCanchas,
       };
     }
-    case 'equipo':
-      return { ...base, type: 'equipo', equipoId: pin.id, nombre: pin.nombre, modalidad: pin.modalidad, cantidadJugadores: pin.cantidadJugadores, escudoUrl: pin.escudoUrl };
-    case 'desafio':
-      return { ...base, type: 'desafio', desafioId: pin.id, creatorId: pin.creatorId, equipoId: pin.equipoId ?? undefined, equipo: pin.equipo, modalidad: pin.modalidad, fechaUnix: pin.fechaUnix, conCancha: pin.conCancha, descripcion: pin.descripcion };
-    case 'jugador':
-      return { ...base, type: 'jugador', uid: pin.uid, apodo: `${pin.nombre} ${pin.apellido}`.trim() || 'Jugador', posicion: ETIQUETA_POSICION[pin.playerRole ?? ''] ?? 'Cualquiera', media: pin.media, fairPlay: pin.fairPlay };
+    case 'equipo': {
+      const p = pin as RadarPinEquipo;
+      const divisionInfo = calcularDivisionEquipo({
+        stats: p.stats,
+        reputation: typeof p.fairPlayScore === 'number' ? { fairPlayScore: p.fairPlayScore, buenRivalCount: 0, conflictivoCount: 0, partidosJugados: 0 } : null,
+      });
+      return {
+        ...base,
+        type: 'equipo',
+        equipoId: pin.id,
+        nombre: pin.nombre,
+        modalidad: pin.modalidad,
+        cantidadJugadores: pin.cantidadJugadores,
+        escudoUrl: pin.escudoUrl,
+        fairPlayScore: p.fairPlayScore,
+        stats: p.stats,
+        divisionInfo,
+      };
+    }
+    case 'desafio': {
+      const p = pin as RadarPinDesafio;
+      return {
+        ...base,
+        type: 'desafio',
+        desafioId: pin.id,
+        creatorId: pin.creatorId,
+        equipoId: pin.equipoId ?? undefined,
+        equipo: pin.equipo,
+        modalidad: pin.modalidad,
+        fechaUnix: pin.fechaUnix,
+        conCancha: pin.conCancha,
+        descripcion: pin.descripcion,
+        tipoDesafio: p.tipoDesafio ?? (p.jugadoresFaltantes && p.jugadoresFaltantes > 0 ? 'busqueda_jugador' : 'partido_equipo'),
+        posicionBuscada: p.posicionBuscada,
+        jugadoresFaltantes: p.jugadoresFaltantes,
+      };
+    }
+    case 'jugador': {
+      const rawMedia = pin.media;
+      const mediaFifa = rawMedia <= 10 && rawMedia > 0 ? Math.round(rawMedia * 10) : Math.round(rawMedia);
+      const rawFp = pin.fairPlay;
+      const fairPlayPct = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
+      return {
+        ...base,
+        type: 'jugador',
+        uid: pin.uid,
+        apodo: `${pin.nombre} ${pin.apellido}`.trim() || 'Jugador',
+        posicion: ETIQUETA_POSICION[pin.playerRole ?? ''] ?? 'Cualquiera',
+        media: mediaFifa,
+        fairPlay: fairPlayPct,
+      };
+    }
   }
 };
 
@@ -478,7 +552,7 @@ function MarcadoresRadar({
           <Marker
             key={entidad.id}
             position={[lat, lng]}
-            icon={iconoDe(entidad.type)}
+            icon={iconoDe(entidad)}
             eventHandlers={{ click: () => onSeleccionar(entidad) }}
           />
         );
@@ -503,6 +577,7 @@ export const MapaRadarUnificado: React.FC = () => {
   
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
+  const [mostrarModalDesafio, setMostrarModalDesafio] = useState(false);
 
   const [toastMessage, setToastMessage] = useState('');
   const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
@@ -528,7 +603,52 @@ export const MapaRadarUnificado: React.FC = () => {
         console.warn('No se pudo cargar los datos completos del predio:', err);
       });
     }
-  }, [seleccionado]);
+
+    // Si se selecciona un equipo, hidratamos su división y datos completos desde Firestore
+    if (seleccionado?.type === 'equipo') {
+      obtenerEquipoPorId(seleccionado.equipoId).then((eq) => {
+        if (eq) {
+          let mediaPlantel: number | null = null;
+          if (eq.members && eq.members.length > 0) {
+            let suma = 0;
+            eq.members.forEach((m: any) => {
+              const st = eq.estadisticasJugadores?.[m.uid];
+              suma += calcularMediaJugador({
+                partidosJugados: st?.partidosJugados ?? 0,
+                goles: st?.goles ?? 0,
+                asistencias: st?.asistencias ?? 0,
+                mvpCount: st?.mvpCount ?? 0,
+                posicion: m.position ?? null,
+              });
+            });
+            mediaPlantel = Math.round(suma / eq.members.length);
+          }
+
+          const divInfo = calcularDivisionEquipo({
+            stats: eq.stats,
+            mediaPlantel,
+            reputation: eq.reputation,
+          });
+
+          setSeleccionado((prev) =>
+            prev && prev.id === eq.id && prev.type === 'equipo'
+              ? {
+                  ...prev,
+                  stats: eq.stats,
+                  cantidadJugadores: eq.members.length,
+                  escudoUrl: eq.shieldUrl ?? prev.escudoUrl,
+                  captainId: eq.captainId ?? prev.captainId,
+                  fairPlayScore: eq.reputation?.fairPlayScore ?? prev.fairPlayScore,
+                  divisionInfo: divInfo,
+                }
+              : prev
+          );
+        }
+      }).catch((err) => {
+        console.warn('No se pudo hidratar los datos completos del equipo:', err);
+      });
+    }
+  }, [seleccionado?.id]);
 
   const abrirComoLlegar = (cancha: CanchaEntity) => {
     // Redirección directa a Google Maps en modo navegación / ruta hacia las coordenadas del predio
@@ -625,54 +745,115 @@ export const MapaRadarUnificado: React.FC = () => {
         ciudad: p.ciudad,
         telefono: p.telefono,
         tipo: canchas[0]?.tipo ?? 'Sintetico',
-        cantidadCanchas: canchas.length
+        cantidadCanchas: canchas.length,
+        promedioRating: p.reputation?.promedio,
+        ratingCount: p.reputation?.ratingCount,
       };
     });
 
-    const desafiosEntities: DesafioEntity[] = desafios.map(d => ({
-      id: d.id,
-      type: 'desafio' as const,
-      lat: d.geo.lat,
-      lng: d.geo.lng,
-      distanciaKm: d.distanciaKm,
-      desafioId: d.id,
-      creatorId: d.creatorId,
-      equipoId: d.equipoId,
-      equipo: d.equipoNombre,
-      modalidad: d.modalidad,
-      fechaUnix: d.fechaUnix,
-      // El puente con FULBEANDO: si hay turno, la cancha ya esta reservada.
-      conCancha: d.turnoId !== null,
-      descripcion: d.descripcion,
-    }));
+    const desafiosEntities: DesafioEntity[] = desafios.map((d) => {
+      const esBusqueda =
+        d.tipoDesafio === 'busqueda_jugador' ||
+        (d.jugadoresFaltantes && d.jugadoresFaltantes > 0) ||
+        d.posicionBuscada !== null ||
+        (d.descripcion?.startsWith('¡No completamos!') ?? false);
+      return {
+        id: d.id,
+        type: 'desafio' as const,
+        lat: d.geo.lat,
+        lng: d.geo.lng,
+        distanciaKm: d.distanciaKm,
+        desafioId: d.id,
+        creatorId: d.creatorId,
+        equipoId: d.equipoId,
+        equipo: d.equipoNombre,
+        modalidad: d.modalidad,
+        fechaUnix: d.fechaUnix,
+        conCancha: d.turnoId !== null,
+        descripcion: d.descripcion,
+        tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
+        posicionBuscada: d.posicionBuscada ?? null,
+        jugadoresFaltantes: d.jugadoresFaltantes ?? (esBusqueda ? 1 : undefined),
+      };
+    });
 
     const jugadoresEntities: JugadorEntity[] = jugadores
       .filter(u => u.geo !== null && u.perfilDeportivo !== null)
-      .map(u => ({
-        id: u.uid,
-        type: 'jugador' as const,
-        lat: u.geo!.lat,
-        lng: u.geo!.lng,
-        distanciaKm: u.distanciaKm,
-        uid: u.uid,
-        apodo: nombreCompleto(u) || 'Jugador',
-        posicion: ETIQUETA_POSICION[u.perfilDeportivo!.playerRole ?? ''] ?? 'Cualquiera',
-        media: u.perfilDeportivo!.rating ?? 5.0,
-        fairPlay: Math.round(u.perfilDeportivo!.stats?.fairPlayIndex ?? 100),
-      }));
+      .map(u => {
+        const perf = u.perfilDeportivo!;
+        const stats = perf.stats;
+        let mediaFifa = calcularMediaJugador({
+          partidosJugados: stats?.matchesPlayed ?? 0,
+          goles: stats?.goals ?? 0,
+          asistencias: stats?.assists ?? 0,
+          mvpCount: stats?.mvpCount ?? 0,
+          posicion: perf.posicion ?? perf.playerRole ?? null,
+        });
 
-    const equiposEntities: EquipoEntity[] = equipos.map(e => ({
-      id: e.id,
-      type: 'equipo' as const,
-      lat: e.geo!.lat,
-      lng: e.geo!.lng,
-      distanciaKm: e.distanciaKm,
-      equipoId: e.id,
-      nombre: e.name,
-      modalidad: e.modalidadBase,
-      cantidadJugadores: e.members.length,
-      escudoUrl: e.shieldUrl ?? null,
-    }));
+        if ((stats?.matchesPlayed ?? 0) === 0 && typeof perf.rating === 'number' && perf.rating > 0) {
+          mediaFifa = perf.rating <= 10 ? Math.round(perf.rating * 10) : Math.round(perf.rating);
+        }
+
+        const rawFp = perf.stats?.fairPlayIndex ?? 100;
+        const fairPlayPct = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
+
+        return {
+          id: u.uid,
+          type: 'jugador' as const,
+          lat: u.geo!.lat,
+          lng: u.geo!.lng,
+          distanciaKm: u.distanciaKm,
+          uid: u.uid,
+          apodo: nombreCompleto(u) || 'Jugador',
+          posicion: ETIQUETA_POSICION[perf.playerRole ?? ''] ?? 'Cualquiera',
+          media: mediaFifa,
+          fairPlay: fairPlayPct,
+        };
+      });
+
+    const equiposEntities: EquipoEntity[] = equipos.map(e => {
+      let mediaPlantel: number | null = null;
+      if (e.members && e.members.length > 0) {
+        let suma = 0;
+        let count = 0;
+        e.members.forEach((m: any) => {
+          const st = e.estadisticasJugadores?.[m.uid];
+          const med = calcularMediaJugador({
+            partidosJugados: st?.partidosJugados ?? 0,
+            goles: st?.goles ?? 0,
+            asistencias: st?.asistencias ?? 0,
+            mvpCount: st?.mvpCount ?? 0,
+            posicion: m.position ?? null,
+          });
+          suma += med;
+          count++;
+        });
+        if (count > 0) mediaPlantel = Math.round(suma / count);
+      }
+
+      const divisionInfo = calcularDivisionEquipo({
+        stats: e.stats,
+        mediaPlantel,
+        reputation: e.reputation,
+      });
+
+      return {
+        id: e.id,
+        type: 'equipo' as const,
+        lat: e.geo!.lat,
+        lng: e.geo!.lng,
+        distanciaKm: e.distanciaKm,
+        equipoId: e.id,
+        nombre: e.name,
+        modalidad: e.modalidadBase,
+        cantidadJugadores: e.members.length,
+        escudoUrl: e.shieldUrl ?? null,
+        captainId: e.captainId,
+        fairPlayScore: e.reputation?.fairPlayScore,
+        stats: e.stats,
+        divisionInfo,
+      };
+    });
 
     setEntidades([
       ...canchasEntities,
@@ -879,10 +1060,15 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
               <h3 className="text-white font-black text-xl tracking-tight px-4">{seleccionado.nombre}</h3>
               <p className="text-xs text-zinc-400 mt-1 font-semibold">{seleccionado.cantidadCanchas} Canchas • {seleccionado.tipo}</p>
               
-              <div className="flex items-center justify-center gap-2 mt-2 mb-3">
+              <div className="flex items-center justify-center gap-2 mt-2 mb-3 flex-wrap">
                 <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
                   Predio Verificado
                 </span>
+                {typeof seleccionado.ratingCount === 'number' && seleccionado.ratingCount > 0 && (
+                  <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
+                    ⭐ {seleccionado.promedioRating?.toFixed(1) ?? '5.0'} ({seleccionado.ratingCount})
+                  </span>
+                )}
                 <span className="bg-zinc-800 text-zinc-400 border border-zinc-700/80 px-2.5 py-1 rounded-full text-[11px] font-bold">
                   {seleccionado.distanciaKm.toFixed(1)} km
                 </span>
@@ -940,46 +1126,102 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             </div>
           )}
 
-          {seleccionado.type === 'equipo' && (
-            <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 ring-4 ring-sky-500/20 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)] mb-3 overflow-hidden">
-                {seleccionado.escudoUrl
-                  ? <img src={seleccionado.escudoUrl} alt={`Escudo de ${seleccionado.nombre}`} className="w-full h-full object-cover" />
-                  : <IconoEquipo className="w-8 h-8 text-sky-400" />}
-              </div>
-              <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.nombre}</h3>
-              <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
-                <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80">{seleccionado.modalidad}</span>
-                <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded-lg border border-sky-500/20">
-                  {seleccionado.cantidadJugadores} en el plantel
-                </span>
-                <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">
-                  {seleccionado.distanciaKm.toFixed(1)} km
-                </span>
-              </div>
+          {seleccionado.type === 'equipo' && (() => {
+            const divInfo = seleccionado.divisionInfo || calcularDivisionEquipo({
+              stats: seleccionado.stats,
+              reputation: typeof seleccionado.fairPlayScore === 'number' ? { fairPlayScore: seleccionado.fairPlayScore, buenRivalCount: 0, conflictivoCount: 0, partidosJugados: 0 } : null,
+            });
 
-              <p className="text-zinc-400 text-xs sm:text-sm mb-5 leading-relaxed px-2">
-                Equipo que juega en tu zona. Si te interesa sumarte, coordiná la cancha desde el chat o mandales un mensaje.
-              </p>
+            return (
+              <div className="flex flex-col items-center text-center pt-1">
+                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500/80 ring-4 ring-amber-500/20 flex items-center justify-center text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)] mb-2.5 overflow-hidden">
+                  {seleccionado.escudoUrl
+                    ? <img src={seleccionado.escudoUrl} alt={`Escudo de ${seleccionado.nombre}`} className="w-full h-full object-cover" />
+                    : <IconoEquipo className="w-8 h-8 text-amber-400" />}
+                </div>
 
-              <button
-                onClick={() => {
-                  if (!usuario) { navigate('/login'); return; }
-                  setToastMessage('Mensaje enviado al equipo.');
-                  setTimeout(() => setToastMessage(''), 3500);
-                }}
-                className="w-full h-13 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white rounded-2xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(14,165,233,0.35)] cursor-pointer"
-              >
-                Contactar al equipo
-              </button>
-            </div>
-          )}
+                {/* Badge destacado de la División de Fútbol */}
+                <div className="mb-2">
+                  <span className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-sm ${divInfo.badgeClass}`}>
+                    <span>{divInfo.icono}</span>
+                    <span>{divInfo.nombre}</span>
+                  </span>
+                </div>
+
+                <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.nombre}</h3>
+                
+                {/* Métricas clave: Media Colectiva, Fair Play, Récord y Datos */}
+                <div className="flex justify-center gap-2 text-xs font-bold mt-2.5 mb-3 flex-wrap">
+                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/35 px-2.5 py-1 rounded-lg font-black text-xs tracking-wider shadow-sm flex items-center gap-1">
+                    ⭐ MEDIA {divInfo.mediaEquipo}
+                  </span>
+
+                  <span className={`px-2.5 py-1 rounded-lg border font-bold flex items-center gap-1.5 shadow-sm ${divInfo.insigniaFairPlay.badgeClass}`}>
+                    <span>{divInfo.insigniaFairPlay.icono}</span>
+                    <span>{divInfo.insigniaFairPlay.score}% {divInfo.insigniaFairPlay.texto}</span>
+                  </span>
+
+                  {seleccionado.stats && (
+                    <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-bold flex items-center gap-1.5">
+                      <span className="text-emerald-400">{seleccionado.stats.wins} PG</span>
+                      <span className="text-zinc-600">·</span>
+                      <span className="text-zinc-400">{seleccionado.stats.draws} PE</span>
+                      <span className="text-zinc-600">·</span>
+                      <span className="text-rose-400">{seleccionado.stats.losses} PP</span>
+                    </span>
+                  )}
+
+                  <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80">{seleccionado.modalidad}</span>
+                  <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded-lg border border-sky-500/20">
+                    {seleccionado.cantidadJugadores} en el plantel
+                  </span>
+                  <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">
+                    {seleccionado.distanciaKm.toFixed(1)} km
+                  </span>
+                </div>
+
+                <p className="text-zinc-400 text-xs sm:text-sm mb-5 leading-relaxed px-2">
+                  Equipo que juega en tu zona. Podés sumarte a su plantel o desafiarlos a un partido amistoso.
+                </p>
+
+                <button
+                  onClick={() => {
+                    if (!usuario) { navigate('/login'); return; }
+                    setMostrarModalDesafio(true);
+                  }}
+                  className="w-full h-13 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 rounded-2xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(245,158,11,0.35)] cursor-pointer"
+                >
+                  <Swords className="w-5 h-5" />
+                  Pactar Desafío Directo
+                </button>
+              </div>
+            );
+          })()}
 
           {seleccionado.type === 'desafio' && (
             <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 ring-4 ring-amber-500/20 flex items-center justify-center text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)] mb-3">
-                <IconoDesafio className="w-8 h-8" />
+              <div className={`w-16 h-16 rounded-full border-2 flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(245,158,11,0.3)] ${
+                seleccionado.tipoDesafio === 'busqueda_jugador'
+                  ? 'bg-amber-950/60 border-amber-500 ring-4 ring-amber-500/20 text-amber-400'
+                  : 'bg-zinc-800 border-amber-500 ring-4 ring-amber-500/20 text-amber-400'
+              }`}>
+                {seleccionado.tipoDesafio === 'busqueda_jugador' ? (
+                  <span className="text-3xl">🧤</span>
+                ) : (
+                  <IconoDesafio className="w-8 h-8" />
+                )}
               </div>
+
+              {seleccionado.tipoDesafio === 'busqueda_jugador' ? (
+                <div className="inline-block bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full mb-1">
+                  ⚠️ ¡Búsqueda Urgente de Jugador!
+                </div>
+              ) : (
+                <div className="inline-block bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full mb-1">
+                  ⚽ Desafío Abierto entre Equipos
+                </div>
+              )}
+
               <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.equipo}</h3>
               <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
                 <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80">{seleccionado.modalidad}</span>
@@ -987,11 +1229,21 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
               </div>
 
+              {/* Faltantes / Puesto si es búsqueda de jugador */}
+              {seleccionado.tipoDesafio === 'busqueda_jugador' && (
+                <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-300 flex items-center justify-center gap-2">
+                  <span>Faltan: {seleccionado.jugadoresFaltantes || 1} jugador(es)</span>
+                  {seleccionado.posicionBuscada && (
+                    <span>• Puesto: {seleccionado.posicionBuscada}</span>
+                  )}
+                </div>
+              )}
+
               {/* PUENTE ENTRE MODULOS */}
               <div className={`mb-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
                 {seleccionado.conCancha
                   ? '✅ Cancha ya reservada (turno confirmado)'
-                  : '⚽ El equipo busca cancha: se coordina al aceptar'}
+                  : '⚽ Buscan cancha: se coordina al aceptar'}
               </div>
 
               {seleccionado.descripcion && (
@@ -1019,7 +1271,11 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                         descripcion: seleccionado.descripcion,
                       }
                     );
-                    setToastMessage('¡Aceptaste el desafío! Se le avisó al organizador ⚽');
+                    setToastMessage(
+                      seleccionado.tipoDesafio === 'busqueda_jugador'
+                        ? '¡Te sumaste a la convocatoria! Se le avisó al capitán 🧤'
+                        : '¡Aceptaste el desafío! Se le avisó al organizador ⚽'
+                    );
                     setTimeout(() => setToastMessage(''), 4000);
                     setSeleccionado(null);
                   } catch (err: any) {
@@ -1030,7 +1286,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 }}
                 className="w-full h-13 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-2xl font-black shadow-[0_0_20px_rgba(245,158,11,0.35)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm cursor-pointer"
               >
-                Aceptar Desafío
+                {seleccionado.tipoDesafio === 'busqueda_jugador' ? 'Sumarme al Partido (Agente Libre)' : 'Aceptar Desafío con mi Equipo'}
               </button>
             </div>
           )}
@@ -1045,12 +1301,17 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 <div className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 w-4 h-4 rounded-full border-2 border-zinc-900 shadow-sm" title="Disponible hoy" />
               </div>
 
-              {/* Título centralizado + Media */}
+              {/* Título centralizado + Media estilo FIFA */}
               <div className="flex items-center justify-center gap-2 flex-wrap mb-2 px-4">
                 <h3 className="text-white font-black text-xl tracking-tight">{seleccionado.apodo}</h3>
-                <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-lg font-black text-xs tracking-wide shadow-sm">
-                  M {seleccionado.media}
-                </span>
+                {(() => {
+                  const tema = obtenerTemaSegunMedia(seleccionado.media);
+                  return (
+                    <span className={`px-2.5 py-0.5 rounded-lg font-black text-xs tracking-wider shadow-sm ${tema.badgeMediaClass}`}>
+                      {tema.nombreTier} {seleccionado.media}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Badges de Posición y Fair Play centralizados */}
@@ -1059,7 +1320,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                   {seleccionado.posicion}
                 </span>
                 <span className="bg-amber-400/10 text-amber-400 px-3 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 font-bold">
-                  ⭐ {seleccionado.fairPlay} FP
+                  ⭐ {seleccionado.fairPlay}% Fair Play
                 </span>
               </div>
 
@@ -1092,6 +1353,32 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           )}
 
         </div>
+      )}
+
+      {/* Modal Pactar Desafío Rápido entre Capitanes */}
+      {mostrarModalDesafio && seleccionado?.type === 'equipo' && usuario && (
+        <ModalProponerDesafio
+          abierto={mostrarModalDesafio}
+          onCerrar={() => setMostrarModalDesafio(false)}
+          rival={{
+            equipoId: seleccionado.equipoId,
+            nombre: seleccionado.nombre,
+            modalidad: seleccionado.modalidad,
+            escudoUrl: seleccionado.escudoUrl,
+            captainId: seleccionado.captainId,
+            divisionInfo: seleccionado.divisionInfo,
+          }}
+          usuarioActual={{
+            uid: usuario.uid,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+          }}
+          onDesafioEnviado={(mensaje) => {
+            setToastMessage(mensaje);
+            setTimeout(() => setToastMessage(''), 4500);
+            setSeleccionado(null);
+          }}
+        />
       )}
     </div>
   );

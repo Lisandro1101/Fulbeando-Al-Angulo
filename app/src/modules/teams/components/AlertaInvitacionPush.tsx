@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Shield, Check, X, Loader2, Trophy, UserPlus } from 'lucide-react';
+import { Bell, Shield, Check, X, Loader2, Trophy, UserPlus, Swords, Clock, MapPin, MessageSquareQuote, ArrowRightLeft } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 import {
   escucharInvitacionesPendientes,
   responderInvitacion,
+  responderDesafioEquipo,
   unirseAEquipo,
   incorporarRefuerzoAEquipo,
   type InvitacionEquipo,
@@ -13,12 +14,21 @@ import { confirmarSuplente, rechazarSuplente } from '@/modules/alertas/repositor
 import { dispararNotificacionPushLocal } from '@/modules/notifications/pushService';
 import { Toast } from '@/modules/ui/overlays';
 
+const CHIPS_CONTRAOFERTA = [
+  'Preferimos 30 min más tarde ⏰',
+  'Nos queda mejor el Sábado 📅',
+  'Tenemos cancha nosotros 🟢',
+  '¿Se puede pasar a F7? ⚽',
+];
+
 export const AlertaInvitacionPush: React.FC = () => {
   const sesion = useSesion();
   const navigate = useNavigate();
   const [invitaciones, setInvitaciones] = useState<InvitacionEquipo[]>([]);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
   const [toastExito, setToastExito] = useState<string | null>(null);
+  const [modoContraoferta, setModoContraoferta] = useState(false);
+  const [contraofertaSeleccionada, setContraofertaSeleccionada] = useState(CHIPS_CONTRAOFERTA[0]);
 
   useEffect(() => {
     if (!sesion.user) {
@@ -33,7 +43,10 @@ export const AlertaInvitacionPush: React.FC = () => {
         let tituloNotif = '¡Alerta de Partido en Fulbeando!';
         let cuerpoNotif = `${nombreEmisor} te envió una notificación.`;
 
-        if (masReciente.tipo === 'desafio_aceptado') {
+        if (masReciente.tipo === 'desafio_equipo') {
+          tituloNotif = '¡Desafío de Partido! ⚽';
+          cuerpoNotif = masReciente.mensaje || `${masReciente.equipoNombre} desafió a tu equipo a un partido.`;
+        } else if (masReciente.tipo === 'desafio_aceptado') {
           tituloNotif = '¡Aceptaron tu desafío de partido! ⚽';
           cuerpoNotif = masReciente.mensaje || `${nombreEmisor} aceptó el desafío para jugar con ${masReciente.equipoNombre}.`;
         } else if (masReciente.tipo === 'postulacion_partido') {
@@ -66,12 +79,18 @@ export const AlertaInvitacionPush: React.FC = () => {
 
   const tipo = invitacionActual.tipo || 'invitacion_equipo';
   const nombreEmisor = invitacionActual.remitenteNombre || invitacionActual.capitanNombre || 'Un jugador';
+  const pacto = invitacionActual.pactoPartido;
 
   const handleAceptar = async () => {
     if (!sesion.user || !invitacionActual) return;
     setProcesandoId(invitacionActual.id);
     try {
-      if (tipo === 'invitacion_equipo') {
+      if (tipo === 'desafio_equipo') {
+        await responderDesafioEquipo(invitacionActual.id, 'pactado');
+        setToastExito(`¡Partido pactado contra ${invitacionActual.equipoNombre}! ⚽ Agendado en Mi Equipo`);
+        setTimeout(() => setToastExito(null), 4000);
+        navigate('/equipo');
+      } else if (tipo === 'invitacion_equipo') {
         await unirseAEquipo(invitacionActual.equipoId, sesion.user.uid);
         await responderInvitacion(invitacionActual.id, 'aceptada');
         setToastExito(`¡Te uniste a ${invitacionActual.equipoNombre}! ⚽`);
@@ -107,14 +126,41 @@ export const AlertaInvitacionPush: React.FC = () => {
     }
   };
 
+  const handleContraoferta = async () => {
+    if (!sesion.user || !invitacionActual) return;
+    setProcesandoId(invitacionActual.id);
+    try {
+      const nombreUsuario = sesion.usuario?.nombre || 'Capitán';
+      await responderDesafioEquipo(invitacionActual.id, 'contraoferta', {
+        emisorUid: sesion.user.uid,
+        emisorNombre: nombreUsuario,
+        equipoNombre: invitacionActual.destinatarioNombre || 'Equipo Rival',
+        pingTexto: contraofertaSeleccionada,
+      });
+      setToastExito('Contraoferta enviada al rival 🔄');
+      setTimeout(() => setToastExito(null), 3500);
+      setModoContraoferta(false);
+    } catch (err: any) {
+      console.error('Error enviando contraoferta:', err);
+      setToastExito(err?.message || 'Error al enviar contraoferta');
+      setTimeout(() => setToastExito(null), 3000);
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
   const handleRechazar = async () => {
     if (!invitacionActual) return;
     setProcesandoId(invitacionActual.id);
     try {
-      if (tipo === 'postulacion_partido' && invitacionActual.alertaId) {
+      if (tipo === 'desafio_equipo') {
+        await responderDesafioEquipo(invitacionActual.id, 'rechazado');
+      } else if (tipo === 'postulacion_partido' && invitacionActual.alertaId) {
         await rechazarSuplente(invitacionActual.alertaId, invitacionActual.remitenteUid).catch(() => {});
+        await responderInvitacion(invitacionActual.id, 'rechazada');
+      } else {
+        await responderInvitacion(invitacionActual.id, 'rechazada');
       }
-      await responderInvitacion(invitacionActual.id, 'rechazada');
     } catch (err) {
       console.error('Error al rechazar alerta:', err);
     } finally {
@@ -128,12 +174,14 @@ export const AlertaInvitacionPush: React.FC = () => {
 
       {/* Alerta Push Modal Interactivo */}
       <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-        <div role="dialog" aria-modal="true" aria-label="Invitación a equipo" className="relative w-full max-w-sm bg-zinc-900 border-2 border-amber-500/80 rounded-3xl p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-slide-up text-center">
+        <div role="dialog" aria-modal="true" aria-label="Alerta de partido" className="relative w-full max-w-sm bg-zinc-900 border-2 border-amber-500/80 rounded-3xl p-5 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-slide-up text-center">
           
           {/* Header Push Alert Badge */}
-          <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-5 animate-pulse">
+          <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4 animate-pulse">
             <Bell className="w-3.5 h-3.5" />
-            {tipo === 'desafio_aceptado'
+            {tipo === 'desafio_equipo'
+              ? 'Alerta Push • Desafío de Equipos'
+              : tipo === 'desafio_aceptado'
               ? 'Alerta Push • Desafío Aceptado'
               : tipo === 'postulacion_partido'
               ? 'Alerta Push • Jugador Disponible'
@@ -141,8 +189,10 @@ export const AlertaInvitacionPush: React.FC = () => {
           </div>
 
           {/* Icono / Escudo */}
-          <div className="w-20 h-20 mx-auto rounded-full bg-zinc-800 border-4 border-amber-500 flex items-center justify-center overflow-hidden mb-4 shadow-xl">
-            {tipo === 'desafio_aceptado' ? (
+          <div className="w-18 h-18 sm:w-20 sm:h-20 mx-auto rounded-full bg-zinc-800 border-4 border-amber-500 flex items-center justify-center overflow-hidden mb-3 shadow-xl">
+            {tipo === 'desafio_equipo' ? (
+              <Swords className="w-9 h-9 sm:w-10 sm:h-10 text-amber-400" />
+            ) : tipo === 'desafio_aceptado' ? (
               <Trophy className="w-10 h-10 text-amber-400" />
             ) : tipo === 'postulacion_partido' ? (
               <UserPlus className="w-10 h-10 text-amber-400" />
@@ -158,64 +208,158 @@ export const AlertaInvitacionPush: React.FC = () => {
           </div>
 
           {/* Título y Mensaje */}
-          <h3 className="text-xl font-black text-white mb-2">
-            {tipo === 'desafio_aceptado'
+          <h3 className="text-lg sm:text-xl font-black text-white mb-1.5">
+            {tipo === 'desafio_equipo'
+              ? `¡Desafío de ${invitacionActual.equipoNombre}!`
+              : tipo === 'desafio_aceptado'
               ? '¡Aceptaron tu desafío!'
               : tipo === 'postulacion_partido'
               ? '¡Quieren sumarse a tu partido!'
               : '¡Te invitaron a un equipo!'}
           </h3>
 
-          <p className="text-sm text-zinc-300 mb-6 leading-relaxed">
-            {tipo === 'desafio_aceptado' ? (
-              <>
-                <span className="font-bold text-amber-400">{nombreEmisor}</span> aceptó sumarse a jugar con{' '}
-                <span className="font-black text-white">{invitacionActual.equipoNombre}</span> ese día.
-              </>
-            ) : tipo === 'postulacion_partido' ? (
-              <>
-                <span className="font-bold text-amber-400">{nombreEmisor}</span> se postuló para sumarse hoy al partido{' '}
-                {invitacionActual.posicion && (
-                  <>
-                    como <span className="font-bold text-white">{invitacionActual.posicion}</span>
-                  </>
+          {tipo === 'desafio_equipo' && pacto ? (
+            <div className="mb-5 text-left bg-zinc-950/70 border border-zinc-800 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                <span className="font-black text-amber-400">{pacto.modalidad}</span>
+                {pacto.equipoDesafianteDivision && (
+                  <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                    {pacto.equipoDesafianteDivision}
+                  </span>
                 )}
-                .
-              </>
-            ) : (
-              <>
-                <span className="font-bold text-amber-400">{nombreEmisor}</span> te invitó a unirte al plantel de{' '}
-                <span className="font-black text-white">{invitacionActual.equipoNombre}</span>.
-              </>
-            )}
-          </p>
-
-          {/* Botones de acción */}
-          <div className="space-y-3">
-            <button
-              onClick={handleAceptar}
-              disabled={Boolean(procesandoId)}
-              className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] active:scale-95 disabled:opacity-60"
-            >
-              {procesandoId ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+              <div className="flex items-center gap-2 text-zinc-300">
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-bold">{pacto.fechaTentativa}</span>
+              </div>
+              <div className="flex items-center gap-2 text-zinc-300">
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  {pacto.canchaOpcion === 'con_cancha'
+                    ? `Cancha: ${pacto.predioNombre || 'Ya reservada'}`
+                    : pacto.canchaOpcion === 'busca_cancha'
+                    ? 'Buscamos cancha a medias'
+                    : 'Proponen que elijan predio'}
+                </span>
+              </div>
+              {pacto.pingsTacticos && pacto.pingsTacticos.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-zinc-800/80 flex items-start gap-1.5 text-zinc-400 italic">
+                  <MessageSquareQuote className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <span className="line-clamp-2">"{pacto.pingsTacticos[pacto.pingsTacticos.length - 1].texto}"</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-300 mb-6 leading-relaxed">
+              {tipo === 'desafio_aceptado' ? (
+                <>
+                  <span className="font-bold text-amber-400">{nombreEmisor}</span> aceptó sumarse a jugar con{' '}
+                  <span className="font-black text-white">{invitacionActual.equipoNombre}</span> ese día.
+                </>
+              ) : tipo === 'postulacion_partido' ? (
+                <>
+                  <span className="font-bold text-amber-400">{nombreEmisor}</span> se postuló para sumarse hoy al partido{' '}
+                  {invitacionActual.posicion && (
+                    <>
+                      como <span className="font-bold text-white">{invitacionActual.posicion}</span>
+                    </>
+                  )}
+                  .
+                </>
               ) : (
                 <>
-                  <Check className="w-5 h-5" />
-                  {tipo === 'invitacion_equipo' ? 'Aceptar y Unirme' : 'Confirmar Jugador'}
+                  <span className="font-bold text-amber-400">{nombreEmisor}</span> te invitó a unirte al plantel de{' '}
+                  <span className="font-black text-white">{invitacionActual.equipoNombre}</span>.
                 </>
               )}
-            </button>
+            </p>
+          )}
 
-            <button
-              onClick={handleRechazar}
-              disabled={Boolean(procesandoId)}
-              className="w-full flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold py-3 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-60"
-            >
-              <X className="w-4 h-4" />
-              Descartar
-            </button>
-          </div>
+          {/* Subpanel de Contraoferta rápida */}
+          {tipo === 'desafio_equipo' && modoContraoferta ? (
+            <div className="mb-4 bg-zinc-950/80 border border-amber-500/40 rounded-2xl p-3 text-left animate-fade-in">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-2">
+                Seleccioná una contraoferta rápida:
+              </span>
+              <div className="space-y-1.5 mb-3">
+                {CHIPS_CONTRAOFERTA.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setContraofertaSeleccionada(chip)}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold transition border ${
+                      contraofertaSeleccionada === chip
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModoContraoferta(false)}
+                  className="w-1/3 py-2 bg-zinc-900 text-zinc-400 rounded-xl text-xs font-bold"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={handleContraoferta}
+                  disabled={Boolean(procesandoId)}
+                  className="w-2/3 py-2 bg-amber-500 text-zinc-950 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition"
+                >
+                  {procesandoId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Enviar Contraoferta'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Botones de acción estándar */
+            <div className="space-y-2.5">
+              <button
+                onClick={handleAceptar}
+                disabled={Boolean(procesandoId)}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black py-3 sm:py-3.5 rounded-2xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] active:scale-95 disabled:opacity-60 text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
+              >
+                {procesandoId ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    {tipo === 'desafio_equipo'
+                      ? 'Aceptar Desafío (Cerrar Partido)'
+                      : tipo === 'invitacion_equipo'
+                      ? 'Aceptar y Unirme'
+                      : 'Confirmar Jugador'}
+                  </>
+                )}
+              </button>
+
+              {tipo === 'desafio_equipo' && (
+                <button
+                  type="button"
+                  onClick={() => setModoContraoferta(true)}
+                  disabled={Boolean(procesandoId)}
+                  className="w-full flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-800 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700/60 transition-all active:scale-95 text-xs cursor-pointer"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  Contraoferta Rápida
+                </button>
+              )}
+
+              <button
+                onClick={handleRechazar}
+                disabled={Boolean(procesandoId)}
+                className="w-full flex items-center justify-center gap-1.5 bg-transparent hover:bg-zinc-800/50 text-zinc-400 hover:text-white font-bold py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-60 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                {tipo === 'desafio_equipo' ? 'Rechazar Desafío' : 'Descartar'}
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
     </>

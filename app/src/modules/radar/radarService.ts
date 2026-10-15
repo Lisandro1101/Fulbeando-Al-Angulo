@@ -85,6 +85,8 @@ export interface RadarPinEquipo extends RadarPinBase {
   modalidad: string
   cantidadJugadores: number
   escudoUrl: string | null
+  fairPlayScore?: number
+  stats?: { wins: number; draws: number; losses: number }
 }
 export interface RadarPinDesafio extends RadarPinBase {
   t: 'desafio'
@@ -95,6 +97,9 @@ export interface RadarPinDesafio extends RadarPinBase {
   fechaUnix: number
   conCancha: boolean
   descripcion: string | null
+  tipoDesafio?: 'partido_equipo' | 'busqueda_jugador'
+  posicionBuscada?: string | null
+  jugadoresFaltantes?: number
 }
 export interface RadarPinJugador extends RadarPinBase {
   t: 'jugador'

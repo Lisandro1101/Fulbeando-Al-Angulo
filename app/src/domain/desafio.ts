@@ -19,7 +19,40 @@ export type EstadoDesafio = 'ABIERTO' | 'ACEPTADO' | 'CANCELADO' | 'FINALIZADO'
 export type ModalidadDesafio = 'F5' | 'F7' | 'F8' | 'F11'
 
 /** Si el equipo ya tiene cancha reservada o busca pagarla a medias. */
-export type EstadoCanchaDesafio = 'CON_CANCHA' | 'BUSCA_CANCHA'
+export type TipoDesafio = 'partido_equipo' | 'busqueda_jugador'
+
+export interface PingTactico {
+  emisorUid: string
+  emisorNombre: string
+  equipoNombre: string
+  texto: string
+  fecha: number
+}
+
+export type EstadoPacto = 'propuesto' | 'contraoferta' | 'pactado' | 'rechazado' | 'expirado'
+
+export interface PropuestaPactoPartido {
+  id: string
+  modalidad: ModalidadDesafio
+  fechaTentativa: string
+  fechaUnix: number
+  canchaOpcion: 'con_cancha' | 'busca_cancha' | 'rival_propone'
+  predioNombre?: string
+  predioId?: string
+  pingsTacticos: PingTactico[]
+  estado: EstadoPacto
+  equipoDesafianteId: string
+  equipoDesafianteNombre: string
+  equipoDesafianteEscudoUrl: string | null
+  equipoDesafianteDivision?: string
+  equipoRivalId: string
+  equipoRivalNombre: string
+  equipoRivalEscudoUrl: string | null
+  creadoPorUid: string
+  destinatarioUid: string
+  creadoEn: number
+  actualizadoEn: number
+}
 
 export interface Desafio {
   id: string
@@ -33,6 +66,10 @@ export interface Desafio {
   modalidad: ModalidadDesafio
   estadoCancha: EstadoCanchaDesafio
   estado: EstadoDesafio
+
+  /** Discriminador para el Radar: buscar rival vs buscar jugador faltante */
+  tipoDesafio?: TipoDesafio
+  jugadoresFaltantes?: number
 
   /** --- PUENTE CON FULBEANDO (opcionales) --- */
   /** Turno reservado del modulo FULBEANDO, si el equipo ya pago la senia. */
