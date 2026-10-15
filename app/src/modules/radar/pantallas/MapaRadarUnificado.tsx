@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, X, Search, Phone, Clock, Target, User } from 'lucide-react';
+import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation } from 'lucide-react';
 import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha } from '../radarService';
 import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
@@ -265,6 +265,9 @@ interface BaseEntity {
 interface CanchaEntity extends BaseEntity {
   type: 'cancha';
   nombre: string;
+  direccion?: string;
+  barrio?: string;
+  ciudad?: string;
   telefono?: string;
   tipo: string;
   cantidadCanchas: number;
@@ -378,8 +381,20 @@ export const formatearParaWhatsApp = (rawTel: string): string => {
 const entidadDePin = (pin: RadarPin): RadarEntity => {
   const base = { id: pin.id, lat: pin.lat, lng: pin.lng, distanciaKm: pin.d };
   switch (pin.t) {
-    case 'cancha':
-      return { ...base, type: 'cancha', nombre: pin.nombre, telefono: (pin as RadarPinCancha).telefono, tipo: pin.tipo, cantidadCanchas: pin.cantidadCanchas };
+    case 'cancha': {
+      const p = pin as RadarPinCancha;
+      return {
+        ...base,
+        type: 'cancha',
+        nombre: p.nombre,
+        direccion: p.direccion,
+        barrio: p.barrio,
+        ciudad: p.ciudad,
+        telefono: p.telefono,
+        tipo: p.tipo,
+        cantidadCanchas: p.cantidadCanchas,
+      };
+    }
     case 'equipo':
       return { ...base, type: 'equipo', equipoId: pin.id, nombre: pin.nombre, modalidad: pin.modalidad, cantidadJugadores: pin.cantidadJugadores, escudoUrl: pin.escudoUrl };
     case 'desafio':
@@ -492,22 +507,34 @@ export const MapaRadarUnificado: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
   const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
 
-  // Si se selecciona un predio y no vino con teléfono en el pin rápido, lo obtenemos
+  // Si se selecciona un predio y no vino con teléfono o dirección en el pin rápido, lo obtenemos
   useEffect(() => {
-    if (seleccionado?.type === 'cancha' && !seleccionado.telefono) {
+    if (seleccionado?.type === 'cancha' && (!seleccionado.telefono || !seleccionado.direccion)) {
       obtenerPredio(seleccionado.id).then((p) => {
-        if (p?.telefono) {
+        if (p) {
           setSeleccionado((prev) =>
             prev && prev.id === p.id && prev.type === 'cancha'
-              ? { ...prev, telefono: p.telefono }
+              ? {
+                  ...prev,
+                  telefono: p.telefono || prev.telefono,
+                  direccion: p.direccion || prev.direccion,
+                  barrio: p.barrio || prev.barrio,
+                  ciudad: p.ciudad || prev.ciudad,
+                }
               : prev
           );
         }
       }).catch((err) => {
-        console.warn('No se pudo cargar el teléfono del predio:', err);
+        console.warn('No se pudo cargar los datos completos del predio:', err);
       });
     }
   }, [seleccionado]);
+
+  const abrirComoLlegar = (cancha: CanchaEntity) => {
+    // Redirección directa a Google Maps en modo navegación / ruta hacia las coordenadas del predio
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${cancha.lat},${cancha.lng}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const contactarPredioPorWhatsApp = async (cancha: CanchaEntity) => {
     try {
@@ -593,6 +620,9 @@ export const MapaRadarUnificado: React.FC = () => {
         lng: p.geo.lng,
         distanciaKm: p.distanciaKm,
         nombre: p.nombre,
+        direccion: p.direccion,
+        barrio: p.barrio,
+        ciudad: p.ciudad,
         telefono: p.telefono,
         tipo: canchas[0]?.tipo ?? 'Sintetico',
         cantidadCanchas: canchas.length
@@ -848,28 +878,65 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
               </div>
               <h3 className="text-white font-black text-xl tracking-tight px-4">{seleccionado.nombre}</h3>
               <p className="text-xs text-zinc-400 mt-1 font-semibold">{seleccionado.cantidadCanchas} Canchas • {seleccionado.tipo}</p>
-              <span className="inline-block mt-2 mb-6 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
-                Predio Verificado
-              </span>
               
-              <div className="grid grid-cols-2 gap-3 w-full">
+              <div className="flex items-center justify-center gap-2 mt-2 mb-3">
+                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                  Predio Verificado
+                </span>
+                <span className="bg-zinc-800 text-zinc-400 border border-zinc-700/80 px-2.5 py-1 rounded-full text-[11px] font-bold">
+                  {seleccionado.distanciaKm.toFixed(1)} km
+                </span>
+              </div>
+
+              {/* DIRECCIÓN REGISTRADA */}
+              <div className="w-full bg-zinc-800/60 border border-zinc-700/70 rounded-2xl p-3 mb-4 text-left flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    Dirección registrada
+                  </span>
+                  <p className="text-white text-sm font-bold truncate">
+                    {seleccionado.direccion?.trim() || 'Dirección registrada en el predio'}
+                  </p>
+                  {(seleccionado.barrio || seleccionado.ciudad) && (
+                    <p className="text-xs text-zinc-400 truncate mt-0.5">
+                      {[seleccionado.barrio, seleccionado.ciudad].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* ACCIONES: CÓMO LLEGAR, WHATSAPP Y VER / RESERVAR */}
+              <div className="grid grid-cols-2 gap-2.5 w-full mb-2.5">
+                <button 
+                  onClick={() => abrirComoLlegar(seleccionado)}
+                  title="Cómo llegar con Google Maps"
+                  className="h-12 bg-zinc-800/90 hover:bg-zinc-800 text-white py-2.5 px-3 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm shadow-md"
+                >
+                  <Navigation className="w-4 h-4 text-sky-400" />
+                  <span>Cómo llegar</span>
+                </button>
+
                 <button 
                   onClick={() => contactarPredioPorWhatsApp(seleccionado)}
                   disabled={contactandoWhatsapp}
                   title="Contactar al predio por WhatsApp"
-                  className="h-13 bg-zinc-800/90 hover:bg-zinc-800 text-white py-3 px-4 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-sm shadow-md disabled:opacity-50"
+                  className="h-12 bg-zinc-800/90 hover:bg-zinc-800 text-white py-2.5 px-3 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm shadow-md disabled:opacity-50"
                 >
                   <Phone className="w-4 h-4 text-emerald-400" /> 
                   <span>{contactandoWhatsapp ? 'Abriendo...' : 'WhatsApp'}</span>
                 </button>
-                <button 
-                  onClick={() => navigate(`/reservar/${seleccionado.id}`, { state: { backgroundLocation: location } })}
-                  className="h-13 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 py-3 px-3 rounded-2xl font-black shadow-[0_0_20px_rgba(16,185,129,0.35)] flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm whitespace-nowrap"
-                >
-                  <Clock className="w-4 h-4" /> 
-                  <span>Ver y reservar</span>
-                </button>
               </div>
+
+              <button 
+                onClick={() => navigate(`/reservar/${seleccionado.id}`, { state: { backgroundLocation: location } })}
+                className="w-full h-12 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-2xl font-black shadow-[0_0_20px_rgba(16,185,129,0.35)] flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm whitespace-nowrap uppercase tracking-wider"
+              >
+                <Clock className="w-4 h-4" /> 
+                <span>Ver y reservar</span>
+              </button>
             </div>
           )}
 
