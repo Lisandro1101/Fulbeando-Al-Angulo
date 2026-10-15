@@ -108,6 +108,7 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         ...base,
         t: 'cancha',
         nombre: str(raw.nombre),
+        telefono: str(raw.telefono),
         tipo: str(primera?.tipo) || 'Sintetico',
         cantidadCanchas: canchas.length,
       }

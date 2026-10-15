@@ -72,6 +72,7 @@ interface RadarPinBase {
 export interface RadarPinCancha extends RadarPinBase {
   t: 'cancha'
   nombre: string
+  telefono?: string
   tipo: string
   cantidadCanchas: number
 }

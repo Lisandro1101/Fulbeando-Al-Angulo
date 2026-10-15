@@ -3,8 +3,8 @@ import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserPlus, X, Search, Phone, Clock, Target, User } from 'lucide-react';
-import { listarDesafiosCercanos, consultarRadar, type RadarPin } from '../radarService';
-import { listarPrediosCercanos } from '@/modules/predios/repositorio';
+import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha } from '../radarService';
+import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
 import { listarEquiposCercanos, notificarAceptacionDesafio } from '@/modules/teams/teamService';
 import { useSesion } from '@/modules/auth/useSesion';
@@ -23,36 +23,93 @@ const LOCALIDADES_FALLBACK = [
   { nombre: 'Rosario', lat: -32.9442, lng: -60.6505 },
 ];
 
-// 🟢 Pin Verde Esmeralda: Predios/Canchas
+// SVGs para Leaflet Pins y Marcadores HTML
+export const SVG_CANCHA_HTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="18" height="20" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3.5"/><path d="M8 2v3.5a0.5 0.5 0 0 0 .5.5h7a0.5 0.5 0 0 0 .5-.5V2"/><path d="M8 22v-3.5a0.5 0.5 0 0 1 .5-.5h7a0.5 0.5 0 0 1 .5.5V22"/></svg>`;
+
+export const SVG_EQUIPO_HTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.25)"/><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="2" x2="12" y2="22"/><path d="M4.5 9h15"/></svg>`;
+
+export const SVG_DESAFIO_HTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="rgba(255,255,255,0.18)"/><circle cx="12" cy="12" r="10"/><polygon points="12 7 15.5 9.5 14 13.5 10 13.5 8.5 9.5" fill="#FFFFFF"/><line x1="12" y1="7" x2="12" y2="2"/><line x1="15.5" y1="9.5" x2="20.5" y2="7.5"/><line x1="14" y1="13.5" x2="18" y2="18.5"/><line x1="10" y1="13.5" x2="6" y2="18.5"/><line x1="8.5" y1="9.5" x2="3.5" y2="7.5"/></svg>`;
+
+export const SVG_JUGADOR_HTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#FFFFFF"><circle cx="13" cy="3.5" r="2.2"/><path d="M12.5 6.8c-.7 0-1.3.4-1.6 1L8.2 12.5l1.6.9 1.6-3.2 1.2 1.1-2.8 7.8 1.9.7 2.8-7.2 1.8 1.9V21h2.2v-7.8l-2.4-2.7 1.2-2.9c.3-.7-.2-1.4-1-1.4h-2.2z"/><circle cx="19.5" cy="19.5" r="2.2"/></svg>`;
+
+export const SVG_CLUSTER_POR_TIPO: Record<RadarEntityType, string> = {
+  cancha: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="18" height="20" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3.5"/><path d="M8 2v3.5a0.5 0.5 0 0 0 .5.5h7a0.5 0.5 0 0 0 .5-.5V2"/><path d="M8 22v-3.5a0.5 0.5 0 0 1 .5-.5h7a0.5 0.5 0 0 1 .5.5V22"/></svg>`,
+  equipo: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.25)"/><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="2" x2="12" y2="22"/><path d="M4.5 9h15"/></svg>`,
+  desafio: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="rgba(255,255,255,0.18)"/><circle cx="12" cy="12" r="10"/><polygon points="12 7 15.5 9.5 14 13.5 10 13.5 8.5 9.5" fill="#FFFFFF"/><line x1="12" y1="7" x2="12" y2="2"/><line x1="15.5" y1="9.5" x2="20.5" y2="7.5"/><line x1="14" y1="13.5" x2="18" y2="18.5"/><line x1="10" y1="13.5" x2="6" y2="18.5"/><line x1="8.5" y1="9.5" x2="3.5" y2="7.5"/></svg>`,
+  jugador: `<svg viewBox="0 0 24 24" width="20" height="20" fill="#FFFFFF"><circle cx="13" cy="3.5" r="2.2"/><path d="M12.5 6.8c-.7 0-1.3.4-1.6 1L8.2 12.5l1.6.9 1.6-3.2 1.2 1.1-2.8 7.8 1.9.7 2.8-7.2 1.8 1.9V21h2.2v-7.8l-2.4-2.7 1.2-2.9c.3-.7-.2-1.4-1-1.4h-2.2z"/><circle cx="19.5" cy="19.5" r="2.2"/></svg>`,
+};
+
+// Componentes SVG para UI en React
+export const IconoCancha = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="2" width="18" height="20" rx="2" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <circle cx="12" cy="12" r="3.5" />
+    <path d="M8 2v3.5a0.5 0.5 0 0 0 .5.5h7a0.5 0.5 0 0 0 .5-.5V2" />
+    <path d="M8 22v-3.5a0.5 0.5 0 0 1 .5-.5h7a0.5 0.5 0 0 1 .5.5V22" />
+  </svg>
+);
+
+export const IconoEquipo = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor" fillOpacity="0.25" />
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <path d="M4.5 9h15" />
+  </svg>
+);
+
+export const IconoDesafio = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.18" />
+    <circle cx="12" cy="12" r="10" />
+    <polygon points="12 7 15.5 9.5 14 13.5 10 13.5 8.5 9.5" fill="currentColor" />
+    <line x1="12" y1="7" x2="12" y2="2" />
+    <line x1="15.5" y1="9.5" x2="20.5" y2="7.5" />
+    <line x1="14" y1="13.5" x2="18" y2="18.5" />
+    <line x1="10" y1="13.5" x2="6" y2="18.5" />
+    <line x1="8.5" y1="9.5" x2="3.5" y2="7.5" />
+  </svg>
+);
+
+export const IconoJugador = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <circle cx="13" cy="3.5" r="2.2" />
+    <path d="M12.5 6.8c-.7 0-1.3.4-1.6 1L8.2 12.5l1.6.9 1.6-3.2 1.2 1.1-2.8 7.8 1.9.7 2.8-7.2 1.8 1.9V21h2.2v-7.8l-2.4-2.7 1.2-2.9c.3-.7-.2-1.4-1-1.4h-2.2z" />
+    <circle cx="19.5" cy="19.5" r="2.2" />
+  </svg>
+);
+
+// 🟢 Pin Verde Esmeralda: Predios/Canchas (Dibujo de Cancha)
 const iconoPredio = L.divIcon({
   className: 'marcador-predio',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #10B981; border: 3px solid #0F172A; box-shadow: 0 0 15px #10B981; display: flex; align-items: center; justify-content: center; font-size: 14px;">🏟️</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background: #10B981; border: 3px solid #0F172A; box-shadow: 0 0 15px #10B981; display: flex; align-items: center; justify-content: center; color: #fff;">${SVG_CANCHA_HTML}</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
 });
 
-// 🟣 Pin Violeta: Equipos del area
+// 🟣 Pin Violeta: Equipos del area (Silueta de Escudo)
 const iconoEquipo = L.divIcon({
   className: 'marcador-equipo',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #8B5CF6; border: 3px solid #0F172A; box-shadow: 0 0 15px #8B5CF6; display: flex; align-items: center; justify-content: center; font-size: 14px;">🧢</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background: #8B5CF6; border: 3px solid #0F172A; box-shadow: 0 0 15px #8B5CF6; display: flex; align-items: center; justify-content: center; color: #fff;">${SVG_EQUIPO_HTML}</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
 });
 
-// 🔴 Pin Rojo Fuego: Desafíos
+// 🔴 Pin Rojo Fuego: Desafíos (Pelota de Fútbol)
 const iconoDesafio = L.divIcon({
   className: 'marcador-desafio',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #EF4444; border: 3px solid #0F172A; box-shadow: 0 0 15px #EF4444; display: flex; align-items: center; justify-content: center; font-size: 14px;">🛡️</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background: #EF4444; border: 3px solid #0F172A; box-shadow: 0 0 15px #EF4444; display: flex; align-items: center; justify-content: center; color: #fff;">${SVG_DESAFIO_HTML}</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
 });
 
-// 🔵 Pin Azul: Jugador Libre
+// 🔵 Pin Azul: Jugador Libre (Jugador de Fútbol)
 const iconoJugadorLibre = L.divIcon({
   className: 'marcador-jugador',
-  html: `<div style="width: 28px; height: 28px; border-radius: 50%; background: #3B82F6; border: 3px solid #0F172A; box-shadow: 0 0 15px #3B82F6; display: flex; align-items: center; justify-content: center; font-size: 14px;">🏃</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background: #3B82F6; border: 3px solid #0F172A; box-shadow: 0 0 15px #3B82F6; display: flex; align-items: center; justify-content: center; color: #fff;">${SVG_JUGADOR_HTML}</div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
 });
 
 /** Icono de pin segun el tipo de entidad del radar. */
@@ -65,8 +122,8 @@ function iconoDe(tipo: RadarEntityType): L.DivIcon {
 
 const EMOJI_POR_TIPO: Record<RadarEntityType, string> = {
   cancha: '🏟️',
-  equipo: '🧢',
-  desafio: '🛡️',
+  equipo: '🛡️',
+  desafio: '⚽',
   jugador: '🏃',
 };
 
@@ -120,8 +177,8 @@ function infoDeCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature)
 function iconoCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature): L.DivIcon {
   const { total, dominante } = infoDeCluster(indice, f);
   const color = COLOR_POR_TIPO[dominante];
-  const emoji = EMOJI_POR_TIPO[dominante];
-  const html = `<span style="position:relative;display:inline-block"><span style="font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">${emoji}</span><span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9999px;background:${color};color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #0B0F19">${total}</span></span>`;
+  const svg = SVG_CLUSTER_POR_TIPO[dominante];
+  const html = `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#0F172A;border:2.5px solid ${color};box-shadow:0 0 15px ${color}80;color:#fff;">${svg}<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9999px;background:${color};color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #0B0F19">${total}</span></span>`;
   return L.divIcon({
     className: 'cluster-radar',
     html,
@@ -208,6 +265,7 @@ interface BaseEntity {
 interface CanchaEntity extends BaseEntity {
   type: 'cancha';
   nombre: string;
+  telefono?: string;
   tipo: string;
   cantidadCanchas: number;
 }
@@ -266,6 +324,51 @@ const ETIQUETA_POSICION: Record<string, string> = {
   DT: 'DT',
 };
 
+/** Normaliza un número telefónico para abrir un chat de WhatsApp con wa.me */
+export const formatearParaWhatsApp = (rawTel: string): string => {
+  let num = rawTel.replace(/\D/g, '');
+  if (!num) return '';
+
+  // Ya tiene formato internacional argentino completo con 9
+  if (num.startsWith('549')) return num;
+
+  // Empieza con 54 (código de Argentina) pero sin el 9 de celular
+  if (num.startsWith('54')) {
+    return `549${num.slice(2)}`;
+  }
+
+  // Quitar 0 inicial de prefijo interurbano (ej: 011 -> 11)
+  if (num.startsWith('0')) {
+    num = num.slice(1);
+  }
+
+  // Quitar el '15' de celular local si está presente tras el código de área (ej: 11 15 1234 5678 -> 11 1234 5678)
+  if (num.length === 12) {
+    if (num.slice(2, 4) === '15') {
+      num = num.slice(0, 2) + num.slice(4);
+    } else if (num.slice(3, 5) === '15') {
+      num = num.slice(0, 3) + num.slice(5);
+    }
+  }
+
+  // Celular argentino habitual de 10 dígitos (área + local)
+  if (num.length === 10) {
+    return `549${num}`;
+  }
+
+  // Si tiene 11 dígitos y empieza con 9
+  if (num.length === 11 && num.startsWith('9')) {
+    return `54${num}`;
+  }
+
+  // Otros números internacionales (más de 10 dígitos)
+  if (num.length > 10) {
+    return num;
+  }
+
+  return `549${num}`;
+};
+
 /**
  * FASE 2: mapea un pin del radar (DTO corto que devuelve la Cloud Function
  * `radarQuery`) a la entidad que pintan los marcadores. Los labels viven en el
@@ -276,7 +379,7 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
   const base = { id: pin.id, lat: pin.lat, lng: pin.lng, distanciaKm: pin.d };
   switch (pin.t) {
     case 'cancha':
-      return { ...base, type: 'cancha', nombre: pin.nombre, tipo: pin.tipo, cantidadCanchas: pin.cantidadCanchas };
+      return { ...base, type: 'cancha', nombre: pin.nombre, telefono: (pin as RadarPinCancha).telefono, tipo: pin.tipo, cantidadCanchas: pin.cantidadCanchas };
     case 'equipo':
       return { ...base, type: 'equipo', equipoId: pin.id, nombre: pin.nombre, modalidad: pin.modalidad, cantidadJugadores: pin.cantidadJugadores, escudoUrl: pin.escudoUrl };
     case 'desafio':
@@ -387,6 +490,59 @@ export const MapaRadarUnificado: React.FC = () => {
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
 
   const [toastMessage, setToastMessage] = useState('');
+  const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
+
+  // Si se selecciona un predio y no vino con teléfono en el pin rápido, lo obtenemos
+  useEffect(() => {
+    if (seleccionado?.type === 'cancha' && !seleccionado.telefono) {
+      obtenerPredio(seleccionado.id).then((p) => {
+        if (p?.telefono) {
+          setSeleccionado((prev) =>
+            prev && prev.id === p.id && prev.type === 'cancha'
+              ? { ...prev, telefono: p.telefono }
+              : prev
+          );
+        }
+      }).catch((err) => {
+        console.warn('No se pudo cargar el teléfono del predio:', err);
+      });
+    }
+  }, [seleccionado]);
+
+  const contactarPredioPorWhatsApp = async (cancha: CanchaEntity) => {
+    try {
+      setContactandoWhatsapp(true);
+      let tel = cancha.telefono;
+
+      if (!tel) {
+        const predio = await obtenerPredio(cancha.id);
+        tel = predio?.telefono;
+      }
+
+      if (!tel || !tel.trim()) {
+        setToastMessage('Este predio no tiene teléfono de contacto registrado.');
+        setTimeout(() => setToastMessage(''), 3500);
+        return;
+      }
+
+      const telFormateado = formatearParaWhatsApp(tel);
+      if (!telFormateado) {
+        setToastMessage('El número de teléfono del predio no es válido.');
+        setTimeout(() => setToastMessage(''), 3500);
+        return;
+      }
+
+      const mensaje = `Hola ${cancha.nombre}, te consulto desde la app Al Ángulo por el alquiler de canchas.`;
+      const url = `https://wa.me/${telFormateado}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('Error al abrir WhatsApp:', err);
+      setToastMessage('No se pudo abrir WhatsApp para este predio.');
+      setTimeout(() => setToastMessage(''), 3500);
+    } finally {
+      setContactandoWhatsapp(false);
+    }
+  };
   
   const { usuario, cargando: cargandoSesion } = useSesion();
   const { location: geoLoc, requestLocation, setLocation } = useGeolocation(
@@ -437,6 +593,7 @@ export const MapaRadarUnificado: React.FC = () => {
         lng: p.geo.lng,
         distanciaKm: p.distanciaKm,
         nombre: p.nombre,
+        telefono: p.telefono,
         tipo: canchas[0]?.tipo ?? 'Sintetico',
         cantidadCanchas: canchas.length
       };
@@ -595,27 +752,31 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           </button>
           <button
             onClick={() => setFiltroActivo('canchas')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_12px_rgba(16,185,129,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_12px_rgba(16,185,129,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🏟️ Canchas / Predios
+            <IconoCancha className="w-3.5 h-3.5" />
+            <span>Canchas / Predios</span>
           </button>
           <button
             onClick={() => setFiltroActivo('equipos')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white shadow-[0_0_12px_rgba(14,165,233,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white shadow-[0_0_12px_rgba(14,165,233,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🧢 Equipos
+            <IconoEquipo className="w-3.5 h-3.5" />
+            <span>Equipos</span>
           </button>
           <button
             onClick={() => setFiltroActivo('desafios')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950 shadow-[0_0_12px_rgba(245,158,11,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950 shadow-[0_0_12px_rgba(245,158,11,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🛡️ Desafíos
+            <IconoDesafio className="w-3.5 h-3.5" />
+            <span>Desafíos</span>
           </button>
           <button 
             onClick={() => setFiltroActivo('jugadores')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-3.5 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
-            🏃 Jugadores Libres
+            <IconoJugador className="w-3.5 h-3.5" />
+            <span>Jugadores Libres</span>
           </button>
           {cargando && (
             <span className="px-3 py-2 text-[11px] font-bold text-zinc-500 whitespace-nowrap animate-pulse">
@@ -682,8 +843,8 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           
           {seleccionado.type === 'cancha' && (
             <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-emerald-500 ring-4 ring-emerald-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(16,185,129,0.3)] mb-3">
-                🏟️
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-emerald-500 ring-4 ring-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] mb-3">
+                <IconoCancha className="w-8 h-8" />
               </div>
               <h3 className="text-white font-black text-xl tracking-tight px-4">{seleccionado.nombre}</h3>
               <p className="text-xs text-zinc-400 mt-1 font-semibold">{seleccionado.cantidadCanchas} Canchas • {seleccionado.tipo}</p>
@@ -692,9 +853,14 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
               </span>
               
               <div className="grid grid-cols-2 gap-3 w-full">
-                <button className="h-13 bg-zinc-800/90 hover:bg-zinc-800 text-white py-3 px-4 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-sm shadow-md">
+                <button 
+                  onClick={() => contactarPredioPorWhatsApp(seleccionado)}
+                  disabled={contactandoWhatsapp}
+                  title="Contactar al predio por WhatsApp"
+                  className="h-13 bg-zinc-800/90 hover:bg-zinc-800 text-white py-3 px-4 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-sm shadow-md disabled:opacity-50"
+                >
                   <Phone className="w-4 h-4 text-emerald-400" /> 
-                  <span>WhatsApp</span>
+                  <span>{contactandoWhatsapp ? 'Abriendo...' : 'WhatsApp'}</span>
                 </button>
                 <button 
                   onClick={() => navigate(`/reservar/${seleccionado.id}`, { state: { backgroundLocation: location } })}
@@ -709,10 +875,10 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
 
           {seleccionado.type === 'equipo' && (
             <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 ring-4 ring-sky-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(14,165,233,0.3)] mb-3 overflow-hidden">
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 ring-4 ring-sky-500/20 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(14,165,233,0.3)] mb-3 overflow-hidden">
                 {seleccionado.escudoUrl
                   ? <img src={seleccionado.escudoUrl} alt={`Escudo de ${seleccionado.nombre}`} className="w-full h-full object-cover" />
-                  : '🧢'}
+                  : <IconoEquipo className="w-8 h-8 text-sky-400" />}
               </div>
               <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.nombre}</h3>
               <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
@@ -744,8 +910,8 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
 
           {seleccionado.type === 'desafio' && (
             <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 ring-4 ring-amber-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(245,158,11,0.3)] mb-3">
-                🛡️
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 ring-4 ring-amber-500/20 flex items-center justify-center text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)] mb-3">
+                <IconoDesafio className="w-8 h-8" />
               </div>
               <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.equipo}</h3>
               <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
@@ -758,7 +924,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
               <div className={`mb-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
                 {seleccionado.conCancha
                   ? '✅ Cancha ya reservada (turno confirmado)'
-                  : '🏟️ El equipo busca cancha: se coordina al aceptar'}
+                  : '⚽ El equipo busca cancha: se coordina al aceptar'}
               </div>
 
               {seleccionado.descripcion && (
@@ -806,8 +972,8 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             <div className="flex flex-col items-center text-center pt-1">
               {/* Avatar con anillo luminoso y badge de disponibilidad */}
               <div className="relative mb-3">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-blue-500 ring-4 ring-blue-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(37,99,235,0.35)] overflow-hidden">
-                  🏃
+                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-blue-500 ring-4 ring-blue-500/20 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.35)] overflow-hidden">
+                  <IconoJugador className="w-8 h-8" />
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 w-4 h-4 rounded-full border-2 border-zinc-900 shadow-sm" title="Disponible hoy" />
               </div>

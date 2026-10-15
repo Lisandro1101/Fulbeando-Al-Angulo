@@ -290,8 +290,11 @@ export default function CargaDeSena() {
         titulo="Cargar seña"
         subtitulo={`${predio.nombre} · ${predio.barrio}`}
         acciones={
-          <Link to="/" className="text-sm text-ink-muted hover:text-ink">
-            Cambiar
+          <Link
+            to="/"
+            className="text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-700 px-3 py-1.5 rounded-lg border border-zinc-700 transition"
+          >
+            Cambiar predio
           </Link>
         }
       >

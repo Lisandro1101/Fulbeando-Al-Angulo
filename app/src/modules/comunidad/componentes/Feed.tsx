@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Globe, MapPin, UserCheck } from 'lucide-react'
+import { Globe, MapPin, UserCheck, Sparkles, Image, MessageSquare, Filter } from 'lucide-react'
 import { useSesion } from '@/modules/auth/useSesion'
 import type { Publicacion } from '@/domain'
 import { alternarSeguir, escucharSiguiendo } from '../follows'
@@ -20,13 +20,27 @@ const TABS: Tab[] = [
   { id: 'siguiendo', etiqueta: 'Siguiendo', icono: UserCheck },
 ]
 
+type TipoFiltro = 'todos' | 'cartas' | 'fotos' | 'avisos'
+
+const CATEGORIAS_FILTRO: Array<{ id: TipoFiltro; etiqueta: string; icono: typeof MessageSquare }> = [
+  { id: 'todos', etiqueta: 'Todo', icono: MessageSquare },
+  { id: 'cartas', etiqueta: 'Cartas FUT', icono: Sparkles },
+  { id: 'fotos', etiqueta: 'Fotos', icono: Image },
+  { id: 'avisos', etiqueta: 'Avisos & Plantel', icono: Filter },
+]
+
+interface FeedProps {
+  busqueda?: string
+}
+
 /**
  * Muro social de la comunidad: composer + pestanas (Comunidad / Mi zona /
- * Siguiendo) + lista de publicaciones con reacciones y comentarios.
+ * Siguiendo) + filtros de categoria + lista de publicaciones con busqueda en tiempo real.
  */
-export const Feed = () => {
+export const Feed = ({ busqueda = '' }: FeedProps) => {
   const { usuario } = useSesion()
   const [filtro, setFiltro] = useState<FiltroFeed>('comunidad')
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
   const [posts, setPosts] = useState<Publicacion[]>([])
   const [siguiendo, setSiguiendo] = useState<string[]>([])
   const [cargando, setCargando] = useState(true)
@@ -45,8 +59,6 @@ export const Feed = () => {
 
   useEffect(() => {
     if (!miUid) return
-    // "Siguiendo" sin nadie a quien seguir se resuelve con un estado vacio, no
-    // con la query. "Mi zona" sin municipio declarado, idem: no drop a comunidad.
     if (filtro === 'siguiendo' && siguiendo.length === 0) {
       setPosts([])
       setCargando(false)
@@ -78,7 +90,38 @@ export const Feed = () => {
     }
   }
 
+  // Filtrado compuesto: por categoría y por texto de búsqueda
+  const postsFiltrados = posts.filter((pub) => {
+    if (tipoFiltro === 'cartas' && pub.tipo !== 'carta') return false
+    if (tipoFiltro === 'fotos' && (!pub.media || pub.media.length === 0)) return false
+    if (tipoFiltro === 'avisos') {
+      const texto = (pub.texto || '').toLowerCase()
+      if (
+        !texto.includes('#buscoequipo') &&
+        !texto.includes('#faltauno') &&
+        !texto.includes('#desafio') &&
+        !texto.includes('#amistoso') &&
+        !texto.includes('#resultado')
+      ) {
+        return false
+      }
+    }
+
+    if (!busqueda?.trim()) return true
+    const q = busqueda.trim().toLowerCase()
+    const autor = `${pub.autorNombre} ${pub.autorApodo}`.toLowerCase()
+    const texto = (pub.texto || '').toLowerCase()
+    const zona = [pub.autorZona, pub.autorMunicipio].filter(Boolean).join(' ').toLowerCase()
+    return autor.includes(q) || texto.includes(q) || zona.includes(q)
+  })
+
   const vacio = () => {
+    if (busqueda.trim()) {
+      return `No se encontraron publicaciones que coincidan con "${busqueda}".`
+    }
+    if (tipoFiltro !== 'todos') {
+      return `No hay publicaciones en la categoría seleccionada.`
+    }
     if (filtro === 'siguiendo') {
       return 'Todavía no seguís a nadie. Tocá "Seguir" en un post para ver sus novedades acá.'
     }
@@ -92,6 +135,7 @@ export const Feed = () => {
     <section className="space-y-4">
       {usuario && <Composer />}
 
+      {/* Pestañas de audiencia: Comunidad / Mi zona / Siguiendo */}
       <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
         {TABS.map(({ id, etiqueta, icono: Icono }) => {
           const activo = filtro === id
@@ -99,12 +143,34 @@ export const Feed = () => {
             <button
               key={id}
               onClick={() => setFiltro(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition ${
-                activo ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-400 hover:text-white'
+              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition-all cursor-pointer ${
+                activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-400 hover:text-white'
               }`}
             >
               <Icono className="w-3.5 h-3.5" />
               {etiqueta}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Subfiltros por formato de contenido */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        {CATEGORIAS_FILTRO.map(({ id, etiqueta, icono: Icono }) => {
+          const activo = tipoFiltro === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTipoFiltro(id)}
+              className={`flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-full border transition-all shrink-0 cursor-pointer ${
+                activo
+                  ? 'bg-zinc-800 border-zinc-600 text-zinc-100 shadow-sm'
+                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+              }`}
+            >
+              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <span>{etiqueta}</span>
             </button>
           )
         })}
@@ -126,13 +192,24 @@ export const Feed = () => {
             </div>
           ))}
         </div>
-      ) : posts.length === 0 ? (
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center">
-          <p className="text-zinc-400 text-sm">{vacio()}</p>
+      ) : postsFiltrados.length === 0 ? (
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center space-y-2">
+          <p className="text-zinc-300 text-sm font-medium">{vacio()}</p>
+          {(busqueda.trim() || tipoFiltro !== 'todos') && (
+            <button
+              type="button"
+              onClick={() => {
+                setTipoFiltro('todos')
+              }}
+              className="text-xs text-emerald-400 hover:underline font-bold"
+            >
+              Restablecer filtros
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {posts.map((pub) => (
+          {postsFiltrados.map((pub) => (
             <PostCard
               key={pub.id}
               publicacion={pub}
@@ -145,3 +222,4 @@ export const Feed = () => {
     </section>
   )
 }
+

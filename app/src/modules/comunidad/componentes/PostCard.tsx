@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, MessageCircle, Send, Trash2, UserPlus, UserCheck } from 'lucide-react'
+import { Check, Loader2, MessageCircle, Send, Share2, Sparkles, Trash2, UserPlus, UserCheck } from 'lucide-react'
 import { REACCIONES, type Comentario, type Publicacion, type TipoReaccion } from '@/domain'
 import { aMillis } from '@/core/firestore'
 import { useSesion } from '@/modules/auth/useSesion'
@@ -75,12 +75,49 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
   const [cargandoComentarios, setCargandoComentarios] = useState(false)
   const [borrador, setBorrador] = useState('')
   const [enviandoComentario, setEnviandoComentario] = useState(false)
+  const [copiado, setCopiado] = useState(false)
 
   const esMio = usuario?.uid === pub.autorUid
   const media = pub.media ?? []
   const reacciones = pub.reacciones ?? {}
   const totalReacciones = pub.reaccionesCount ?? 0
   const totalComentarios = pub.comentariosCount ?? 0
+
+  const irAlPerfil = () => {
+    if (usuario && usuario.uid === pub.autorUid) {
+      navigate('/perfil')
+    } else {
+      navigate(`/carta/${pub.autorUid}`)
+    }
+  }
+
+  const compartirPost = async () => {
+    const urlCompartir = `${window.location.origin}/carta/${pub.autorUid}`
+    const textoCompartir = pub.texto
+      ? `${pub.autorApodo} en Al Ángulo: "${pub.texto.slice(0, 80)}${pub.texto.length > 80 ? '...' : ''}"`
+      : `Mirá la publicación de ${pub.autorApodo} en Al Ángulo ⚽`
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Al Ángulo - Comunidad',
+          text: textoCompartir,
+          url: urlCompartir,
+        })
+        return
+      } catch {
+        // Fallback a clipboard si el usuario cancela o el navegador falla
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(`${textoCompartir}\n${urlCompartir}`)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2500)
+    } catch (err) {
+      console.warn('No se pudo copiar el enlace:', err)
+    }
+  }
 
   useEffect(() => {
     if (!usuario) return
@@ -158,12 +195,13 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
   const puedeSeguir = usuario && !esMio
 
   return (
-    <article className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+    <article className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700/80 transition-all">
       {/* Cabecera del autor */}
       <header className="flex items-center gap-3 p-4">
         <button
-          onClick={() => navigate(`/carta/${pub.autorUid}`)}
-          className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-700"
+          onClick={irAlPerfil}
+          title="Ver perfil y carta del jugador"
+          className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-700 hover:ring-2 hover:ring-amber-500/50 hover:scale-105 transition-all cursor-pointer"
         >
           {pub.autorFotoUrl?.startsWith('http') ? (
             <img src={pub.autorFotoUrl} alt={pub.autorApodo} className="w-full h-full object-cover" />
@@ -172,20 +210,31 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <button onClick={() => navigate(`/carta/${pub.autorUid}`)} className="block text-left">
-            <p className="font-black text-white truncate leading-tight">{pub.autorApodo}</p>
-            <p className="text-[11px] text-zinc-400 truncate">
-              {[pub.autorZona, pub.autorMunicipio].filter(Boolean).length > 0
-                ? `📍 ${[pub.autorZona, pub.autorMunicipio].filter(Boolean).join(', ')} · `
-                : ''}
-              {tiempoRelativo(pub.createdAt)}
-            </p>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={irAlPerfil}
+              className="text-left font-black text-white hover:text-amber-400 truncate leading-tight cursor-pointer transition"
+              title="Ver perfil y carta"
+            >
+              {pub.autorApodo}
+            </button>
+            {pub.tipo === 'carta' && (
+              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                <Sparkles className="w-2.5 h-2.5" /> Ficha FUT
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+            {[pub.autorZona, pub.autorMunicipio].filter(Boolean).length > 0
+              ? `📍 ${[pub.autorZona, pub.autorMunicipio].filter(Boolean).join(', ')} · `
+              : ''}
+            {tiempoRelativo(pub.createdAt)}
+          </p>
         </div>
         {puedeSeguir && onAlternarSeguir && (
           <button
             onClick={onAlternarSeguir}
-            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition ${
+            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition active:scale-95 cursor-pointer ${
               siguiendo
                 ? 'border-zinc-600 text-zinc-300 hover:border-red-500/60 hover:text-red-400'
                 : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10'
@@ -196,7 +245,7 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           </button>
         )}
         {esMio && (
-          <button onClick={borrarPublicacion} className="text-zinc-500 hover:text-red-400 transition" aria-label="Borrar">
+          <button onClick={borrarPublicacion} className="text-zinc-500 hover:text-red-400 transition p-1 cursor-pointer" aria-label="Borrar">
             <Trash2 className="w-4 h-4" />
           </button>
         )}
@@ -238,38 +287,64 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           </div>
         ))}
 
-      {/* Reacciones */}
+      {/* Reacciones y Compartir */}
       <div className="px-4 py-3 flex items-center gap-2 flex-wrap border-t border-zinc-800 mt-3">
         {REACCIONES.map(({ tipo, emoji, etiqueta }) => {
           const activa = miReaccion === tipo
           const count = reacciones[tipo] ?? 0
+
+          const estilosActivos: Record<TipoReaccion, string> = {
+            gol: 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]',
+            fuego: 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.3)]',
+            mvp: 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.3)]',
+            like: 'bg-sky-500/20 border-sky-500 text-sky-400 shadow-[0_0_12px_rgba(14,165,233,0.3)]',
+            risa: 'bg-yellow-500/20 border-yellow-500 text-yellow-400 shadow-[0_0_12px_rgba(234,179,8,0.3)]',
+          }
+
           return (
             <button
               key={tipo}
               onClick={() => reaccionarA(tipo)}
               disabled={!usuario || reaccionando}
               title={etiqueta}
-              className={`flex items-center gap-1 text-sm py-1.5 px-2.5 rounded-full border transition active:scale-95 disabled:opacity-50 ${
+              className={`flex items-center gap-1 text-sm py-1.5 px-2.5 rounded-full border transition-all duration-150 active:scale-125 hover:scale-105 disabled:opacity-50 cursor-pointer ${
                 activa
-                  ? 'bg-emerald-500/15 border-emerald-500/60'
-                  : 'bg-zinc-800/60 border-zinc-700 hover:border-zinc-500'
+                  ? estilosActivos[tipo]
+                  : 'bg-zinc-800/60 border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800'
               }`}
             >
               <span>{emoji}</span>
-              {count > 0 && <span className="text-[11px] font-bold text-zinc-300">{count}</span>}
+              {count > 0 && <span className={`text-[11px] font-bold ${activa ? 'font-black' : 'text-zinc-300'}`}>{count}</span>}
             </button>
           )
         })}
         {totalReacciones > 0 && (
           <span className="text-[11px] text-zinc-500 font-medium ml-1">{totalReacciones} reacciones</span>
         )}
-        <button
-          onClick={() => setComentariosAbiertos((v) => !v)}
-          className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400 hover:text-white ml-auto transition"
-        >
-          <MessageCircle className="w-4 h-4" />
-          {totalComentarios}
-        </button>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={compartirPost}
+            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition active:scale-95 cursor-pointer ${
+              copiado
+                ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-400'
+                : 'border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:text-white hover:border-zinc-500'
+            }`}
+            title="Compartir publicación"
+          >
+            {copiado ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{copiado ? 'Copiado' : 'Compartir'}</span>
+          </button>
+
+          <button
+            onClick={() => setComentariosAbiertos((v) => !v)}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400 hover:text-white py-1.5 px-2.5 rounded-full bg-zinc-800/60 border border-zinc-700 hover:border-zinc-500 transition cursor-pointer"
+            title="Ver comentarios"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>{totalComentarios}</span>
+          </button>
+        </div>
       </div>
 
       {/* Comentarios */}

@@ -15,12 +15,12 @@ export function Pantalla({
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-canvas">
       <header className="sticky top-0 z-20 border-b border-ink-faint/20 bg-canvas/90 px-4 py-4 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 pr-12">
           <div>
             {titulo && <h1 className="text-lg font-bold text-ink">{titulo}</h1>}
             {subtitulo && <p className="text-sm text-ink-muted">{subtitulo}</p>}
           </div>
-          {acciones}
+          {acciones && <div className="flex items-center gap-2 shrink-0">{acciones}</div>}
         </div>
       </header>
       <main className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 py-4 pb-nav">{children}</main>
