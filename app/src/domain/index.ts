@@ -13,3 +13,9 @@ export * from './solicitud'
 // forma de un equipo y de un desafio: reemplazan al duplicado `types.ts` legacy.
 export * from './equipo'
 export * from './desafio'
+export * from './calculoMedia'
+
+// Modulo "Comunidad": muro social (posts, cartas, reacciones, comentarios) y
+// grafo de seguimiento entre jugadores.
+export * from './publicacion'
+export * from './follow'

@@ -57,15 +57,54 @@ export const uploadImageToR2 = async (
     });
   };
 
-  const isR2Configured = 
-    import.meta.env.VITE_CLOUDFLARE_R2_ACCESS_KEY_ID && 
-    import.meta.env.VITE_CLOUDFLARE_R2_SECRET_ACCESS_KEY && 
-    import.meta.env.VITE_CLOUDFLARE_R2_BUCKET;
+  // Si R2 está explícitamente desactivado por variable de entorno, ir directo a Firebase
+  const useR2 = import.meta.env.VITE_USE_R2 !== 'false';
 
-  if (!isR2Configured) {
-    console.warn('[Al Ángulo Uploader] R2 credentials missing. Falling back to Firebase Storage.');
+  if (!useR2) {
     return fallbackToFirebase();
   }
+
+  const workerUrl = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+
+  // TIER 1: Subida directa mediante Cloudflare Worker hacia R2 (100% gratis, sin cuota Blaze)
+  if (workerUrl) {
+    try {
+      const endpoint = `${workerUrl.replace(/\/+$/, '')}?fileName=${encodeURIComponent(fileName)}&folder=${encodeURIComponent(folder)}`;
+
+      return await new Promise<UploadResult>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentage = Math.round((event.loaded / event.total) * 100);
+            onProgress(percentage);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const res = JSON.parse(xhr.responseText);
+              resolve({ publicUrl: res.publicUrl, fileKey: res.fileKey });
+            } catch {
+              reject(new Error('Respuesta no válida del servidor de subida'));
+            }
+          } else {
+            reject(new Error(`Error Cloudflare Worker: HTTP ${xhr.status}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Interrupción de red hacia Cloudflare'));
+
+        xhr.open('PUT', endpoint, true);
+        xhr.setRequestHeader('Content-Type', blob.type);
+        xhr.send(blob);
+      });
+    } catch (workerErr) {
+      console.warn('[Al Ángulo Uploader] Worker R2 no disponible, intentando Cloud Function / Storage:', workerErr);
+    }
+  }
+
 
   try {
     // 1. Obtener boleto de entrada (Handshake)

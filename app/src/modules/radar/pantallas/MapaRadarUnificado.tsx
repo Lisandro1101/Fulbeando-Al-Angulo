@@ -3,15 +3,18 @@ import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserPlus, X, Search, Phone, Clock, Target, User } from 'lucide-react';
-import { listarDesafiosCercanos } from '../radarService';
-import { listarPrediosPublicos } from '@/modules/predios/repositorio';
+import { listarDesafiosCercanos, consultarRadar, type RadarPin } from '../radarService';
+import { listarPrediosCercanos } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
-import { listarEquiposCercanos } from '@/modules/teams/teamService';
+import { listarEquiposCercanos, notificarAceptacionDesafio } from '@/modules/teams/teamService';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto } from '@/domain';
-import { haversineKm, type Punto } from '@/core/geo/geohash';
-import { separarPisados } from '../separacion';
+import { type Punto } from '@/core/geo/geohash';
+import { appEnv } from '@/core/config';
+import Supercluster from 'supercluster';
+import type { ClusterFeature, PointFeature } from 'supercluster';
 import { useGeolocation } from '@/hooks/useGeolocation';
+import { Toast } from '@/modules/ui/overlays';
 
 const LOCALIDADES_FALLBACK = [
   { nombre: 'CABA', lat: -34.6037, lng: -58.3816 },
@@ -51,6 +54,81 @@ const iconoJugadorLibre = L.divIcon({
   iconSize: [28, 28],
   iconAnchor: [14, 14]
 });
+
+/** Icono de pin segun el tipo de entidad del radar. */
+function iconoDe(tipo: RadarEntityType): L.DivIcon {
+  if (tipo === 'cancha') return iconoPredio;
+  if (tipo === 'equipo') return iconoEquipo;
+  if (tipo === 'desafio') return iconoDesafio;
+  return iconoJugadorLibre;
+}
+
+const EMOJI_POR_TIPO: Record<RadarEntityType, string> = {
+  cancha: '🏟️',
+  equipo: '🧢',
+  desafio: '🛡️',
+  jugador: '🏃',
+};
+
+/** Bounding box del viewport en el orden que espera supercluster: [W, S, E, N]. */
+function bboxDe(map: L.Map): [number, number, number, number] {
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+}
+
+/** Propiedades que viajan dentro del indice de supercluster. */
+type RadarProps = { entity: RadarEntity };
+type RadarClusterFeature = ClusterFeature<RadarProps>;
+type RadarPointFeature = PointFeature<RadarProps>;
+type RadarFeature = RadarClusterFeature | RadarPointFeature;
+
+/** Supercluster devuelve clusters y puntos planos en la misma lista. */
+function esCluster(f: RadarFeature): f is RadarClusterFeature {
+  return (f.properties as { cluster?: boolean }).cluster === true;
+}
+
+const COLOR_POR_TIPO: Record<RadarEntityType, string> = {
+  cancha: '#10B981',
+  equipo: '#8B5CF6',
+  desafio: '#EF4444',
+  jugador: '#3B82F6',
+};
+
+interface InfoCluster {
+  total: number;
+  dominante: RadarEntityType;
+}
+
+/** Desglose de un cluster: cantidad de hojas y tipo dominante. */
+function infoDeCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature): InfoCluster {
+  const total = f.properties.point_count;
+  const hojas = indice.getLeaves(f.properties.cluster_id, total, 0);
+  const conteo = new Map<RadarEntityType, number>();
+  for (const h of hojas) {
+    const t = h.properties.entity.type;
+    conteo.set(t, (conteo.get(t) ?? 0) + 1);
+  }
+  const dominante = [...conteo.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'jugador';
+  return { total, dominante };
+}
+
+/**
+ * Icono del cluster estilo "badge": el emoji del tipo dominante con un
+ * contador de color pegado arriba a la derecha. Agrupa todo lo que comparte
+ * pantalla (canchas, equipos, desafios y jugadores libres).
+ */
+function iconoCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature): L.DivIcon {
+  const { total, dominante } = infoDeCluster(indice, f);
+  const color = COLOR_POR_TIPO[dominante];
+  const emoji = EMOJI_POR_TIPO[dominante];
+  const html = `<span style="position:relative;display:inline-block"><span style="font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">${emoji}</span><span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9999px;background:${color};color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #0B0F19">${total}</span></span>`;
+  return L.divIcon({
+    className: 'cluster-radar',
+    html,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}
 
 // ==========================================
 // COMPONENTES AUXILIARES
@@ -148,6 +226,8 @@ interface DesafioEntity extends BaseEntity {
   type: 'desafio';
   /** Cruce con FULBEANDO: el desafio con `turnoId` ya tiene la cancha reservada. */
   desafioId: string;
+  creatorId: string;
+  equipoId?: string;
   equipo: string;
   modalidad: string;
   fechaUnix: number;
@@ -187,11 +267,34 @@ const ETIQUETA_POSICION: Record<string, string> = {
 };
 
 /**
- * Los markers los pinta este componente y no el cuerpo del mapa porque
- * `separarPisados` necesita el zoom vigente: agrupar es una decision visual en
- * pixeles y hay que recalcular cada vez que cambia la escala. Sin esto, una
- * cancha, un equipo y un desafio en la misma coordenada quedarian apilados y
- * solo se veria el color del ultimo.
+ * FASE 2: mapea un pin del radar (DTO corto que devuelve la Cloud Function
+ * `radarQuery`) a la entidad que pintan los marcadores. Los labels viven en el
+ * cliente (mismo `ETIQUETA_POSICION`/`nombreCompleto` de siempre): el server no
+ * duplica reglas de presentacion.
+ */
+const entidadDePin = (pin: RadarPin): RadarEntity => {
+  const base = { id: pin.id, lat: pin.lat, lng: pin.lng, distanciaKm: pin.d };
+  switch (pin.t) {
+    case 'cancha':
+      return { ...base, type: 'cancha', nombre: pin.nombre, tipo: pin.tipo, cantidadCanchas: pin.cantidadCanchas };
+    case 'equipo':
+      return { ...base, type: 'equipo', equipoId: pin.id, nombre: pin.nombre, modalidad: pin.modalidad, cantidadJugadores: pin.cantidadJugadores, escudoUrl: pin.escudoUrl };
+    case 'desafio':
+      return { ...base, type: 'desafio', desafioId: pin.id, creatorId: pin.creatorId, equipoId: pin.equipoId ?? undefined, equipo: pin.equipo, modalidad: pin.modalidad, fechaUnix: pin.fechaUnix, conCancha: pin.conCancha, descripcion: pin.descripcion };
+    case 'jugador':
+      return { ...base, type: 'jugador', uid: pin.uid, apodo: `${pin.nombre} ${pin.apellido}`.trim() || 'Jugador', posicion: ETIQUETA_POSICION[pin.playerRole ?? ''] ?? 'Cualquiera', media: pin.media, fairPlay: pin.fairPlay };
+  }
+};
+
+/**
+ * Pinta los pins del radar con agrupado tipo supercluster.
+ *
+ * TODOS los tipos se agrupan por igual (predios/canchas, equipos, desafios y
+ * jugadores libres): lo que comparte pantalla se funde en una burbuja con la
+ * cantidad y el tipo dominante. Al tocar, se hace zoom hasta desagrupar.
+ *
+ * Se recalcula por viewport (bbox + zoom) porque agrupar es una decision visual
+ * en el espacio de pantalla.
  */
 function MarcadoresRadar({
   entidades,
@@ -201,33 +304,67 @@ function MarcadoresRadar({
   onSeleccionar: (e: RadarEntity) => void;
 }) {
   const map = useMap();
-  const [zoom, setZoom] = useState(map.getZoom());
+  const [vista, setVista] = useState(() => ({ bbox: bboxDe(map), zoom: map.getZoom() }));
 
   useEffect(() => {
-    const alHacerZoom = () => setZoom(map.getZoom());
-    map.on('zoomend', alHacerZoom);
+    const actualizar = () => setVista({ bbox: bboxDe(map), zoom: map.getZoom() });
+    map.on('moveend', actualizar);
+    map.on('zoomend', actualizar);
+    actualizar();
     return () => {
-      map.off('zoomend', alHacerZoom);
+      map.off('moveend', actualizar);
+      map.off('zoomend', actualizar);
     };
   }, [map]);
 
-  const posiciones = useMemo(() => separarPisados(entidades, zoom), [entidades, zoom]);
+  const indice = useMemo<Supercluster<RadarProps>>(() => {
+    const idx = new Supercluster<RadarProps>({ radius: 64, maxZoom: 17, minPoints: 2 });
+    idx.load(
+      entidades.map((e) => ({
+        type: 'Feature' as const,
+        properties: { entity: e },
+        geometry: { type: 'Point' as const, coordinates: [e.lng, e.lat] as [number, number] },
+      })),
+    );
+    return idx;
+  }, [entidades]);
+
+  const clusters = useMemo(
+    () => indice.getClusters(vista.bbox, Math.round(vista.zoom)) as unknown as RadarFeature[],
+    [indice, vista],
+  );
 
   return (
     <>
-      {entidades.map((entidad) => (
-        <Marker
-          key={entidad.id}
-          position={posiciones.get(entidad.id) ?? [entidad.lat, entidad.lng]}
-          icon={
-            entidad.type === 'cancha' ? iconoPredio :
-            entidad.type === 'equipo' ? iconoEquipo :
-            entidad.type === 'desafio' ? iconoDesafio :
-            iconoJugadorLibre
-          }
-          eventHandlers={{ click: () => onSeleccionar(entidad) }}
-        />
-      ))}
+      {clusters.map((f) => {
+        const lng = f.geometry.coordinates[0]!;
+        const lat = f.geometry.coordinates[1]!;
+        if (esCluster(f)) {
+          const clusterId = f.properties.cluster_id;
+          return (
+            <Marker
+              key={`cluster-${clusterId}`}
+              position={[lat, lng]}
+              icon={iconoCluster(indice, f)}
+              eventHandlers={{
+                click: () => {
+                  const expansion = indice.getClusterExpansionZoom(clusterId);
+                  map.flyTo([lat, lng], Math.min(expansion, 18), { animate: true, duration: 0.6 });
+                },
+              }}
+            />
+          );
+        }
+        const entidad = f.properties.entity;
+        return (
+          <Marker
+            key={entidad.id}
+            position={[lat, lng]}
+            icon={iconoDe(entidad.type)}
+            eventHandlers={{ click: () => onSeleccionar(entidad) }}
+          />
+        );
+      })}
     </>
   );
 }
@@ -268,29 +405,42 @@ export const MapaRadarUnificado: React.FC = () => {
   // comparten el motor de `core/geo`). Asi el mapa muestra la realidad de los dos
   // modulos.
   const cargarRadar = useCallback(async (punto: Punto, radioKm: number) => {
+    // FASE 2: con la flag activa, una sola invocacion resuelve los pines (el
+    // server aplica el mismo geohash + Haversine y devuelve un DTO corto). Si
+    // la Function falla o no esta disponible, se cae a las consultas directas
+    // de abajo: el radar nunca queda vacio por un deploy pendiente.
+    if (appEnv().radarUsaFunction) {
+      try {
+        const { pins } = await consultarRadar(punto, radioKm);
+        setEntidades(
+          pins.map(entidadDePin).sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 100)
+        );
+        return;
+      } catch (err) {
+        console.warn('radarQuery falló; se usan las consultas directas:', err);
+      }
+    }
+
     const [predios, desafios, jugadores, equipos] = await Promise.all([
-      listarPrediosPublicos('').catch((e) => { console.error('Error predios:', e); return []; }),
+      listarPrediosCercanos(punto, radioKm).catch((e) => { console.error('Error predios:', e); return []; }),
       listarDesafiosCercanos(punto, radioKm).catch((e) => { console.error('Error desafios:', e); return []; }),
       listarCandidatosRadar(punto, radioKm).catch((e) => { console.error('Error candidatos:', e); return []; }),
       listarEquiposCercanos(punto, radioKm).catch((e) => { console.error('Error equipos:', e); return []; }),
     ]);
 
-    const canchasEntities: CanchaEntity[] = predios
-      .filter(p => p.geo !== null)
-      .map(p => {
-        const canchas = canchasDe(p);
-        return {
-          id: p.id,
-          type: 'cancha' as const,
-          lat: p.geo!.lat,
-          lng: p.geo!.lng,
-          distanciaKm: haversineKm(punto, p.geo!),
-          nombre: p.nombre,
-          tipo: canchas[0]?.tipo ?? 'Sintetico',
-          cantidadCanchas: canchas.length
-        };
-      })
-      .filter(c => c.distanciaKm <= radioKm);
+    const canchasEntities: CanchaEntity[] = predios.map((p) => {
+      const canchas = canchasDe(p);
+      return {
+        id: p.id,
+        type: 'cancha' as const,
+        lat: p.geo.lat,
+        lng: p.geo.lng,
+        distanciaKm: p.distanciaKm,
+        nombre: p.nombre,
+        tipo: canchas[0]?.tipo ?? 'Sintetico',
+        cantidadCanchas: canchas.length
+      };
+    });
 
     const desafiosEntities: DesafioEntity[] = desafios.map(d => ({
       id: d.id,
@@ -299,6 +449,8 @@ export const MapaRadarUnificado: React.FC = () => {
       lng: d.geo.lng,
       distanciaKm: d.distanciaKm,
       desafioId: d.id,
+      creatorId: d.creatorId,
+      equipoId: d.equipoId,
       equipo: d.equipoNombre,
       modalidad: d.modalidad,
       fechaUnix: d.fechaUnix,
@@ -401,14 +553,10 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
   }, [entidades, filtroActivo]);
 
   return (
-    <div className="h-full w-full bg-zinc-950 relative font-sans overflow-hidden">
+    <div className="h-full w-full bg-canvas relative font-sans overflow-hidden">
       
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
-          {toastMessage}
-        </div>
-      )}
+      <Toast mensaje={toastMessage} />
 
       {/* MAPA BASE */}
       <div className="absolute inset-0 z-0">
@@ -430,45 +578,47 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           />
           <FlyToLocation lat={mapCenter.lat} lng={mapCenter.lng} />
 
-          <MarcadoresRadar entidades={entidadesVisibles} onSeleccionar={setSeleccionado} />
-        </MapContainer>
+          <MarcadoresRadar
+            entidades={entidadesVisibles}
+            onSeleccionar={setSeleccionado}
+          />        </MapContainer>
       </div>
 
       {/* HEADER FLOTANTE / FILTROS RAPIDOS */}
-      <div className="absolute top-safe pt-4 w-full flex justify-center z-10 pointer-events-none px-2">
-        <div className="bg-zinc-900/90 backdrop-blur-md p-1 rounded-full border border-zinc-800 flex shadow-xl pointer-events-auto max-w-full overflow-x-auto hide-scrollbar">
+      <div className="absolute top-safe pt-3 md:pt-4 w-full flex justify-center z-10 pointer-events-none px-3">
+        <div className="bg-zinc-900/90 backdrop-blur-md p-1.5 rounded-full border border-zinc-800 flex items-center shadow-xl pointer-events-auto max-w-full overflow-x-auto hide-scrollbar gap-1">
           <button 
             onClick={() => setFiltroActivo('todos')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'todos' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'todos' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             Todos
           </button>
           <button
             onClick={() => setFiltroActivo('canchas')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'canchas' ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_12px_rgba(16,185,129,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             🏟️ Canchas / Predios
           </button>
           <button
             onClick={() => setFiltroActivo('equipos')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'equipos' ? 'bg-sky-500 text-white shadow-[0_0_12px_rgba(14,165,233,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             🧢 Equipos
           </button>
           <button
             onClick={() => setFiltroActivo('desafios')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'desafios' ? 'bg-amber-500 text-amber-950 shadow-[0_0_12px_rgba(245,158,11,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             🛡️ Desafíos
           </button>
           <button 
             onClick={() => setFiltroActivo('jugadores')}
-            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`px-4 py-2 rounded-full font-bold text-[11px] whitespace-nowrap transition-colors cursor-pointer ${filtroActivo === 'jugadores' ? 'bg-blue-500 text-white shadow-[0_0_12px_rgba(37,99,235,0.4)]' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             🏃 Jugadores Libres
           </button>
           {cargando && (
-            <span className="px-3 py-2 text-[11px] font-bold text-zinc-500 whitespace-nowrap">
+            <span className="px-3 py-2 text-[11px] font-bold text-zinc-500 whitespace-nowrap animate-pulse">
               Buscando…
             </span>
           )}
@@ -500,76 +650,83 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
         <>
           <button 
             onClick={requestLocation} 
-            className="absolute bottom-40 right-4 bg-zinc-800 text-blue-500 p-3 rounded-full shadow-lg z-10 active:scale-95 transition-transform border border-zinc-700"
+            className="absolute bottom-[calc(9.5rem+env(safe-area-inset-bottom,0px))] md:bottom-24 right-4 bg-zinc-900/90 hover:bg-zinc-800 backdrop-blur text-blue-400 hover:text-blue-300 p-3.5 rounded-full shadow-lg z-10 active:scale-95 transition border border-zinc-700/80 cursor-pointer"
             title="Mi Ubicación"
+            aria-label="Mi ubicación"
           >
-            <Target className="w-6 h-6" />
+            <Target className="w-5 h-5" />
           </button>
           
-          <button onClick={() => navigate('/partidos', { state: { backgroundLocation: location } })} className="absolute bottom-24 right-4 bg-amber-500 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] z-10 active:scale-95 transition-transform">
+          <button onClick={() => navigate('/partidos', { state: { backgroundLocation: location } })} aria-label="Lanzar desafío" className="absolute bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] md:bottom-8 right-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] z-10 active:scale-95 transition cursor-pointer">
             <Search className="w-6 h-6" />
           </button>
         </>
       )}
 
-
-
       {/* BOTTOM SHEET UNIFICADA */}
       {seleccionado && (
-        <div className="absolute bottom-16 w-full bg-zinc-900 rounded-t-[32px] border-t border-zinc-800 p-6 animate-in slide-in-from-bottom shadow-[0_-10px_50px_rgba(0,0,0,0.6)] z-20 transition-all">
-          <button onClick={() => setSeleccionado(null)} className="absolute top-4 right-4 text-zinc-500 hover:text-white bg-zinc-800 rounded-full p-1">
-            <X className="w-5 h-5" />
+        <div className="fixed md:absolute bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-0 right-0 md:left-6 md:right-auto md:w-[26rem] md:max-w-[calc(100vw-18rem)] bg-zinc-900/95 backdrop-blur-xl rounded-t-[32px] md:rounded-3xl border-t md:border border-zinc-800/80 p-5 sm:p-6 animate-in slide-in-from-bottom shadow-[0_-10px_50px_rgba(0,0,0,0.7)] md:shadow-2xl z-30 transition-all max-h-[80vh] overflow-y-auto">
+          {/* Indicador de arrastre / grab bar */}
+          <div className="w-10 h-1 bg-zinc-700/50 rounded-full mx-auto mb-3" />
+
+          {/* Botón Cerrar: elevado y en su propia esquina sin tocar datos */}
+          <button 
+            onClick={() => setSeleccionado(null)} 
+            aria-label="Cerrar panel" 
+            className="absolute top-4 right-4 z-20 text-zinc-400 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full p-2 transition cursor-pointer border border-zinc-700/50 shadow-md active:scale-90"
+          >
+            <X className="w-4 h-4" />
           </button>
 
           {/* RENDERIZADO CONDICIONAL SEGÚN TIPO */}
           
           {seleccionado.type === 'cancha' && (
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-emerald-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(16,185,129,0.3)]">🏟️</div>
-                <div>
-                  <h3 className="text-white font-black text-xl">{seleccionado.nombre}</h3>
-                  <p className="text-xs text-zinc-400 mt-1 font-semibold">{seleccionado.cantidadCanchas} Canchas • {seleccionado.tipo}</p>
-                  <span className="inline-block mt-2 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">Predio Verificado</span>
-                </div>
+            <div className="flex flex-col items-center text-center pt-1">
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-emerald-500 ring-4 ring-emerald-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(16,185,129,0.3)] mb-3">
+                🏟️
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="bg-zinc-800 text-white py-3.5 rounded-xl font-bold border border-zinc-700 flex justify-center items-center gap-2 active:bg-zinc-700 transition">
-                  <Phone className="w-4 h-4" /> WhatsApp
+              <h3 className="text-white font-black text-xl tracking-tight px-4">{seleccionado.nombre}</h3>
+              <p className="text-xs text-zinc-400 mt-1 font-semibold">{seleccionado.cantidadCanchas} Canchas • {seleccionado.tipo}</p>
+              <span className="inline-block mt-2 mb-6 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider">
+                Predio Verificado
+              </span>
+              
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <button className="h-13 bg-zinc-800/90 hover:bg-zinc-800 text-white py-3 px-4 rounded-2xl font-bold border border-zinc-700/80 hover:border-zinc-500 flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-sm shadow-md">
+                  <Phone className="w-4 h-4 text-emerald-400" /> 
+                  <span>WhatsApp</span>
                 </button>
                 <button 
                   onClick={() => navigate(`/reservar/${seleccionado.id}`, { state: { backgroundLocation: location } })}
-                  className="bg-emerald-500 text-zinc-950 py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(16,185,129,0.3)] flex justify-center items-center gap-2 active:scale-95 transition"
+                  className="h-13 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 py-3 px-3 rounded-2xl font-black shadow-[0_0_20px_rgba(16,185,129,0.35)] flex justify-center items-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm whitespace-nowrap"
                 >
-                  <Clock className="w-4 h-4" /> Ver canchas y reservar
+                  <Clock className="w-4 h-4" /> 
+                  <span>Ver y reservar</span>
                 </button>
               </div>
             </div>
           )}
 
           {seleccionado.type === 'equipo' && (
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(14,165,233,0.3)]">
-                  {seleccionado.escudoUrl
-                    ? <img src={seleccionado.escudoUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                    : '🧢'}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-white font-black text-xl truncate">{seleccionado.nombre}</h3>
-                  <div className="flex gap-2 text-xs font-bold mt-1 flex-wrap">
-                    <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.modalidad}</span>
-                    <span className="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20">
-                      {seleccionado.cantidadJugadores} en el plantel
-                    </span>
-                    <span className="text-zinc-500 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
-                  </div>
-                </div>
+            <div className="flex flex-col items-center text-center pt-1">
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-sky-500 ring-4 ring-sky-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(14,165,233,0.3)] mb-3 overflow-hidden">
+                {seleccionado.escudoUrl
+                  ? <img src={seleccionado.escudoUrl} alt={`Escudo de ${seleccionado.nombre}`} className="w-full h-full object-cover" />
+                  : '🧢'}
+              </div>
+              <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.nombre}</h3>
+              <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
+                <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80">{seleccionado.modalidad}</span>
+                <span className="bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded-lg border border-sky-500/20">
+                  {seleccionado.cantidadJugadores} en el plantel
+                </span>
+                <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">
+                  {seleccionado.distanciaKm.toFixed(1)} km
+                </span>
               </div>
 
-              <p className="text-zinc-400 text-sm mb-4">
-                Equipo que juega en tu zona. Si te interesa Readiness, coordiná la cancha desde el
-                chat o mandales un mensaje.
+              <p className="text-zinc-400 text-xs sm:text-sm mb-5 leading-relaxed px-2">
+                Equipo que juega en tu zona. Si te interesa sumarte, coordiná la cancha desde el chat o mandales un mensaje.
               </p>
 
               <button
@@ -578,7 +735,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                   setToastMessage('Mensaje enviado al equipo.');
                   setTimeout(() => setToastMessage(''), 3500);
                 }}
-                className="w-full bg-sky-500 text-white py-4 rounded-xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm"
+                className="w-full h-13 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white rounded-2xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(14,165,233,0.35)] cursor-pointer"
               >
                 Contactar al equipo
               </button>
@@ -586,38 +743,59 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           )}
 
           {seleccionado.type === 'desafio' && (
-            <div>
-               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(245,158,11,0.3)]">🛡️</div>
-                <div className="min-w-0">
-                  <h3 className="text-white font-black text-xl truncate">{seleccionado.equipo}</h3>
-                  <div className="flex gap-2 text-xs font-bold mt-1 flex-wrap">
-                    <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.modalidad}</span>
-                    <span className="bg-amber-400/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">{formatearHorario(seleccionado.fechaUnix)}</span>
-                    <span className="text-zinc-500 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
-                  </div>
-                </div>
+            <div className="flex flex-col items-center text-center pt-1">
+              <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-amber-500 ring-4 ring-amber-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(245,158,11,0.3)] mb-3">
+                🛡️
+              </div>
+              <h3 className="text-white font-black text-xl tracking-tight px-4 truncate max-w-full">{seleccionado.equipo}</h3>
+              <div className="flex justify-center gap-2 text-xs font-bold mt-2 mb-3 flex-wrap">
+                <span className="bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-lg border border-zinc-700/80">{seleccionado.modalidad}</span>
+                <span className="bg-amber-400/10 text-amber-500 px-2.5 py-1 rounded-lg border border-amber-500/20">{formatearHorario(seleccionado.fechaUnix)}</span>
+                <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
               </div>
 
-              {/* PUENTE ENTRE MODULOS: si el desafio referencia un turno de
-                  FULBEANDO, la cancha ya esta reservada y se muestra el puente. */}
-              <div className={`mb-4 rounded-xl border px-4 py-3 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
+              {/* PUENTE ENTRE MODULOS */}
+              <div className={`mb-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
                 {seleccionado.conCancha
                   ? '✅ Cancha ya reservada (turno confirmado)'
                   : '🏟️ El equipo busca cancha: se coordina al aceptar'}
               </div>
 
               {seleccionado.descripcion && (
-                <p className="text-zinc-300 text-sm mb-4 leading-relaxed">{seleccionado.descripcion}</p>
+                <p className="text-zinc-300 text-xs sm:text-sm mb-5 leading-relaxed px-2">{seleccionado.descripcion}</p>
               )}
 
               <button 
-                onClick={() => {
+                onClick={async () => {
                   if (!usuario) { navigate('/login'); return; }
-                  setToastMessage('Desafío enviado. Te avisamos cuando alguien lo acepte.');
-                  setTimeout(() => setToastMessage(''), 3500);
+                  if (seleccionado.creatorId === usuario.uid) {
+                    setToastMessage('Este partido fue publicado por vos');
+                    setTimeout(() => setToastMessage(''), 3000);
+                    return;
+                  }
+                  try {
+                    const nombreUsuario = nombreCompleto(usuario) || usuario.nombre || 'Un jugador';
+                    await notificarAceptacionDesafio(
+                      usuario.uid,
+                      nombreUsuario,
+                      seleccionado.creatorId,
+                      {
+                        id: seleccionado.desafioId,
+                        equipoId: seleccionado.equipoId,
+                        equipoNombre: seleccionado.equipo,
+                        descripcion: seleccionado.descripcion,
+                      }
+                    );
+                    setToastMessage('¡Aceptaste el desafío! Se le avisó al organizador ⚽');
+                    setTimeout(() => setToastMessage(''), 4000);
+                    setSeleccionado(null);
+                  } catch (err: any) {
+                    console.error('Error enviando aceptación del desafío:', err);
+                    setToastMessage('No se pudo enviar el aviso al organizador.');
+                    setTimeout(() => setToastMessage(''), 3000);
+                  }
                 }}
-                className="w-full bg-amber-500 text-amber-950 py-4 rounded-xl font-black shadow-[0_0_15px_rgba(245,158,11,0.3)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm"
+                className="w-full h-13 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-2xl font-black shadow-[0_0_20px_rgba(245,158,11,0.35)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm cursor-pointer"
               >
                 Aceptar Desafío
               </button>
@@ -625,36 +803,56 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           )}
 
           {seleccionado.type === 'jugador' && (
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-blue-500 flex items-center justify-center text-2xl shadow-[0_0_10px_rgba(37,99,235,0.3)] relative">
+            <div className="flex flex-col items-center text-center pt-1">
+              {/* Avatar con anillo luminoso y badge de disponibilidad */}
+              <div className="relative mb-3">
+                <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-blue-500 ring-4 ring-blue-500/20 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(37,99,235,0.35)] overflow-hidden">
                   🏃
-                  <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-zinc-800 shadow-sm"></div>
                 </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start">
-                    <h3 className="text-white font-black text-xl">{seleccionado.apodo}</h3>
-                    <div className="bg-zinc-950 px-2 py-1 rounded font-black text-amber-400 text-sm border border-zinc-800">M {seleccionado.media}</div>
-                  </div>
-                  <div className="flex gap-2 text-xs font-bold mt-1">
-                    <span className="bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">{seleccionado.posicion}</span>
-                    <span className="bg-amber-400/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">⭐ {seleccionado.fairPlay} FP</span>
-                  </div>
-                  <p className="text-xs text-zinc-400 mt-2 font-medium">Disponible hoy · {seleccionado.distanciaKm.toFixed(1)} km de distancia</p>
-                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 w-4 h-4 rounded-full border-2 border-zinc-900 shadow-sm" title="Disponible hoy" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="bg-zinc-800 text-white py-3.5 rounded-xl font-bold border border-zinc-700 flex justify-center items-center gap-2 hover:border-blue-500 hover:text-blue-500 active:bg-zinc-700 transition">
-                  <User className="w-4 h-4" /> Ver perfil
+
+              {/* Título centralizado + Media */}
+              <div className="flex items-center justify-center gap-2 flex-wrap mb-2 px-4">
+                <h3 className="text-white font-black text-xl tracking-tight">{seleccionado.apodo}</h3>
+                <span className="bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-lg font-black text-xs tracking-wide shadow-sm">
+                  M {seleccionado.media}
+                </span>
+              </div>
+
+              {/* Badges de Posición y Fair Play centralizados */}
+              <div className="flex items-center justify-center gap-2 text-xs font-bold mb-2">
+                <span className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded-lg border border-zinc-700/80">
+                  {seleccionado.posicion}
+                </span>
+                <span className="bg-amber-400/10 text-amber-400 px-3 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1 font-bold">
+                  ⭐ {seleccionado.fairPlay} FP
+                </span>
+              </div>
+
+              {/* Distancia y disponibilidad */}
+              <p className="text-xs text-zinc-400 font-medium mb-5">
+                Disponible hoy · {seleccionado.distanciaKm.toFixed(1)} km de distancia
+              </p>
+
+              {/* Botones estilizados, equilibrados y con texto en una sola línea */}
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <button 
+                  onClick={() => navigate(`/carta/${seleccionado.uid || seleccionado.id}`)}
+                  className="h-13 bg-zinc-800/90 hover:bg-zinc-800 text-white font-bold rounded-2xl border border-zinc-700/80 hover:border-zinc-500 flex items-center justify-center gap-2 active:scale-95 transition cursor-pointer text-sm shadow-md"
+                >
+                  <User className="w-4 h-4 text-zinc-400" />
+                  <span>Ver perfil</span>
                 </button>
                 <button 
                   onClick={() => {
                     setToastMessage(`¡Invitación al equipo enviada a ${seleccionado.apodo}!`);
                     setTimeout(() => setToastMessage(''), 3000);
                   }} 
-                  className="bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-[0_0_15px_rgba(37,99,235,0.3)] flex justify-center items-center gap-2 active:scale-95 transition"
+                  className="h-13 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center justify-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm tracking-wide whitespace-nowrap px-3"
                 >
-                  <UserPlus className="w-4 h-4" /> Invitar al Equipo
+                  <UserPlus className="w-4 h-4" />
+                  <span>Invitar al Equipo</span>
                 </button>
               </div>
             </div>

@@ -42,6 +42,22 @@ export interface Equipo {
    * el mapa, pero se siguen managing desde "Mis equipos".
    */
   geo?: GeoIndex | null
+  ultimoPartido?: {
+    fecha: string
+    predioNombre?: string | null
+    canchaNombre?: string | null
+    mvpId?: string | null
+    mvpNombre?: string | null
+    mvpEmoji?: string | null
+    stats?: Record<string, { goles: number; asistencias: number }>
+    finalizadoEn: number
+  } | null
+  estadisticasJugadores?: Record<string, {
+    goles: number
+    asistencias: number
+    partidosJugados: number
+    mvpCount: number
+  }>
   createdAt: Timestamp | number
 }
 

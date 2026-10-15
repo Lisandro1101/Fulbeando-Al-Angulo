@@ -1,1 +1,13 @@
 node_modules
+dist
+dist-ssr
+*.log
+*-debug.log
+.emulator-data/
+.firebase/
+*.local
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store

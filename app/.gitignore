@@ -6,6 +6,8 @@ dist-ssr
 .env.*
 !.env.example
 .firebase
+*.log
+*-debug.log
 firebase-debug.log
 *.tsbuildinfo
 .DS_Store

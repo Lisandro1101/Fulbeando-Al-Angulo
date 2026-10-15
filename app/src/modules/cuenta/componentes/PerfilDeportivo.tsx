@@ -274,8 +274,9 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
   return (
     <div className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs text-ink-muted">Apodo</label>
+        <label htmlFor="perfil-apodo" className="mb-1 block text-xs text-ink-muted">Apodo</label>
         <input 
+          id="perfil-apodo"
           type="text" 
           value={apodo} 
           onChange={(e) => setApodo(e.target.value)} 
@@ -283,10 +284,11 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-ink-muted">Nombre de Usuario (@)</label>
+        <label htmlFor="perfil-username" className="mb-1 block text-xs text-ink-muted">Nombre de Usuario (@)</label>
         <div className="flex items-center field p-0 overflow-hidden">
           <span className="pl-3 text-ink-muted font-bold">@</span>
           <input 
+            id="perfil-username"
             type="text" 
             value={username} 
             onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} 
@@ -316,7 +318,7 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
             onClick={() => document.getElementById('avatar-upload')?.click()}
           >
             {emojiFoto?.startsWith('http') ? (
-               <img src={emojiFoto} alt="Perfil" className="w-full h-full object-cover" />
+               <img src={emojiFoto} alt="Foto de perfil" className="w-full h-full object-cover" />
             ) : (
                <span className="text-sm font-bold text-zinc-500">Foto</span>
             )}

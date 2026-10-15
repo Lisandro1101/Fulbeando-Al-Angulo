@@ -60,6 +60,20 @@
 }
 
 @layer utilities {
+  /* Reserva espacio para el bottom-nav movil (h-16) + safe area, para que el
+     ultimo contenido no quede tapado por la barra de navegacion. */
+  .pb-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
+
+  .hide-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Estados de la grilla del dueno de predio (semaforo del PRD) */
   .slot-libre {
     @apply bg-pitch-faint/60 text-pitch;
@@ -150,8 +164,32 @@
     box-shadow: 0 0 0 2px #f59e0b;
     transform: scale(1.2);
   }
+
+  /* Cluster del radar (supercluster): badge del icono dominante + contador.
+     Agrupa todo lo que comparte pantalla (canchas, equipos, desafios, jugadores). */
+  .cluster-radar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    line-height: 1;
+    transition: transform 120ms ease;
+  }
+
+  .cluster-radar:hover {
+    transform: scale(1.08);
+  }
 }
 
 .mapa-oscuro-filtro {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+/* Anillo de foco accesible por teclado en toda la app. Va fuera de las capas
+   de Tailwind y con `:not(:disabled)` para ganarle al especificidad de
+   `outline-none` / `focus:outline-none` sin depender del orden. */
+:focus-visible:not(:disabled) {
+  outline: 2px solid theme('colors.pitch.DEFAULT');
+  outline-offset: 2px;
 }

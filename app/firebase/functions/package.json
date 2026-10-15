@@ -14,12 +14,14 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "firebase-admin": "^11.8.0",
     "firebase-functions": "^4.3.1"
   },
   "devDependencies": {
-    "typescript": "^4.9.0",
-    "firebase-functions-test": "^3.1.0"
+    "firebase-functions-test": "^3.1.0",
+    "typescript": "^5.0.0"
   },
   "private": true
 }

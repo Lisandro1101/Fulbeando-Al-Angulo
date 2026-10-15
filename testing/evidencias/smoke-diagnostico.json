@@ -1,0 +1,72 @@
+{
+  "generado": "2026-10-12T03:49:09.514Z",
+  "rutasVisitadas": [
+    {
+      "ruta": "/",
+      "url": "http://localhost:5173/",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "10-home.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/radar",
+      "url": "http://localhost:5173/radar",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "11-radar.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/equipo",
+      "url": "http://localhost:5173/equipo",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "12-equipo.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/partidos",
+      "url": "http://localhost:5173/partidos",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "13-partidos.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/perfil",
+      "url": "http://localhost:5173/perfil",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "14-perfil.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/turnos",
+      "url": "http://localhost:5173/turnos",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "15-turnos.png",
+      "estado": "OK"
+    },
+    {
+      "ruta": "/ajustes",
+      "url": "http://localhost:5173/ajustes",
+      "titulo": "Fulbeando - Noche de Sintetico",
+      "captura": "16-ajustes.png",
+      "estado": "OK"
+    }
+  ],
+  "eventos": [
+    {
+      "tipo": "http-error",
+      "ruta": "/login (validación)",
+      "detalle": "HTTP 400",
+      "url": "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key"
+    },
+    {
+      "tipo": "console-error",
+      "ruta": "/login (validación)",
+      "detalle": "[error] Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+      "tipo": "console-error",
+      "ruta": "/login (validación)",
+      "detalle": "[error] Error en autenticación por email: FirebaseError: Firebase: Error (auth/user-not-found).\n    at createErrorInternal (http://localhost:5173/node_modules/.vite/deps/firebase_auth.js?v=6ba7b89b:707:37)\n    at _fail (http://localhost:5173/node_modules/.vite/deps/firebase_auth.js?v=6ba7b89b:672:9)\n    at _performFetchWithErrorHandling (http://localhost:5173/node_modules/.vite/deps/firebase_auth.js?v=6ba7b89b:1142:9)\n    at async _performSignInRequest (http://localhost:5173/node_modules/.vite/deps/firebase_auth.js?v=6ba7b89b:1153:26)\n    at async _signInWithCredential (http://localhost:5173/node_modules/.vite/deps/firebase_auth.js?v=6ba7b89b:4642:20)\n    at async handleEmailAuth (http://localhost:5173/src/modules/ui/Screens.tsx?t=1791776441263:81:9)"
+    }
+  ]
+}

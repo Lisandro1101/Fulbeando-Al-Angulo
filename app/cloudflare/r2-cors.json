@@ -1,21 +1,16 @@
 [
   {
     "AllowedOrigins": [
-      "http://localhost:3000",
-      "http://localhost:8080",
-      "https://app.al-angulo.com",
-      "https://al-angulo.web.app",
-      "https://fulbeando-*.firebaseapp.com"
+      "*"
     ],
     "AllowedMethods": [
-      "PUT",
       "GET",
-      "HEAD",
-      "OPTIONS"
+      "PUT",
+      "POST",
+      "HEAD"
     ],
     "AllowedHeaders": [
-      "Content-Type",
-      "Authorization"
+      "*"
     ],
     "ExposeHeaders": [
       "ETag"

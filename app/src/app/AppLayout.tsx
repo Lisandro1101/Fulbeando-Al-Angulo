@@ -11,10 +11,11 @@ const FlotanteModal = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 md:p-8 animate-fade-in">
-      <div className="relative w-full max-w-xl h-full md:h-auto md:max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl bg-zinc-950 border border-zinc-800 animate-slide-up flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="Ventana modal" className="relative w-full max-w-xl h-full md:h-auto md:max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl bg-canvas border border-zinc-800 animate-slide-up flex flex-col">
         <button 
           onClick={() => navigate(-1)}
-          className="absolute top-4 right-4 z-[300] bg-zinc-900/80 hover:bg-zinc-800 p-2 rounded-full text-white transition-colors"
+          aria-label="Cerrar modal"
+          className="absolute top-4 right-4 z-[300] bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 p-2 rounded-full text-zinc-400 hover:text-white transition-all cursor-pointer shadow-md active:scale-90"
         >
           <X className="w-5 h-5" />
         </button>
@@ -26,6 +27,8 @@ const FlotanteModal = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+import { AlertaInvitacionPush } from '@/modules/teams/components/AlertaInvitacionPush';
+
 export const AppLayout = () => {
   const location = useLocation();
   const state = location.state as { backgroundLocation?: Location };
@@ -35,12 +38,22 @@ export const AppLayout = () => {
   const esModal = Boolean(state?.backgroundLocation);
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-zinc-950 text-white font-sans">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-canvas text-white font-sans">
+      {/* Alerta Push de Invitaciones en tiempo real para el jugador */}
+      <AlertaInvitacionPush />
+
       {/* Sidebar (Desktop) / Bottom Nav (Mobile) */}
       <MenuNavegacion />
 
+      {/* Cabecera mobile: el logo (en desktop lo muestra el sidebar). */}
+      <header className="md:hidden fixed inset-x-0 top-0 z-[90] border-b border-zinc-800 bg-canvas/90 backdrop-blur-md">
+        <div className="flex h-14 items-center px-2">
+          <img src="/logo.svg" alt="Al Ángulo" className="h-14 w-48 object-cover object-center" />
+        </div>
+      </header>
+
       {/* Main Content Area */}
-      <main className="flex-1 h-full relative overflow-hidden md:pl-64">
+      <main className="flex-1 h-full relative overflow-hidden pt-14 md:pt-0 md:pl-64">
         {/* We use React Router's trick to render the background if state.backgroundLocation exists */}
         {esModal ? (
           <Routes location={state.backgroundLocation}>

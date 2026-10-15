@@ -17,3 +17,5 @@ export const aGeoIndex = (
   prefijo: encodeGeohash(punto.lat, punto.lng, 5),
   prefijos: prefijosQueCubrenBD(punto, radioKm),
 })
+
+export * from './zonas'

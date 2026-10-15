@@ -7,9 +7,11 @@ import {
   getDocs,
   increment,
   limit,
+  onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore'
@@ -176,7 +178,8 @@ export const unirseAEquipo = async (
   if (!usuarioSnap.exists()) {
     throw new ErrorEquipo('USUARIO_NO_EXISTE', 'No se encontro el documento del usuario')
   }
-  const nombre = nombreCompleto(usuarioSnap.data() as Usuario)
+  const uData = usuarioSnap.data() as Usuario
+  const nombre = nombreCompleto(uData) || (uData as any).displayName || 'Jugador'
 
   const equipoRef = doc(db, COLECCIONES.equipos, equipoId)
   await runTransaction(db, async (tx) => {
@@ -344,6 +347,107 @@ export const obtenerEquiposDeUsuario = async (uid: string): Promise<Equipo[]> =>
 }
 
 /**
+ * Escucha en TIEMPO REAL los equipos a los que pertenece el usuario.
+ * Cualquier cambio en el equipo (convocatoria, nuevos miembros, confirmados al partido,
+ * bajas, cambio de escudo o capitán) se propaga instantáneamente a todos los jugadores.
+ */
+export const escucharEquiposDeUsuario = (
+  uid: string,
+  callback: (equipos: Equipo[]) => void,
+): (() => void) => {
+  let unsubscribeEquipos: Array<() => void> = []
+  let unsubscribeRefuerzos: (() => void) | null = null
+
+  const equiposMap = new Map<string, Equipo>()
+  let currentTeamIds: string[] = []
+  let refuerzosTeams: Equipo[] = []
+
+  const emitir = () => {
+    const todosMap = new Map<string, Equipo>()
+    // 1. Equipos regulares del usuario
+    currentTeamIds.forEach((id) => {
+      const eq = equiposMap.get(id)
+      if (eq) todosMap.set(id, eq)
+    })
+    // 2. Equipos donde es refuerzo temporal para el partido de hoy
+    refuerzosTeams.forEach((eq) => {
+      if (!todosMap.has(eq.id)) {
+        todosMap.set(eq.id, eq)
+      }
+    })
+    callback(Array.from(todosMap.values()))
+  }
+
+  // Escuchar equipos donde el usuario figura como confirmado en la convocatoria activa
+  try {
+    const qRefuerzo = query(
+      collection(db, COLECCIONES.equipos),
+      where('convocatoria.confirmados', 'array-contains', uid),
+    )
+    unsubscribeRefuerzos = onSnapshot(
+      qRefuerzo,
+      (snap) => {
+        refuerzosTeams = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Equipo))
+        emitir()
+      },
+      (err) => {
+        console.warn('Error escuchando equipos como refuerzo:', err)
+      },
+    )
+  } catch (err) {
+    console.warn('Error iniciando query de refuerzos:', err)
+  }
+
+  const unsubscribeUsuario = onSnapshot(
+    doc(db, COLECCIONES.usuarios, uid),
+    (userSnap) => {
+      // Limpiar listeners anteriores de equipos
+      unsubscribeEquipos.forEach((unsub) => unsub())
+      unsubscribeEquipos = []
+
+      if (!userSnap.exists()) {
+        currentTeamIds = []
+        emitir()
+        return
+      }
+
+      currentTeamIds = userSnap.data()?.perfilDeportivo?.teamIds ?? []
+      if (currentTeamIds.length === 0) {
+        emitir()
+        return
+      }
+
+      currentTeamIds.forEach((tId) => {
+        const unsub = onSnapshot(
+          doc(db, COLECCIONES.equipos, tId),
+          (teamDoc) => {
+            if (teamDoc.exists()) {
+              equiposMap.set(tId, { ...teamDoc.data(), id: teamDoc.id } as Equipo)
+            } else {
+              equiposMap.delete(tId)
+            }
+            emitir()
+          },
+          (err) => {
+            console.warn(`Error escuchando equipo ${tId} en tiempo real:`, err)
+          },
+        )
+        unsubscribeEquipos.push(unsub)
+      })
+    },
+    (err) => {
+      console.warn('Error escuchando perfil del usuario para equipos:', err)
+    },
+  )
+
+  return () => {
+    unsubscribeUsuario()
+    if (unsubscribeRefuerzos) unsubscribeRefuerzos()
+    unsubscribeEquipos.forEach((unsub) => unsub())
+  }
+}
+
+/**
  * Un equipo puntual, para el banner de invitacion `?unirse=<id>`.
  *
  * Devuelve `null` en vez de tirar: un link viejo no tiene por que romper la
@@ -368,32 +472,69 @@ export const obtenerEquipoPorId = async (equipoId: string): Promise<Equipo | nul
 export const buscarJugadores = async (
   termino: string,
   limite = 10,
+  excluirUid?: string,
 ): Promise<Array<MiembroEquipo & { username: string }>> => {
   const prefijo = termino.trim()
-  if (prefijo.length < 2) return []
-
-  const snap = await getDocs(
-    query(
-      collection(db, COLECCIONES.usuarios),
-      where('nombre', '>=', prefijo),
-      where('nombre', '<=', `${prefijo}\uf8ff`),
-      limit(limite * 3),
-    ),
-  )
+  if (prefijo.length < 1) return []
 
   const q = prefijo.toLowerCase()
-  return snap.docs
+  const qCap = prefijo.charAt(0).toUpperCase() + prefijo.slice(1).toLowerCase()
+  const qUpper = prefijo.toUpperCase()
+
+  const colRef = collection(db, COLECCIONES.usuarios)
+
+  // Ejecutamos consultas para cubrir variaciones de capitalización en nombre y apellido,
+  // y traemos un conjunto de jugadores registrados para búsqueda en memoria.
+  const promesas = [
+    getDocs(query(colRef, where('nombre', '>=', qCap), where('nombre', '<=', `${qCap}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('nombre', '>=', q), where('nombre', '<=', `${q}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('nombre', '>=', qUpper), where('nombre', '<=', `${qUpper}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('apellido', '>=', qCap), where('apellido', '<=', `${qCap}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('apellido', '>=', q), where('apellido', '<=', `${q}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('rol', '==', 'jugador'), limit(150))),
+  ]
+
+  const resultados = await Promise.allSettled(promesas)
+  const docsMap = new Map<string, any>()
+
+  for (const res of resultados) {
+    if (res.status === 'fulfilled') {
+      for (const d of res.value.docs) {
+        if (!docsMap.has(d.id)) {
+          docsMap.set(d.id, d)
+        }
+      }
+    }
+  }
+
+  return Array.from(docsMap.values())
     .filter((d) => {
+      // El mismo usuario que busca no puede aparecer en el listado
+      if (excluirUid && d.id === excluirUid) return false
+
       const data = d.data()
+      if (data.deletedAt !== null && data.deletedAt !== undefined) return false
+
+      // REGLA ESTRICTA: Solo usuarios con rol de jugador pueden aparecer en la búsqueda
+      if (data.rol !== 'jugador') return false
+
+      const nombreCompleto = `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim().toLowerCase()
+      const displayName = `${data.displayName ?? ''}`.trim().toLowerCase()
+      const email = `${data.email ?? ''}`.toLowerCase()
+
       return (
-        data.deletedAt === null &&
-        `${data.nombre ?? ''} ${data.apellido ?? ''}`.toLowerCase().includes(q)
+        nombreCompleto.includes(q) ||
+        displayName.includes(q) ||
+        email.includes(q)
       )
     })
     .slice(0, limite)
     .map((d) => {
       const data = d.data()
-      const nombre = `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim() || 'Jugador'
+      const nombre =
+        `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim() ||
+        data.displayName ||
+        'Jugador'
       return {
         uid: d.id,
         name: nombre,
@@ -494,4 +635,420 @@ export const actualizarEquipo = async (
     ...(cambios.genero ? { genero: cambios.genero } : {}),
     ...(cambios.shieldUrl !== undefined ? { shieldUrl: cambios.shieldUrl } : {})
   })
+}
+
+// -------------------------------------------------------------------------
+// Invitaciones a Equipos con Alerta Push
+// -------------------------------------------------------------------------
+
+export type TipoInvitacion = 'invitacion_equipo' | 'desafio_aceptado' | 'postulacion_partido'
+
+export interface InvitacionEquipo {
+  id: string
+  tipo?: TipoInvitacion
+  equipoId: string
+  equipoNombre: string
+  equipoEscudoUrl: string | null
+  remitenteUid: string
+  remitenteNombre?: string
+  capitanNombre: string
+  destinatarioUid: string
+  destinatarioNombre: string
+  estado: 'pendiente' | 'aceptada' | 'rechazada'
+  creadaEn: any
+  leida: boolean
+  mensaje?: string
+  desafioId?: string
+  alertaId?: string
+  posicion?: string | null
+}
+
+/**
+ * El capitán envía una invitación formal a un jugador específico.
+ * Se guarda en `invitaciones` para disparar el alerta push en tiempo real.
+ */
+export const enviarInvitacionAEquipo = async (
+  remitenteUid: string,
+  remitenteNombre: string,
+  destinatarioUid: string,
+  destinatarioNombre: string,
+  equipo: { id: string; name: string; shieldUrl?: string | null },
+): Promise<string> => {
+  const invRef = doc(collection(db, COLECCIONES.invitaciones))
+  const invData: InvitacionEquipo = {
+    id: invRef.id,
+    tipo: 'invitacion_equipo',
+    equipoId: equipo.id,
+    equipoNombre: equipo.name,
+    equipoEscudoUrl: equipo.shieldUrl ?? null,
+    remitenteUid,
+    remitenteNombre,
+    capitanNombre: remitenteNombre,
+    destinatarioUid,
+    destinatarioNombre,
+    estado: 'pendiente',
+    creadaEn: serverTimestamp(),
+    leida: false,
+  }
+  await setDoc(invRef, invData)
+  return invRef.id
+}
+
+/**
+ * Un jugador acepta un desafío de partido en el radar/home.
+ * Notifica al creador del desafío en tiempo real con push y modal interactivo.
+ */
+export const notificarAceptacionDesafio = async (
+  remitenteUid: string,
+  remitenteNombre: string,
+  destinatarioUid: string,
+  desafio: {
+    id: string
+    equipoId?: string
+    equipoNombre: string
+    descripcion?: string | null
+    turnoId?: string | null
+  },
+  mensajePersonalizado?: string,
+): Promise<string> => {
+  const invRef = doc(collection(db, COLECCIONES.invitaciones))
+  const invData: InvitacionEquipo = {
+    id: invRef.id,
+    tipo: 'desafio_aceptado',
+    equipoId: desafio.equipoId || desafio.id,
+    equipoNombre: desafio.equipoNombre,
+    equipoEscudoUrl: null,
+    remitenteUid,
+    remitenteNombre,
+    capitanNombre: remitenteNombre,
+    destinatarioUid,
+    destinatarioNombre: '',
+    desafioId: desafio.id,
+    mensaje:
+      mensajePersonalizado ||
+      `${remitenteNombre} aceptó el desafío para jugar con ${desafio.equipoNombre}.`,
+    estado: 'pendiente',
+    creadaEn: serverTimestamp(),
+    leida: false,
+  }
+  await setDoc(invRef, invData)
+  return invRef.id
+}
+
+/**
+ * Un jugador se postula para sumarse a un partido ese día (Alerta 'Falta 1').
+ * Notifica al organizador del partido en tiempo real.
+ */
+export const notificarPostulacionAlerta = async (
+  remitenteUid: string,
+  remitenteNombre: string,
+  destinatarioUid: string,
+  alerta: {
+    id: string
+    fecha: string
+    horaInicio: string
+    horaFin: string
+    posicion?: string | null
+  },
+): Promise<string> => {
+  const invRef = doc(collection(db, COLECCIONES.invitaciones))
+  const invData: InvitacionEquipo = {
+    id: invRef.id,
+    tipo: 'postulacion_partido',
+    equipoId: alerta.id,
+    equipoNombre: `Partido ${alerta.fecha}`,
+    equipoEscudoUrl: null,
+    remitenteUid,
+    remitenteNombre,
+    capitanNombre: remitenteNombre,
+    destinatarioUid,
+    destinatarioNombre: '',
+    alertaId: alerta.id,
+    posicion: alerta.posicion ?? null,
+    mensaje: `${remitenteNombre} quiere sumarse al partido del ${alerta.fecha} (${alerta.horaInicio} a ${alerta.horaFin})${
+      alerta.posicion ? ` como ${alerta.posicion}` : ''
+    }.`,
+    estado: 'pendiente',
+    creadaEn: serverTimestamp(),
+    leida: false,
+  }
+  await setDoc(invRef, invData)
+  return invRef.id
+}
+
+/**
+ * Responde a una invitación pendiente ('aceptada' o 'rechazada').
+ */
+export const responderInvitacion = async (
+  invitacionId: string,
+  estado: 'aceptada' | 'rechazada',
+): Promise<void> => {
+  const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
+  await updateDoc(invRef, {
+    estado,
+    updatedAt: serverTimestamp(),
+    leida: true,
+  })
+}
+
+/**
+ * Escucha en tiempo real las invitaciones pendientes dirigidas a un usuario.
+ */
+export const escucharInvitacionesPendientes = (
+  destinatarioUid: string,
+  alRecibir: (invitaciones: InvitacionEquipo[]) => void,
+) => {
+  const q = query(
+    collection(db, COLECCIONES.invitaciones),
+    where('destinatarioUid', '==', destinatarioUid),
+    where('estado', '==', 'pendiente'),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list: InvitacionEquipo[] = snap.docs.map((d) => d.data() as InvitacionEquipo)
+      alRecibir(list)
+    },
+    (err) => {
+      console.warn('Error escuchando invitaciones pendientes:', err)
+    },
+  )
+}
+
+/**
+ * Actualiza la convocatoria de un equipo en Firestore para que todo el plantel
+ * vea el partido programado y pueda confirmar o bajarse.
+ */
+export const actualizarConvocatoriaEquipo = async (
+  teamId: string,
+  convocatoria: {
+    fecha: string
+    confirmados: string[]
+    bajas: string[]
+    predioNombre?: string
+    turnoId?: string
+    [key: string]: any
+  } | null,
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, teamId)
+  await updateDoc(eqRef, {
+    convocatoria,
+  })
+}
+
+/**
+ * Incorpora a un jugador externo como refuerzo temporal del equipo para el partido.
+ * Lo agrega a los miembros del equipo (con flag esTemporal) y a la convocatoria confirmada.
+ */
+export const incorporarRefuerzoAEquipo = async (
+  equipoId: string,
+  jugador: {
+    uid: string
+    nombre: string
+    avatarUrl?: string | null
+    posicion?: string | null
+  },
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, equipoId)
+  const snap = await getDoc(eqRef)
+  if (!snap.exists()) return
+
+  const equipoData = snap.data()
+
+  // Actualizar convocatoria: el refuerzo se suma únicamente a los confirmados y refuerzos del partido
+  const conv = equipoData.convocatoria || {}
+  const confirmadosActuales: string[] = Array.isArray(conv.confirmados) ? conv.confirmados : []
+  const nuevosConfirmados = confirmadosActuales.includes(jugador.uid)
+    ? confirmadosActuales
+    : [...confirmadosActuales, jugador.uid]
+
+  const bajasActuales: string[] = Array.isArray(conv.bajas) ? conv.bajas : []
+  const nuevasBajas = bajasActuales.filter((id) => id !== jugador.uid)
+
+  const refuerzosActuales = Array.isArray(conv.refuerzos) ? conv.refuerzos : []
+  const nuevosRefuerzos = refuerzosActuales.some((r: any) => r.uid === jugador.uid)
+    ? refuerzosActuales
+    : [
+        ...refuerzosActuales,
+        {
+          uid: jugador.uid,
+          nombre: jugador.nombre,
+          avatarUrl: jugador.avatarUrl ?? null,
+          posicion: jugador.posicion ?? null,
+          esTemporal: true,
+        },
+      ]
+
+  const faltantes = Math.max(0, (conv.jugadoresFaltantes || 1) - 1)
+  const alertaRadarEnviada = faltantes > 0
+
+  await updateDoc(eqRef, {
+    convocatoria: {
+      ...conv,
+      confirmados: nuevosConfirmados,
+      bajas: nuevasBajas,
+      refuerzos: nuevosRefuerzos,
+      jugadoresFaltantes: faltantes,
+      alertaRadarEnviada,
+    },
+  })
+}
+
+/**
+ * Finaliza el 3er tiempo y cierra el partido:
+ * Guarda estadísticas (MVP, goles, asistencias) y desvincula los refuerzos temporales
+ * de la convocatoria activa.
+ */
+export const finalizarTercerTiempoYPartido = async (
+  equipoId: string,
+  partidoData: {
+    mvpId: string | null
+    stats: Record<string, { goles: number; asistencias: number }>
+  },
+): Promise<void> => {
+  const eqRef = doc(db, COLECCIONES.equipos, equipoId)
+  const snap = await getDoc(eqRef)
+  if (!snap.exists()) return
+
+  const equipoData = snap.data()
+  const members = Array.isArray(equipoData.members) ? equipoData.members : []
+  const conv = equipoData.convocatoria
+
+  // Remover refuerzos temporales del plantel
+  const miembrosPermanentes = members.filter((m: any) => !m.esTemporal)
+
+  const historial = Array.isArray(equipoData.historialPartidos) ? equipoData.historialPartidos : []
+  const nuevoHistorial = [
+    ...historial,
+    {
+      fecha: conv?.fecha || new Date().toISOString(),
+      mvpId: partidoData.mvpId,
+      stats: partidoData.stats,
+      finalizadoEn: Date.now(),
+    },
+  ]
+
+  // Acumular estadísticas históricas por jugador dentro del equipo
+  const statsJugadoresActuales: Record<
+    string,
+    { goles: number; asistencias: number; partidosJugados: number; mvpCount: number }
+  > = { ...(equipoData.estadisticasJugadores || {}) }
+
+  const jugadoresQueJugaron = new Set<string>([
+    ...(Array.isArray(conv?.confirmados) ? conv.confirmados : []),
+    ...Object.keys(partidoData.stats || {}),
+  ])
+
+  // Identificar datos del MVP si fue seleccionado
+  let mvpNombre: string | null = null
+  let mvpEmoji: string | null = null
+  if (partidoData.mvpId) {
+    const m = members.find((x: any) => x.uid === partidoData.mvpId)
+    if (m) {
+      mvpNombre = m.name
+      mvpEmoji = m.avatarUrl || '👑'
+    } else {
+      const r = Array.isArray(conv?.refuerzos)
+        ? conv.refuerzos.find((x: any) => x.uid === partidoData.mvpId)
+        : null
+      if (r) {
+        mvpNombre = r.nombre || r.name || 'Refuerzo'
+        mvpEmoji = '⚡'
+      }
+    }
+  }
+
+  jugadoresQueJugaron.forEach((uid) => {
+    const prev = statsJugadoresActuales[uid] || {
+      goles: 0,
+      asistencias: 0,
+      partidosJugados: 0,
+      mvpCount: 0,
+    }
+    const s = partidoData.stats?.[uid] || { goles: 0, asistencias: 0 }
+    statsJugadoresActuales[uid] = {
+      goles: (prev.goles || 0) + (s.goles || 0),
+      asistencias: (prev.asistencias || 0) + (s.asistencias || 0),
+      partidosJugados: (prev.partidosJugados || 0) + 1,
+      mvpCount: (prev.mvpCount || 0) + (partidoData.mvpId === uid ? 1 : 0),
+    }
+  })
+
+  // Guardar resumen del último partido para que la UI no quede vacía
+  const ultimoPartido = {
+    fecha: conv?.fecha || 'Último partido jugado',
+    predioNombre: conv?.predioNombre || conv?.predio || 'Complejo Deportivo',
+    canchaNombre: conv?.canchaNombre || conv?.cancha || 'Cancha',
+    mvpId: partidoData.mvpId,
+    mvpNombre,
+    mvpEmoji,
+    stats: partidoData.stats,
+    finalizadoEn: Date.now(),
+  }
+
+  // Guardar documento individual en `estadisticas_partido` para cada jugador
+  for (const uid of Array.from(jugadoresQueJugaron)) {
+    const s = partidoData.stats?.[uid] || { goles: 0, asistencias: 0 }
+    try {
+      const statDocRef = doc(collection(db, COLECCIONES.estadisticasPartido))
+      await setDoc(statDocRef, {
+        id: statDocRef.id,
+        equipoId,
+        equipoNombre: equipoData.name || 'Equipo',
+        jugadorUid: uid,
+        partidoFecha: conv?.fecha || new Date().toISOString(),
+        goles: s.goles || 0,
+        asistencias: s.asistencias || 0,
+        esMvp: partidoData.mvpId === uid,
+        creadoEn: serverTimestamp(),
+      })
+    } catch (e) {
+      console.warn('Error guardando estadistica de partido:', e)
+    }
+  }
+
+  await updateDoc(eqRef, {
+    members: miembrosPermanentes,
+    convocatoria: null,
+    ultimoPartido,
+    estadisticasJugadores: statsJugadoresActuales,
+    historialPartidos: nuevoHistorial,
+  })
+}
+
+/**
+ * Consulta todas las estadísticas de un jugador a través de partidos jugados.
+ */
+export const obtenerEstadisticasJugador = async (
+  uid: string,
+): Promise<{
+  goles: number
+  asistencias: number
+  partidosJugados: number
+  mvpCount: number
+}> => {
+  try {
+    const q = query(
+      collection(db, COLECCIONES.estadisticasPartido),
+      where('jugadorUid', '==', uid),
+    )
+    const snap = await getDocs(q)
+    let goles = 0
+    let asistencias = 0
+    let partidosJugados = 0
+    let mvpCount = 0
+
+    snap.forEach((d) => {
+      const data = d.data()
+      goles += data.goles || 0
+      asistencias += data.asistencias || 0
+      partidosJugados += 1
+      if (data.esMvp) mvpCount += 1
+    })
+
+    return { goles, asistencias, partidosJugados, mvpCount }
+  } catch (err) {
+    console.warn('Error consultando estadisticas de jugador:', err)
+    return { goles: 0, asistencias: 0, partidosJugados: 0, mvpCount: 0 }
+  }
 }

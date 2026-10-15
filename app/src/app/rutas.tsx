@@ -1,6 +1,7 @@
-import { Navigate, createBrowserRouter, useLocation, type RouteObject } from 'react-router-dom';
+import { Navigate, Outlet, createBrowserRouter, useLocation, type RouteObject } from 'react-router-dom';
 import { useSesion } from '@/modules/auth/useSesion';
 import { planDuenoActivo, planDuenoPendiente } from '@/domain';
+import { CargandoFulbeando, ProveedorTransicion } from '@/modules/ui/overlays';
 
 // Importación de las pantallas unificadas
 import { 
@@ -19,6 +20,7 @@ import AlAnguloHome from '@/modules/ui/AlAnguloHome';
 import CargaDeSena from '@/modules/turnos/pantallas/CargaDeSena';
 import Ajustes from '@/modules/cuenta/pantallas/Ajustes';
 import PlanPendiente from '@/modules/cuenta/pantallas/PlanPendiente';
+import CartaPublica from '@/modules/cuenta/pantallas/CartaPublica';
 import { AppLayout } from '@/app/AppLayout';
 // Dashboard del superadmin: el diseno original (sidebar oscuro, KPI grid y
 // Sala de Arbitraje) con los numeros reales de Firestore y las colas de
@@ -54,7 +56,7 @@ const ProtectedRoute = ({
   const { usuario, cargando } = useSesion();
   const location = useLocation();
   
-  if (cargando) return <div className="bg-zinc-950 h-full w-screen flex justify-center items-center text-emerald-500">Cargando...</div>;
+  if (cargando) return <CargandoFulbeando />;
   if (!usuario) return <Navigate to="/login" replace />;
 
   const ruta = location.pathname;
@@ -96,7 +98,7 @@ const ProtectedRoute = ({
   return children;
 };
 
-export const rutas: RouteObject[] = [
+const rutasHijas: RouteObject[] = [
   // Flujo 1: Acceso (Sin Layout Principal)
   { path: '/login', element: <Screen1Login /> },
   { path: '/role-selector', element: <ProtectedRoute><Screen2RoleSelector /></ProtectedRoute> },
@@ -119,6 +121,7 @@ export const rutas: RouteObject[] = [
       { path: '/equipo', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen7MyTeam /></ProtectedRoute> },
       { path: '/partidos', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen6LaunchChallenge /></ProtectedRoute> },
       { path: '/perfil', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen4WelcomeCard /></ProtectedRoute> },
+      { path: '/carta/:uid', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><CartaPublica /></ProtectedRoute> },
       { path: '/turnos', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen5Reservas /></ProtectedRoute> },
       { path: '/ajustes', element: <ProtectedRoute><Ajustes /></ProtectedRoute> },
       { path: '/reservar/:predioId', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><CargaDeSena /></ProtectedRoute> },
@@ -135,6 +138,17 @@ export const rutas: RouteObject[] = [
   
   // Catch all (404)
   { path: '*', element: <Navigate to="/radar" replace /> },
+];
+
+export const rutas: RouteObject[] = [
+  {
+    element: (
+      <ProveedorTransicion>
+        <Outlet />
+      </ProveedorTransicion>
+    ),
+    children: rutasHijas,
+  },
 ];
 
 export const router = createBrowserRouter(rutas);

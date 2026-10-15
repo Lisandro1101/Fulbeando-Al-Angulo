@@ -28,7 +28,7 @@ service cloud.firestore {
     function isSuperadmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && getUserData().rol == 'superadmin';
+        && getUserData().get('rol', 'jugador') == 'superadmin';
     }
 
     /** Dueno del predio indicado (o superadmin). */
@@ -52,7 +52,7 @@ service cloud.firestore {
     function esDueno() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && getUserData().rol == 'dueno_predio';
+        && getUserData().get('rol', 'jugador') == 'dueno_predio';
     }
 
     /**
@@ -82,14 +82,6 @@ service cloud.firestore {
     /**
      * El update agrega exclusivamente el propio uid como miembro `PLAYER` y no
      * altera ningun otro miembro.
-     *
-     * NO se usa `List.where()` porque no existe en el lenguaje de reglas. La
-     * comparacion es de conjuntos: el nuevo plantel debe ser exactamente el
-     * anterior mas la entrada propia. Exigir igualdad exacta (y no solo "agregar
-     * el propio uid") impide que de paso borre o modifique a otro jugador.
-     *
-     * El nombre se exige igual al del documento del usuario: asi un cliente
-     * manipulado no puede meter un nombre arbitrario en el plantel ajeno.
      */
     function soloAnadePropioMiembro(teamId, uid) {
       return exists(/databases/$(database)/documents/teams/$(teamId))
@@ -99,7 +91,7 @@ service cloud.firestore {
         && request.resource.data.members.toSet() == resource.data.members.toSet().union(
              [{
                'uid': uid,
-               'name': getUserData().nombre + ' ' + getUserData().apellido,
+               'name': getUserData().get('nombre', '') + ' ' + getUserData().get('apellido', ''),
                'role': 'PLAYER'
              }].toSet()
            );
@@ -131,85 +123,64 @@ service cloud.firestore {
        *     capitan.
        *
        * Sin esto, sacar a un jugador dejaria `teamIds` con un id huerfano y
-       * el jugador se quedaria con una ficha gastada del tope de 2 equipos.
        */
-      function equipoQuitado() {
-        return resource.data.perfilDeportivo.teamIds.removeAll(
-          request.resource.data.perfilDeportivo.teamIds);
+      function tienePerfilDeportivo(data) {
+        return data.keys().hasAny(['perfilDeportivo'])
+          && data.perfilDeportivo != null
+          && data.perfilDeportivo.keys().hasAny(['teamIds'])
+          && data.perfilDeportivo.teamIds is list;
       }
 
-      /** El unico teamId que se quita. En rules NO existe `List.get(i)`: se usa el operador `lista[i]`. */
-      function equipoQuitadoId() {
-        return equipoQuitado()[0];
+      function equipoQuitado() {
+        return (tienePerfilDeportivo(resource.data) && tienePerfilDeportivo(request.resource.data))
+          ? resource.data.perfilDeportivo.teamIds.removeAll(request.resource.data.perfilDeportivo.teamIds)
+          : [];
       }
 
       function capitanDesvinculaSuEquipo() {
-        return request.resource.data.perfilDeportivo != null
-          && resource.data.keys().hasAny(['perfilDeportivo'])
-          && resource.data.perfilDeportivo != null
-          && resource.data.perfilDeportivo.keys().hasAny(['teamIds'])
+        return tienePerfilDeportivo(resource.data)
+          && tienePerfilDeportivo(request.resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['perfilDeportivo'])
-          && request.resource.data.perfilDeportivo.diff(resource.data.perfilDeportivo)
-               .affectedKeys().hasOnly(['teamIds'])
-          && request.resource.data.perfilDeportivo.teamIds is list
-          && resource.data.perfilDeportivo.teamIds is list
+          && request.resource.data.perfilDeportivo.diff(resource.data.perfilDeportivo).affectedKeys().hasOnly(['teamIds'])
           && equipoQuitado().size() == 1
-          && resource.data.perfilDeportivo.teamIds.hasAll(
-               request.resource.data.perfilDeportivo.teamIds)
-          // `exists()` antes de `get()`: si el equipo ya no existe, `get().data`
-          // revienta con error de evaluacion y eso negaria TAMBIEN las
-          // escrituras legitimas propias que caen despues en el `||`.
-          && exists(/databases/$(database)/documents/teams/$(equipoQuitadoId()))
-          && get(/databases/$(database)/documents/teams/$(equipoQuitadoId()))
-               .data.captainId == request.auth.uid;
+          && resource.data.perfilDeportivo.teamIds.hasAll(request.resource.data.perfilDeportivo.teamIds)
+          && exists(/databases/$(database)/documents/teams/$(equipoQuitado()[0]))
+          && get(/databases/$(database)/documents/teams/$(equipoQuitado()[0])).data.captainId == request.auth.uid;
       }
 
-      // El usuario puede alterar su propio rol solo si es 'invitado'.
-      // Va ANTES que `capitanDesvinculaSuEquipo()`: las escrituras propias son
-      // las frecuentes y no tienen por que pagar ni arriesgar un `get()` ajeno
-      // (`&&` cortocircuita, asi que rama propia sin equipo queda en false y
-      // sigue buscando permiso en la rama del capitan).
+      // El usuario puede alterar su propio perfil
       allow update: if isSignedIn()
         && (
           isSuperadmin()
           || (
             request.auth.uid == uid
             && (
-              request.resource.data.rol == resource.data.rol
-              || (resource.data.rol == 'invitado' && (request.resource.data.rol == 'jugador' || request.resource.data.rol == 'dueno_predio'))
+              request.resource.data.get('rol', resource.data.get('rol', 'jugador')) == resource.data.get('rol', 'jugador')
+              || (resource.data.get('rol', 'jugador') == 'invitado' && (request.resource.data.get('rol', '') == 'jugador' || request.resource.data.get('rol', '') == 'dueno_predio'))
             )
             && request.resource.data.get('estado', null) == resource.data.get('estado', null)
             && request.resource.data.get('deletedAt', null) == resource.data.get('deletedAt', null)
-            // Regla de negocio: un jugador puede estar en como mucho 2 equipos a
-            // la vez (contando el propio que creo).
-            //
-            // Se valida ACIA porque `perfilDeportivo.teamIds` lo escribe el
-            // cliente: `teamService` avisa antes, pero un cliente modificado se
-            // saltaria ese chequeo. El limite tiene quevivir en el servidor.
-            //
-            // Acceder a una clave ausente es error de evaluacion, asi que se
-            // consulta con `keys().hasAny([...])` antes de `.size()`.
+            && request.resource.data.get('planDueno', 'pendiente') == resource.data.get('planDueno', 'pendiente')
+            // Regla de negocio: un jugador puede estar en como mucho 2 equipos a la vez
             && (
               !request.resource.data.keys().hasAny(['perfilDeportivo'])
-              || request.resource.data.perfilDeportivo == null || !request.resource.data.perfilDeportivo.keys().hasAny(['teamIds'])
+              || request.resource.data.perfilDeportivo == null
+              || !request.resource.data.perfilDeportivo.keys().hasAny(['teamIds'])
               || (
                 (request.resource.data.perfilDeportivo.teamIds is list)
                 && request.resource.data.perfilDeportivo.teamIds.size() <= 2
               )
             )
-            // Un dueno NO tiene ficha de jugador: las dos ramas del PRD son
-            // excluyentes. Solo se acepta que reescriba el campo tal cual esta
-            // (es decir, que no lo toque), para que un cliente alterado no le
-            // rearme una ficha de jugador con posicion, nivel y equipos.
-            // La rama del capitan no se toca: un dueno con equipo heredado
-            // tiene que poder seguir gestionandolo.
             && (
               !request.resource.data.keys().hasAny(['perfilDeportivo'])
-              || resource.data.rol != 'dueno_predio'
-              || request.resource.data.perfilDeportivo == resource.data.perfilDeportivo
+              || resource.data.get('rol', 'jugador') != 'dueno_predio'
+              || request.resource.data.perfilDeportivo == resource.data.get('perfilDeportivo', null)
             )
           )
-          || capitanDesvinculaSuEquipo()
+          || (
+            equipoQuitado().size() == 1
+            && capitanDesvinculaSuEquipo()
+          )
         );
 
       allow delete: if false;
@@ -480,6 +451,20 @@ match /comprobantes/{turnoId} {
              || request.resource.data.members.size() <= 23);
     }
 
+    /**
+     * En el muro social, un tercero (el que reacciona o comenta) solo debe tocar
+     * los contadores desnormalizados de la publicacion. El contenido (texto,
+     * fotos, carta, autor) queda bajo control exclusivo del autor.
+     */
+    function soloActualizaContadoresPublicacion() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['reaccionesCount', 'comentariosCount', 'reacciones', 'updatedAt']);
+    }
+
+    function tipoReaccionValido() {
+      return request.resource.data.tipo in ['like', 'gol', 'mvp', 'risa', 'fuego'];
+    }
+
     match /teams/{teamId} {
       allow read: if isSignedIn();
 
@@ -517,6 +502,10 @@ match /comprobantes/{turnoId} {
                          // puede llegar al segundo paso, asi que se niega la
                          // primera para que falle limpio y sin quedar a medias.
                          (soloAnadePropioMiembro(teamId, request.auth.uid) && !esDueno())
+                          || (
+                               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['convocatoria'])
+                               && !esDueno()
+                             )
                          || (
                               resource.data.captainId == request.auth.uid
                               && request.resource.data.captainId is string
@@ -556,6 +545,65 @@ match /comprobantes/{turnoId} {
 
     match /system_metrics/{docId} {
       allow read, write: if isSuperadmin();
+    }
+
+    match /invitaciones/{invitacionId} {
+      allow read: if isSignedIn()
+        && (resource.data.destinatarioUid == request.auth.uid || resource.data.remitenteUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.remitenteUid == request.auth.uid;
+      allow update: if isSignedIn()
+        && (resource.data.destinatarioUid == request.auth.uid || resource.data.remitenteUid == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /estadisticas_partido/{statId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // Muro social de la comunidad: posts con texto/fotos y cartas compartidas.
+    // Cualquier usuario logueado ve el muro; el autor manda en su contenido y los
+    // terceros solo pueden incrementar los contadores (reacciones/comentarios).
+    match /publicaciones/{pubId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && textoOpcionalSano(request.resource.data, 'texto', 280)
+                    && request.resource.data.autorUid == request.auth.uid;
+      allow update: if isSignedIn()
+                    && (resource.data.autorUid == request.auth.uid
+                        || soloActualizaContadoresPublicacion());
+      allow delete: if isSignedIn() && resource.data.autorUid == request.auth.uid;
+
+      // Reacciones variadas: el id del doc es el uid, asi que cada uno reacciona
+      // una sola vez por publicacion.
+      match /reacciones/{uid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+                              && request.auth.uid == uid
+                              && tipoReaccionValido();
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      match /comentarios/{comentarioId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+                      && textoOpcionalSano(request.resource.data, 'texto', 280)
+                      && request.resource.data.autorUid == request.auth.uid;
+        allow update, delete: if isSignedIn() && resource.data.autorUid == request.auth.uid;
+      }
+    }
+
+    // Grafo social. El id es determinista (`follower_followed`): seguir dos veces
+    // es idempotente y dejar de seguir es un `delete` directo.
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.followerUid == request.auth.uid
+                    && followId == request.resource.data.followerUid + '_' + request.resource.data.followedUid;
+      allow delete: if isSignedIn() && resource.data.followerUid == request.auth.uid;
+      allow update: if false;
     }
   }
 }

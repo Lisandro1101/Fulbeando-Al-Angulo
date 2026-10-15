@@ -16,7 +16,7 @@ export interface FirebaseEnv {
  * `DatosDeCobro.montoSena` es obligatorio, asi que el alta de predio usa este
  * valor como placeholder hasta que el dueno lo configure.
  */
-export const MONTO_SENA_DEFAULT = 15000
+export const MONTO_SENA_DEFAULT = 4000
 
 /**
  * Contacto comercial del dueno de predio (PLACEHOLDER).
@@ -38,7 +38,17 @@ export interface AppEnv {
   useEmulators: boolean
   /** Radio por defecto del radar "Falta 1". */
   radarRadioKm: number
+  /**
+   * Radar servido por la Cloud Function `radarQuery` (Fase 2) en vez de las
+   * cuatro consultas directas. Default `false`: apagado deja el comportamiento
+   * actual intacto. Si la Function falla, el cliente cae solo a las consultas
+   * directas (ver `MapaRadarUnificado`).
+   */
+  radarUsaFunction: boolean
 }
+
+/** Region de despliegue de `radarQuery`. Debe coincidir con la Function. */
+export const RADAR_FUNCTIONS_REGION = 'southamerica-east1'
 
 const read = (key: string, fallback = ''): string => {
   const viteValue = (import.meta as { env?: Record<string, string | undefined> }).env?.[key]
@@ -65,6 +75,7 @@ export const appEnv = (): AppEnv => ({
   firebase: firebaseEnv(),
   useEmulators: flag('VITE_USE_EMULATORS', false),
   radarRadioKm: Number(read('VITE_RADAR_RADIO_KM', '5')),
+  radarUsaFunction: flag('VITE_RADAR_USA_FUNCTION', false),
 })
 
 export const faltaConfigFirebase = (): string[] => {
@@ -95,4 +106,20 @@ export const COLECCIONES = {
   desafios: 'challenges',
   partidos: 'matches',
   resenas: 'reviews',
+  invitaciones: 'invitaciones',
+  /** Una ficha por jugador y por partido: goles, asistencias y MVP. */
+  estadisticasPartido: 'estadisticas_partido',
+  /** Muro de la comunidad: posts y cartas de jugador publicadas. */
+  publicaciones: 'publicaciones',
+  /** Grafo social: `follows/{followerUid}_{followedUid}`. */
+  follows: 'follows',
+} as const
+
+/**
+ * Subcolecciones dentro de una publicacion. Se declaran aparte para que los
+ * repos y las reglas no dependan de strings sueltos.
+ */
+export const SUBCOLECCIONES = {
+  reacciones: 'reacciones',
+  comentarios: 'comentarios',
 } as const

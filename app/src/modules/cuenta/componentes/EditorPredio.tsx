@@ -11,7 +11,14 @@ import {
   normalizarBarrio,
 } from '@/modules/predios/repositorio'
 
-type Borrador = Pick<Predio, 'nombre' | 'direccion' | 'barrio' | 'ciudad' | 'telefono'>
+type Borrador = Pick<Predio, 'nombre' | 'direccion' | 'barrio' | 'ciudad' | 'telefono'> & {
+  tipoSena: 'fijo' | 'porcentaje'
+  montoSena: string
+  porcentajeSena: string
+  alias: string
+  titular: string
+  cbu: string
+}
 
 const desdePredio = (p: Predio): Borrador => ({
   nombre: p.nombre,
@@ -19,15 +26,17 @@ const desdePredio = (p: Predio): Borrador => ({
   barrio: p.barrio,
   ciudad: p.ciudad,
   telefono: p.telefono,
+  tipoSena: p.cobro?.tipoSena ?? 'fijo',
+  montoSena: String(p.cobro?.montoSena ?? 4000),
+  porcentajeSena: String(p.cobro?.porcentajeSena ?? 50),
+  alias: p.cobro?.alias ?? '',
+  titular: p.cobro?.titular ?? '',
+  cbu: p.cobro?.cbu ?? '',
 })
 
 /**
  * Edicion del predio propio: lo que el jugador necesita para LLEGAR hasta la
- * cancha (direccion exacta + punto en el mapa) y el contacto.
- *
- * Es la unica pantalla que modifica `predio.direccion` y `predio.geo` despues
- * del alta (`Screen8VenueRegistration`): sin esto, una direccion mal cargada
- * no tenia arreglo sin borrar el predio.
+ * cancha (direccion exacta + punto en el mapa), el contacto y los datos de cobro/seña.
  */
 export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
   const [predios, setPredios] = useState<Predio[] | null>(null)
@@ -36,18 +45,21 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
   const [punto, setPunto] = useState<{ lat: number; lng: number } | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorCarga, setErrorCarga] = useState<string | null>(null)
   const [guardado, setGuardado] = useState(false)
 
   const predio = predios?.[indice] ?? null
   const { location, requestLocation } = useGeolocation(punto ?? undefined)
 
   const cargar = async () => {
+    setErrorCarga(null)
     try {
       const lista = await listarPrediosDelDueno(duenoUid)
       setPredios(lista)
       setIndice(0)
     } catch {
-      setPredios([])
+      setPredios(null)
+      setErrorCarga('No pudimos cargar tu predio. Revisá tu conexión e intentá de nuevo.')
     }
   }
 
@@ -56,10 +68,6 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duenoUid])
 
-  // Un predio distinto (o el primer cargado) arranca un borrador nuevo.
-  // Depende del id y no del objeto: `guardar()` recarga la lista y `predio`
-  // pasa a ser otra referencia, lo que re-triggeriaba este effect y borraba
-  // el "Datos guardados" apenas aparecia.
   useEffect(() => {
     if (!predio) {
       setBorrador(null)
@@ -73,9 +81,6 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [predio?.id])
 
-  // La posicion que devuelve el GPS reemplaza al punto guardado. El fallback
-  // (CABA) no se aplica: un dueño sin permiso no deberia mover su predio a
-  // otro lado sin darse cuenta.
   useEffect(() => {
     if (location.loading || location.isFallback) return
     if (location.latitude === null || location.longitude === null) return
@@ -110,6 +115,14 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
         telefono: borrador.telefono.trim(),
         barrioNormalizado: normalizarBarrio(borrador.barrio),
         geo: aGeoIndex(punto, appEnv().radarRadioKm),
+        cobro: {
+          tipoSena: borrador.tipoSena,
+          montoSena: Number(borrador.montoSena) > 0 ? Number(borrador.montoSena) : 4000,
+          porcentajeSena: Number(borrador.porcentajeSena) > 0 ? Math.min(100, Number(borrador.porcentajeSena)) : 50,
+          alias: borrador.alias.trim(),
+          titular: borrador.titular.trim(),
+          cbu: borrador.cbu.trim() || null,
+        },
       })
       await cargar()
       setGuardado(true)
@@ -118,6 +131,17 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
     } finally {
       setGuardando(false)
     }
+  }
+
+  if (errorCarga) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-occupied">{errorCarga}</p>
+        <button type="button" className="btn-ghost" onClick={() => void cargar()}>
+          Reintentar
+        </button>
+      </div>
+    )
   }
 
   if (predios === null) {
@@ -234,6 +258,146 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
             type="text"
             value={borrador.ciudad}
             onChange={(e) => cambiar('ciudad', e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* SECCIÓN DATOS DE COBRO Y SEÑA */}
+      <div className="rounded-2xl border border-zinc-800 bg-canvas-raised p-4 space-y-3">
+        <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
+          Cobro de señas y datos bancarios
+        </h3>
+        <p className="text-xs text-ink-muted">
+          Los jugadores transferirán esta seña para congelar su reserva de turno.
+        </p>
+
+        {/* Selector de Modalidad */}
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-ink uppercase tracking-wide">
+            Modalidad de la seña
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => cambiar('tipoSena', 'fijo')}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                borrador.tipoSena === 'fijo'
+                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+              }`}
+            >
+              💵 Monto Fijo ($)
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiar('tipoSena', 'porcentaje')}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                borrador.tipoSena === 'porcentaje'
+                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+              }`}
+            >
+              📊 Porcentaje (%)
+            </button>
+          </div>
+        </div>
+
+        {borrador.tipoSena === 'fijo' ? (
+          <div>
+            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-sena">
+              Monto fijo de la seña por turno ($)
+            </label>
+            <input
+              id="predio-sena"
+              className="field font-bold text-pitch"
+              type="number"
+              min="0"
+              step="500"
+              placeholder="Ej: 4000"
+              value={borrador.montoSena}
+              onChange={(e) => cambiar('montoSena', e.target.value)}
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-porcentaje">
+              Porcentaje del valor de la cancha (%)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="predio-porcentaje"
+                className="field font-bold text-pitch w-28 text-center"
+                type="number"
+                min="5"
+                max="100"
+                step="5"
+                placeholder="Ej: 50"
+                value={borrador.porcentajeSena}
+                onChange={(e) => cambiar('porcentajeSena', e.target.value)}
+              />
+              <div className="flex gap-1.5 flex-1">
+                {[30, 50, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => cambiar('porcentajeSena', String(pct))}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
+                      Number(borrador.porcentajeSena) === pct
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                        : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="mt-1 text-[11px] text-ink-muted">
+              Ej: Para una cancha de $10.000 con {borrador.porcentajeSena || 50}%, la seña será de ${((10000 * (Number(borrador.porcentajeSena) || 50)) / 100).toLocaleString('es-AR')}.
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-alias">
+              Alias de transferencia
+            </label>
+            <input
+              id="predio-alias"
+              className="field font-mono"
+              type="text"
+              placeholder="Ej: complejo.futbol.mp"
+              value={borrador.alias}
+              onChange={(e) => cambiar('alias', e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-titular">
+              Titular de la cuenta
+            </label>
+            <input
+              id="predio-titular"
+              className="field"
+              type="text"
+              placeholder="Ej: Juan Pérez"
+              value={borrador.titular}
+              onChange={(e) => cambiar('titular', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-cbu">
+            CBU / CVU (opcional)
+          </label>
+          <input
+            id="predio-cbu"
+            className="field font-mono text-xs"
+            type="text"
+            placeholder="22 dígitos"
+            value={borrador.cbu}
+            onChange={(e) => cambiar('cbu', e.target.value)}
           />
         </div>
       </div>

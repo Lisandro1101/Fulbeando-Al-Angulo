@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useLocation } from 'react-router-dom'
 import { CheckCircle2, FileImage, Loader2, Upload, X } from 'lucide-react'
 import type { Predio, Turno } from '@/domain'
-import { MAX_BYTES_COMPROBANTE, MINUTOS_BLOQUEO_TEMPORAL, canchasDe, turnoId } from '@/domain'
+import { MAX_BYTES_COMPROBANTE, MINUTOS_BLOQUEO_TEMPORAL, canchasDe, calcularMontoSena, turnoId } from '@/domain'
 import { formatearFechaCorta, formatearMoneda } from '@/core/tiempo'
 import { obtenerPredio } from '@/modules/predios/repositorio'
 import { obtenerTurno, solicitarTurno } from '@/modules/turnos/repositorio'
@@ -17,7 +17,7 @@ import {
 } from '@/modules/turnos/componentes/SelectorFranja'
 import { TemporizadorBloqueo } from '@/modules/turnos/componentes/TemporizadorBloqueo'
 import { Etiqueta, Pantalla, Tarjeta } from '@/modules/ui/pantalla'
-import { NavegacionHeader } from '@/modules/ui/NavegacionHeader'
+import { CargandoFulbeando } from '@/modules/ui/overlays'
 
 type Vista = 'eligiendo' | 'subiendo' | 'esperando'
 
@@ -136,7 +136,7 @@ export default function CargaDeSena() {
         horaInicio: seleccion.horaInicio,
         horaFin: seleccion.horaFin,
         precioTotal: seleccion.precioTotal,
-        montoSena: predio.cobro.montoSena,
+        montoSena: seleccion.montoSena ?? calcularMontoSena(predio.cobro, seleccion.precioTotal),
         alias: predio.cobro.alias,
         geo: predio.geo,
         organizador: {
@@ -156,13 +156,19 @@ export default function CargaDeSena() {
       const fresco = await obtenerTurno(creado)
       setTurno(fresco)
       setVista('esperando')
-    } catch (e) {
+    } catch (e: any) {
       setVista('eligiendo')
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'No pudimos enviar la solicitud. Revisa el comprobante e intenta de nuevo.',
-      )
+      console.error('Error al solicitar turno:', e)
+      const msj = typeof e?.message === 'string' ? e.message : ''
+      if (msj.includes('evaluation error') || msj.includes('permission-denied') || msj.includes('PERMISSION_DENIED')) {
+        setError('No tenés permisos para reservar este turno o el turno ya no está disponible.')
+      } else if (msj.includes('No disponible') || msj.includes('TurnoNoDisponible')) {
+        setError('El turno ya no está disponible. Elegí otro horario.')
+      } else if (msj.includes('comprobante') || msj.includes('SinComprobante')) {
+        setError('El comprobante es obligatorio para confirmar la seña.')
+      } else {
+        setError(msj && !msj.includes('@ L') ? msj : 'No pudimos enviar la solicitud. Revisá el comprobante e intentá de nuevo.')
+      }
     }
   }
 
@@ -182,13 +188,7 @@ export default function CargaDeSena() {
   }
 
   if (cargandoPredio) {
-    return (
-      <Pantalla titulo="Reservar turno">
-        <p className="surface flex items-center gap-2 text-sm text-ink-muted">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando predio...
-        </p>
-      </Pantalla>
-    )
+    return <CargandoFulbeando />
   }
 
   if (!predio) {
@@ -238,7 +238,10 @@ export default function CargaDeSena() {
               <Fila etiqueta="Fecha" valor={formatearFechaCorta(turno.fecha)} />
               <Fila etiqueta="Horario" valor={`${turno.horaInicio} a ${turno.horaFin}`} />
               <Fila etiqueta="Total" valor={formatearMoneda(turno.precioTotal)} />
-              <Fila etiqueta="Sena" valor={formatearMoneda(turno.montoSena)} />
+              <Fila etiqueta="Seña abonada" valor={formatearMoneda(turno.montoSena)} />
+              {turno.precioTotal > turno.montoSena && (
+                <Fila etiqueta="Saldo en cancha" valor={formatearMoneda(turno.precioTotal - turno.montoSena)} />
+              )}
             </dl>
             <div className="mt-3">
               {turno.estado === 'bloqueado_temporal' && (
@@ -266,8 +269,8 @@ export default function CargaDeSena() {
             </p>
           )}
 
-          <Link to="/dashboard" className="btn-primary w-full">
-            Ver mis partidos
+          <Link to="/turnos" className="btn-primary w-full">
+            Ver mis reservas
           </Link>
         </div>
       </Pantalla>
@@ -277,10 +280,7 @@ export default function CargaDeSena() {
   const listoParaEnviar = seleccion !== null && archivo !== null && sesion.user !== null
 
   return (
-    <div className="h-full flex flex-col bg-canvas pb-safe">
-      <div className="shrink-0">
-        <NavegacionHeader />
-      </div>
+    <div className="h-full flex flex-col bg-canvas">
       {contextState?.teamName && (
         <div className="bg-amber-500/10 text-amber-500 font-bold text-sm px-4 py-3 border-b border-amber-500/20 text-center animate-pulse">
           ⚽ Reservando turno para el partido de <span className="text-white">{contextState.teamName}</span>
@@ -319,7 +319,11 @@ export default function CargaDeSena() {
         </Tarjeta>
 
         <Tarjeta titulo="2. Transferí la seña">
-          <DatosDeTransferencia cobro={predio.cobro} />
+          <DatosDeTransferencia
+            cobro={predio.cobro}
+            montoSena={seleccion?.montoSena}
+            precioTotal={seleccion?.precioTotal}
+          />
         </Tarjeta>
 
         <Tarjeta
@@ -347,6 +351,7 @@ export default function CargaDeSena() {
               <span className="text-sm font-medium text-ink">Elegí la imagen del comprobante</span>
               <span className="text-xs text-ink-muted">JPG, PNG o WEBP hasta 5 MB</span>
               <input
+                aria-label="Comprobante de seña"
                 type="file"
                 accept="image/*"
                 className="sr-only"

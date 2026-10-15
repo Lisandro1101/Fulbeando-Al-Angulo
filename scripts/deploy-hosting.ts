@@ -13,7 +13,13 @@
  *
  *   npm run deploy:hosting            -> deploy al hosting del proyecto real
  *   npm run deploy:preview            -> channel deploy "pre-produccion"
+ *   npm run deploy:rules              -> reglas + indices (Firestore, Storage, RTDB)
+ *   npm run deploy:prod               -> build + hosting + reglas + indices
  *   npm run deploy:hosting -- --dry   -> imprime el comando y no despliega
+ *
+ * Las reglas son UN solo archivo para emulador y produccion
+ * (app/firebase/firestore.rules): lo que pasa en el emulador es lo que pasa en
+ * produccion. La diferencia entre entornos esta en los datos, no en las reglas.
  */
 import { spawn } from 'node:child_process'
 import { projectIdDeProduccion } from './proyecto-emulador'
@@ -33,9 +39,16 @@ const dry = process.argv.includes('--dry')
 const previsualizacion = process.argv.includes('--preview')
 const canal = process.argv[process.argv.indexOf('--preview') + 1]
 
+const REGLAS = 'firestore:rules,firestore:indexes,storage,database'
+const only = process.argv.includes('--all')
+  ? `hosting,${REGLAS}`
+  : process.argv.includes('--rules')
+    ? REGLAS
+    : 'hosting'
+
 const args = previsualizacion
   ? ['hosting:channel:deploy', '--project', PROYECTO, canal ?? 'pre-produccion']
-  : ['deploy', '--project', PROYECTO, '--only', 'hosting']
+  : ['deploy', '--project', PROYECTO, '--only', only]
 
 console.log(`\n  Destino: ${PROYECTO}${previsualizacion ? ` (channel "${canal ?? 'pre-produccion'}")` : ''}`)
 console.log(`  firebase ${args.join(' ')}\n`)

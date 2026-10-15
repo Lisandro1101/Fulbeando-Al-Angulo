@@ -4,61 +4,72 @@ exports.getPresignedUploadUrl = void 0;
 const functions = require("firebase-functions");
 const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
-// Configuración cargada desde los secretos del entorno (Firebase Secrets)
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || 'tu-account-id';
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || 'tu-access-key';
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || 'tu-secret-key';
-const BUCKET_NAME = 'al-angulo-media';
-// Cliente S3 configurado apuntando a los servidores de Cloudflare
-const s3 = new client_s3_1.S3Client({
-    region: 'auto',
-    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-        accessKeyId: R2_ACCESS_KEY_ID,
-        secretAccessKey: R2_SECRET_ACCESS_KEY,
-    },
-    forcePathStyle: true // R2 exige este parámetro S3-Compatible
-});
+function getS3Client() {
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+        throw new functions.https.HttpsError('failed-precondition', 'Las credenciales de Cloudflare R2 no están configuradas en el servidor.');
+    }
+    return new client_s3_1.S3Client({
+        region: 'auto',
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+        credentials: {
+            accessKeyId,
+            secretAccessKey,
+        },
+        forcePathStyle: true,
+    });
+}
 /**
- * Callable Function (Segura): Genera un ticket de un solo uso (URL prefirmada)
- * para que el móvil del usuario suba la imagen directo a Cloudflare.
+ * Callable Function: Genera una URL prefirmada de un solo uso para que
+ * el cliente suba el archivo directamente a Cloudflare R2 sin pasar por Firebase Storage.
  */
 exports.getPresignedUploadUrl = functions.https.onCall(async (data, context) => {
-    // 1. Barrera de Seguridad
+    // 1. Barrera de seguridad: requiere usuario autenticado
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Acceso denegado. Se requiere cuenta activa.');
     }
     const { fileName, contentType, folder } = data;
     if (!fileName || !contentType) {
-        throw new functions.https.HttpsError('invalid-argument', 'Parámetros inválidos.');
+        throw new functions.https.HttpsError('invalid-argument', 'Parámetros inválidos: se requiere fileName y contentType.');
     }
-    // 2. Aislamiento e Inmutabilidad
-    // Empaquetamos la foto en el directorio del usuario para que nadie sobreescriba fotos ajenas.
+    // 2. Aislamiento por usuario para evitar sobreescritura
     const uid = context.auth.uid;
-    const safeFolder = folder === 'teams' ? `teams/${uid}` : `avatars/${uid}`;
+    let safeFolder = `avatars/${uid}`;
+    if (folder === 'teams') {
+        safeFolder = `teams/${uid}`;
+    }
+    else if (folder === 'posts') {
+        safeFolder = `posts/${uid}`;
+    }
+    else if (folder) {
+        safeFolder = `${folder.replace(/[^a-zA-Z0-9_-]/g, '')}/${uid}`;
+    }
+    const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const timestamp = Date.now();
-    const fileKey = `${safeFolder}/${timestamp}_${fileName}`;
-    // 3. Reglas de Inserción
+    const fileKey = `${safeFolder}/${timestamp}_${sanitizedName}`;
+    const bucketName = process.env.R2_BUCKET_NAME || 'fulbeando-media';
+    const publicPrefix = (process.env.R2_PUBLIC_URL_PREFIX || `https://${bucketName}.r2.cloudflarestorage.com`).replace(/\/+$/, '');
+    const s3 = getS3Client();
     const command = new client_s3_1.PutObjectCommand({
-        Bucket: BUCKET_NAME,
+        Bucket: bucketName,
         Key: fileKey,
         ContentType: contentType,
-        // ESTRATEGIA DE CACHÉ EXTREMA: Guardar en el dispositivo un año entero.
-        CacheControl: 'public, max-age=31536000, immutable'
+        CacheControl: 'public, max-age=31536000, immutable',
     });
     try {
-        // 4. Firma temporal: Expira rápido (3 min) para que el link no pueda revenderse/abusarse
-        const presignedUrl = await (0, s3_request_presigner_1.getSignedUrl)(s3, command, { expiresIn: 180 });
+        const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(s3, command, { expiresIn: 300 }); // 5 minutos
+        const publicUrl = `${publicPrefix}/${fileKey}`;
         return {
-            uploadUrl: presignedUrl,
-            fileKey: fileKey,
-            // URL productiva de nuestra zona Cloudflare Edge
-            publicUrl: `https://media.al-angulo.com/${fileKey}`
+            uploadUrl,
+            publicUrl,
+            fileKey,
         };
     }
     catch (error) {
-        console.error('[Al Ángulo Backend] Fallo firmando URL R2:', error);
-        throw new functions.https.HttpsError('internal', 'Los servidores de medios están fuera de servicio.');
+        console.error('[Cloudflare R2] Error generando URL prefirmada:', error);
+        throw new functions.https.HttpsError('internal', 'Error al generar ticket de subida a Cloudflare R2.');
     }
 });
 //# sourceMappingURL=storage.js.map

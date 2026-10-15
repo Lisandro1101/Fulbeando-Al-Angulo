@@ -48,7 +48,8 @@ export default {
         },
         freemium: {
           banner: '#000000' // Fondo ads nativos
-        }
+        },
+        border: '#1F2937' // Bordes y divisores (pitch-700)
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
@@ -77,10 +78,20 @@ export default {
           from: { opacity: '0', transform: 'translateY(12px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'fade-in-up': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'radar-pulse': 'pulse-radar 2.4s ease-in-out infinite',
         'slide-up': 'slide-up 220ms ease-out',
+        'fade-in': 'fade-in 200ms ease-out',
+        'fade-in-up': 'fade-in-up 220ms ease-out',
       },
     },
   },

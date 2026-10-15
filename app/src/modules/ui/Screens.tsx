@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X } from 'lucide-react';
+import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X, Loader2, MessageCircle, Copy, Users, Check, Radio } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
-import { NavegacionHeader } from '@/modules/ui/NavegacionHeader';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
-import { MONTO_SENA_DEFAULT } from '@/core/config';
+import { MONTO_SENA_DEFAULT, COLECCIONES } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { obtenerEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, unirseAEquipo } from '@/modules/teams/teamService';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, finalizarTercerTiempoYPartido } from '@/modules/teams/teamService';
+import { doc, updateDoc, serverTimestamp, collection, setDoc } from 'firebase/firestore';
 import { db } from '@/core/firebase';
-import { edadDe, MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole } from '@/domain';
+import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador } from '@/domain';
+import { DIVISION_GEOGRAFICA, calcularGeoZona } from '@/core/geo/zonas';
+import { aGeoIndex } from '@/core/geo';
+import { listarTurnosDelOrganizador } from '@/modules/turnos/repositorio';
+import { obtenerPredio } from '@/modules/predios/repositorio';
+import { aFechaISO } from '@/core/tiempo';
 import { optimizeAvatarImage } from '@/imageCompressor';
 import { uploadImageToR2 } from '@/uploader';
+import { useDatosCarta } from '@/modules/cuenta/useDatosCarta';
+import { TarjetaJugador } from '@/modules/cuenta/componentes/TarjetaJugador';
+import { generarImagenCarta, descargarBlob } from '@/modules/comunidad/tarjetaImagen';
+import { crearPublicacion } from '@/modules/comunidad/repositorio';
+import { Toast, useConfirmar, CargandoFulbeando } from '@/modules/ui/overlays';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -88,11 +97,12 @@ export const Screen1Login = () => {
   };
 
   return (
-    <div className="h-full bg-zinc-950 flex flex-col justify-center items-center p-6 text-white font-sans">
+    <div className="h-full bg-canvas flex flex-col justify-center items-center p-6 text-white font-sans">
+      <CargandoFulbeando visible={cargando} />
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-4xl font-black italic tracking-tighter">AL ÁNGULO</h1>
-          <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mt-2">El Potrero Digital</p>
+          <img src="/logo.svg" alt="Al Ángulo" className="w-full h-40 object-cover object-center mx-auto" />
+          <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mt-2">La red futbolera</p>
         </div>
         
         {error && <div className="text-red-500 text-sm text-center font-bold bg-red-500/10 py-2 rounded-lg">{error}</div>}
@@ -100,12 +110,12 @@ export const Screen1Login = () => {
         <form className="space-y-4" onSubmit={handleEmailAuth}>
           {isRegister && (
             <div className="flex gap-2">
-              <input type="text" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
-              <input type="text" placeholder="Apellido" value={apellido} onChange={e => setApellido(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+              <input type="text" aria-label="Nombre" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+              <input type="text" aria-label="Apellido" placeholder="Apellido" value={apellido} onChange={e => setApellido(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
             </div>
           )}
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
-          <input type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+          <input type="email" aria-label="Email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+          <input type="password" placeholder="Contraseña" aria-label="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
           
           <button type="submit" disabled={cargando} className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition disabled:opacity-50">
             {cargando ? 'PROCESANDO...' : (isRegister ? 'REGISTRARME' : 'INGRESAR')}
@@ -129,7 +139,7 @@ export const Screen1Login = () => {
           disabled={cargando}
           className="w-full bg-white text-zinc-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition disabled:opacity-50"
         >
-          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
           {cargando ? 'Conectando...' : 'Continuar con Google'}
         </button>
       </div>
@@ -178,7 +188,8 @@ export const Screen2RoleSelector = () => {
   };
 
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col justify-center font-sans">
+    <div className="mx-auto h-full w-full max-w-md bg-canvas p-6 flex flex-col justify-center font-sans">
+      <CargandoFulbeando visible={cargando} />
       <h2 className="text-2xl font-black text-white text-center mb-8">¿Cómo vas a jugar hoy?</h2>
 
       {error && (
@@ -238,23 +249,13 @@ export const Screen3PlayerOnboarding = () => {
   const [telefono, setTelefono] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
 
-  // --- ZONAS Y LOCALIDADES PARA ESCALAR ---
-  const ZONAS_OPERATIVAS: Record<string, string[]> = {
-    "GBA Zona Sur": [
-      'Alejandro Korn', 'Adrogué', 'Avellaneda', 'Banfield', 'Burzaco', 
-      'Canning', 'Ezeiza', 'Glew', 'Guernica', 'Lanús', 'Llavallol', 
-      'Lomas de Zamora', 'Longchamps', 'Luis Guillón', 'Monte Grande', 
-      'San Vicente', 'Temperley'
-    ],
-    "CABA (Próximamente)": [
-      'Caballito', 'Palermo', 'Villa Crespo'
-    ],
-    "GBA Oeste (Próximamente)": [
-      'Ramos Mejía', 'Morón', 'Castelar'
-    ]
-  };
+  // --- REGIONES, MUNICIPIOS Y LOCALIDADES (Jerarquía de Zona Sur) ---
+  const [regionSeleccionada, setRegionSeleccionada] = useState("GBA Zona Sur");
+  const municipiosDeRegion = Object.keys(DIVISION_GEOGRAFICA[regionSeleccionada] || {});
 
-  const [zonaSeleccionada, setZonaSeleccionada] = useState("GBA Zona Sur");
+  const [municipioSeleccionado, setMunicipioSeleccionado] = useState<string>("Lomas de Zamora");
+  const localidadesDisponibles = (DIVISION_GEOGRAFICA[regionSeleccionada]?.[municipioSeleccionado]) || [];
+
   const [localidadQuery, setLocalidadQuery] = useState('');
   const [localidadElegida, setLocalidadElegida] = useState('Lomas de Zamora');
   const [mostrarBuscador, setMostrarBuscador] = useState(false);
@@ -265,7 +266,16 @@ export const Screen3PlayerOnboarding = () => {
       if (!apodo) setApodo(sesion.usuario.nombre || sesion.user?.displayName?.split(' ')[0] || '');
       if (!telefono && sesion.usuario.telefono) setTelefono(sesion.usuario.telefono);
       if (!fechaNacimiento && sesion.usuario.fechaNacimiento) setFechaNacimiento(sesion.usuario.fechaNacimiento);
-      if (sesion.usuario.zona) setLocalidadElegida(sesion.usuario.zona);
+      if (sesion.usuario.zona) {
+        setLocalidadElegida(sesion.usuario.zona);
+        // Intentar inferir el municipio según la localidad precargada
+        for (const [muni, locs] of Object.entries(DIVISION_GEOGRAFICA["GBA Zona Sur"] || {})) {
+          if (locs.includes(sesion.usuario.zona)) {
+            setMunicipioSeleccionado(muni);
+            break;
+          }
+        }
+      }
       if (sesion.usuario.perfilDeportivo?.posicion) {
         const p = sesion.usuario.perfilDeportivo.posicion;
         if (p === 'arquero') setPos('ARQ');
@@ -278,8 +288,7 @@ export const Screen3PlayerOnboarding = () => {
     }
   }, [sesion.usuario, sesion.user]);
 
-  // Filtrado reactivo de localidades según zona y texto ingresado
-  const localidadesDisponibles = ZONAS_OPERATIVAS[zonaSeleccionada] || [];
+  // Filtrado reactivo de localidades según el municipio activo y el texto ingresado
   const localidadesFiltradas = localidadesDisponibles.filter(loc => 
     loc.toLowerCase().includes(localidadQuery.toLowerCase())
   );
@@ -319,11 +328,15 @@ export const Screen3PlayerOnboarding = () => {
       };
 
       const userRef = doc(db, 'usuarios', sesion.user.uid);
+      const geoPrivado = calcularGeoZona(localidadElegida || municipioSeleccionado);
+
       await updateDoc(userRef, {
         nombre: apodo.trim() || sesion.usuario?.nombre || sesion.user.displayName?.split(' ')[0] || 'Jugador',
         fechaNacimiento,
         telefono: telefono.trim() || null,
+        municipio: municipioSeleccionado,
         zona: localidadElegida,
+        geo: geoPrivado,
         perfilDeportivo: nuevoPerfil,
         updatedAt: serverTimestamp(),
       });
@@ -340,7 +353,8 @@ export const Screen3PlayerOnboarding = () => {
   const nombreMostrar = sesion.usuario ? nombreCompleto(sesion.usuario) : (sesion.user?.displayName || '');
 
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe overflow-y-auto">
+    <div className="mx-auto h-full w-full max-w-md bg-canvas p-6 flex flex-col font-sans text-white pb-nav overflow-y-auto">
+      <CargandoFulbeando visible={cargando} />
       <h2 className="text-2xl font-black mt-8">Creá tu Carta de Jugador</h2>
       <p className="text-zinc-400 text-sm mt-2 mb-6">
         {nombreMostrar ? `¡Hola ${nombreMostrar}! ` : ''}
@@ -356,8 +370,9 @@ export const Screen3PlayerOnboarding = () => {
       <div className="space-y-6 flex-1">
         {/* APODO FUTBOLERO */}
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Apodo Futbolero (En la Carta)</label>
+          <label htmlFor="onb-apodo" className="text-xs font-bold text-zinc-500 uppercase">Apodo Futbolero (En la Carta)</label>
           <input 
+            id="onb-apodo"
             value={apodo} 
             onChange={e => setApodo(e.target.value)} 
             type="text" 
@@ -369,10 +384,11 @@ export const Screen3PlayerOnboarding = () => {
         {/* FECHA DE NACIMIENTO */}
         <div>
           <div className="flex justify-between items-center mb-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase">Fecha de Nacimiento</label>
+            <label htmlFor="onb-fecha-nac" className="text-xs font-bold text-zinc-500 uppercase">Fecha de Nacimiento</label>
             <span className="text-[11px] text-zinc-400">Calcula tu edad en la ficha</span>
           </div>
           <input 
+            id="onb-fecha-nac"
             value={fechaNacimiento} 
             onChange={e => setFechaNacimiento(e.target.value)} 
             type="date" 
@@ -383,8 +399,9 @@ export const Screen3PlayerOnboarding = () => {
 
         {/* TELÉFONO */}
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase">Número de Teléfono (WhatsApp / Opcional)</label>
+          <label htmlFor="onb-telefono" className="text-xs font-bold text-zinc-500 uppercase">Número de Teléfono (WhatsApp / Opcional)</label>
           <input 
+            id="onb-telefono"
             value={telefono} 
             onChange={e => setTelefono(e.target.value)} 
             type="tel" 
@@ -393,62 +410,96 @@ export const Screen3PlayerOnboarding = () => {
           />
         </div>
         
-        {/* SELECTOR ZONA + BUSCADOR DE LOCALIDADES */}
-        <div className="grid grid-cols-2 gap-4 relative z-10">
-          <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase">Región</label>
-            <select 
-              value={zonaSeleccionada}
-              onChange={(e) => { 
-                setZonaSeleccionada(e.target.value); 
-                setLocalidadElegida(''); // Resetear localidad al cambiar de zona
-              }}
-              className="w-full bg-transparent border-b border-zinc-700 py-2 focus:border-emerald-500 outline-none font-bold text-sm text-white appearance-none"
-            >
-              {Object.keys(ZONAS_OPERATIVAS).map(zona => (
-                <option key={zona} value={zona} className="bg-zinc-900">{zona}</option>
-              ))}
-            </select>
-          </div>
-          <div className="relative">
-            <label className="text-xs font-bold text-zinc-500 uppercase">Barrio / Localidad</label>
-            <div 
-              className="w-full border-b border-zinc-700 py-2 font-bold text-sm text-white cursor-pointer flex justify-between items-center"
-              onClick={() => { setMostrarBuscador(true); setLocalidadQuery(''); }}
-            >
-              <span>{localidadElegida || 'Buscar...'}</span>
-              <Search className="w-4 h-4 text-zinc-500" />
+        {/* SELECTOR JERÁRQUICO: REGIÓN, MUNICIPIO Y LOCALIDAD */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="onb-region" className="text-xs font-bold text-zinc-500 uppercase">Región</label>
+              <select 
+                id="onb-region"
+                value={regionSeleccionada}
+                onChange={(e) => { 
+                  const nuevaRegion = e.target.value;
+                  setRegionSeleccionada(nuevaRegion);
+                  const munis = Object.keys(DIVISION_GEOGRAFICA[nuevaRegion] || {});
+                  const primerMuni = munis[0] || '';
+                  setMunicipioSeleccionado(primerMuni);
+                  const primerLoc = DIVISION_GEOGRAFICA[nuevaRegion]?.[primerMuni]?.[0] || '';
+                  setLocalidadElegida(primerLoc);
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white"
+              >
+                {Object.keys(DIVISION_GEOGRAFICA).map(reg => (
+                  <option key={reg} value={reg} className="bg-zinc-900">{reg}</option>
+                ))}
+              </select>
             </div>
 
-            {/* Modal/Dropdown Buscador */}
+            <div>
+              <label htmlFor="onb-municipio" className="text-xs font-bold text-zinc-500 uppercase">Municipio / Partido</label>
+              <select 
+                id="onb-municipio"
+                value={municipioSeleccionado}
+                onChange={(e) => { 
+                  const nuevoMuni = e.target.value;
+                  setMunicipioSeleccionado(nuevoMuni);
+                  const primerLoc = DIVISION_GEOGRAFICA[regionSeleccionada]?.[nuevoMuni]?.[0] || '';
+                  setLocalidadElegida(primerLoc);
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white"
+              >
+                {municipiosDeRegion.map(muni => (
+                  <option key={muni} value={muni} className="bg-zinc-900">{muni}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-bold text-zinc-500 uppercase">Barrio / Localidad</label>
+              <span className="text-[11px] text-emerald-400 font-semibold">{localidadesDisponibles.length} barrios en {municipioSeleccionado}</span>
+            </div>
+            <div 
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 font-bold text-sm text-white cursor-pointer flex justify-between items-center hover:border-zinc-700 transition"
+              onClick={() => { setMostrarBuscador(true); setLocalidadQuery(''); }}
+            >
+              <span>{localidadElegida || 'Seleccioná o buscá tu barrio...'}</span>
+              <Search className="w-4 h-4 text-zinc-400" />
+            </div>
+
+            {/* Modal/Dropdown Buscador de Barrios */}
             {mostrarBuscador && (
-              <div className="absolute top-14 left-0 w-[200%] sm:w-[150%] -translate-x-1/2 sm:translate-x-0 bg-zinc-900 border border-zinc-800 shadow-2xl rounded-xl p-3 z-50">
+              <div className="absolute top-16 left-0 w-full bg-zinc-900 border border-zinc-700 shadow-2xl rounded-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2">
                 <input 
                   autoFocus
+                  aria-label="Buscar barrio"
                   type="text" 
-                  placeholder="Escribí tu barrio..." 
+                  placeholder={`Buscar barrio en ${municipioSeleccionado}...`} 
                   value={localidadQuery}
                   onChange={(e) => setLocalidadQuery(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500 mb-2"
+                  className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-500 mb-3"
                 />
-                <div className="max-h-48 overflow-y-auto no-scrollbar">
+                <div className="max-h-52 overflow-y-auto space-y-1">
                   {localidadesFiltradas.length > 0 ? (
                     localidadesFiltradas.map(loc => (
                       <div 
                         key={loc} 
                         onClick={() => { setLocalidadElegida(loc); setMostrarBuscador(false); }}
-                        className="py-2 px-2 text-sm text-zinc-300 hover:bg-zinc-800 rounded-lg cursor-pointer"
+                        className={`py-2 px-3 text-sm rounded-xl cursor-pointer flex justify-between items-center transition ${localidadElegida === loc ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30' : 'text-zinc-300 hover:bg-zinc-800'}`}
                       >
-                        {loc}
+                        <span>{loc}</span>
+                        {localidadElegida === loc && <span className="text-xs">✓</span>}
                       </div>
                     ))
                   ) : (
-                    <div className="text-xs text-zinc-500 p-2 text-center">No se encontraron localidades</div>
+                    <div className="text-xs text-zinc-500 p-4 text-center">No se encontraron barrios con ese nombre</div>
                   )}
                 </div>
                 <button 
+                  type="button"
                   onClick={() => setMostrarBuscador(false)} 
-                  className="w-full mt-2 py-1 text-xs text-zinc-500 font-bold hover:text-white"
+                  className="w-full mt-3 py-2 text-xs text-zinc-400 font-bold hover:text-white bg-zinc-800/80 rounded-xl transition"
                 >
                   Cerrar
                 </button>
@@ -492,33 +543,82 @@ export const Screen3PlayerOnboarding = () => {
 export const Screen4WelcomeCard = () => {
   const navigate = useNavigate();
   const sesion = useSesion();
-  const apodo = sesion.usuario?.nombre || 'EL RÚSTICO';
-  const emojiFoto = sesion.usuario?.fotoUrl || '⚽';
-  const [equipoJugador, setEquipoJugador] = useState<any>(null);
-
-  React.useEffect(() => {
-    if (sesion.user) {
-      obtenerEquiposDeUsuario(sesion.user.uid).then(t => {
-        if (t.length > 0) setEquipoJugador(t[0]);
-      }).catch(console.error);
-    }
-  }, [sesion.user]);
+  const { datos, snapshot } = useDatosCarta(sesion.usuario);
+  const cartaRef = React.useRef<HTMLDivElement>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [publicando, setPublicando] = useState(false);
   
   const { isInstallable, promptInstall } = useInstallPrompt();
 
-  // Edad derivada de la fecha de nacimiento: se calcula en lectura, sin escrituras.
-  const edad = (sesion.usuario ? edadDe(sesion.usuario) : null) ?? '--';
-  const posicion = sesion.usuario?.perfilDeportivo?.posicion;
-  const pos = posicion ? posicion.slice(0, 3).toUpperCase() : '--';
-  const piernaHabil = sesion.usuario?.perfilDeportivo?.piernaHabil;
-  const pierna = piernaHabil ? piernaHabil.slice(0, 3).toUpperCase() : '--';
-  // GOL / PAR / ASI y el promedio quedan RESERVADOS hasta que exista historial
-  // de partidos: los numeros del seed son de prueba y no van en la ficha.
-  const reservado = '--';
-  const equipoNombre = equipoJugador?.name ?? '';
+  const mostrarAviso = (mensaje: string) => {
+    setAviso(mensaje);
+    setTimeout(() => setAviso(null), 3500);
+  };
+
+  // Comparte la carta por WhatsApp / hoja nativa. En movil adjunta la IMAGEN
+  // generada; si el navegador no soporta compartir archivos (o falla la
+  // generacion), cae a texto + link. En escritorio no hay share sheet: copia el
+  // link y descarga el PNG para que el usuario lo adjunte a mano.
+  const compartirCarta = async () => {
+    const url = `${window.location.origin}/carta/${sesion.usuario?.uid ?? ''}`;
+    const texto = `¡Mirá mi carta en Fulbeando! Entrá a ver mis estadísticas y armemos un equipo. ${url}`;
+    const blob = cartaRef.current ? await generarImagenCarta(cartaRef.current) : null;
+    const archivo = blob ? new File([blob], 'carta-fulbeando.png', { type: 'image/png' }) : null;
+    const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+
+    if (nav.share && archivo && nav.canShare?.({ files: [archivo] })) {
+      try {
+        await nav.share({ title: 'Mi carta en Fulbeando', text: texto, files: [archivo] });
+        return;
+      } catch (err) {
+        console.error('Error compartiendo la imagen:', err);
+      }
+    }
+    if (nav.share) {
+      try {
+        await nav.share({ title: 'Mi carta en Fulbeando', text: texto, url });
+        return;
+      } catch (err) {
+        console.error('Error compartiendo:', err);
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch { /* clipboard bloqueado: igual descargamos la imagen */ }
+    if (blob) descargarBlob(blob, 'carta-fulbeando.png');
+    mostrarAviso('Link copiado y carta descargada');
+  };
+
+  const publicarEnComunidad = async () => {
+    const u = sesion.usuario;
+    if (!u || publicando) return;
+    setPublicando(true);
+    try {
+      await crearPublicacion({
+        autorUid: u.uid,
+        autorNombre: nombreCompleto(u) || u.nombre,
+        autorApodo: u.nombre,
+        autorFotoUrl: u.fotoUrl,
+        autorZona: u.zona ?? null,
+        autorMunicipio: u.municipio ?? null,
+        tipo: 'carta',
+        texto: null,
+        media: [],
+        tarjeta: snapshot,
+      });
+      mostrarAviso('¡Tu carta se publicó en la comunidad!');
+    } catch (err) {
+      console.error('Error publicando la carta:', err);
+      mostrarAviso('No se pudo publicar. Probá de nuevo.');
+    } finally {
+      setPublicando(false);
+    }
+  };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+      <Toast mensaje={aviso} />
       <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
         
         <div className="absolute top-6 right-6 flex gap-2 z-10">
@@ -536,154 +636,409 @@ export const Screen4WelcomeCard = () => {
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min mt-8">
-        <div className="relative w-64 h-[24rem] shrink-0 drop-shadow-[0_15px_25px_rgba(245,158,11,0.4)]" style={{ clipPath: "url(#ficha-dorada)" }}>
-          {/* La misma silueta del polygon de siempre (15% 0 / 85% 0 / ... /
-              50% 100%) pero con cada vertice redondeado. Esta en SVG (no en
-              clip-path: path()) porque Safari no soporta path(). Con
-              objectBoundingBox la forma se escala sola: si cambia el ancho o
-              el alto de la ficha, no hay que recalcular nada. */}
-          <svg width="0" height="0" className="absolute" aria-hidden="true">
-            <defs>
-              <clipPath id="ficha-dorada" clipPathUnits="objectBoundingBox">
-                <path d="M .2047 0 L .7953 0 Q .85 0 .8887 .0258 L .9613 .0742 Q 1 .1 1 .1365 L 1 .8135 Q 1 .85 .95 .8648 L .55 .9852 Q .5 1 .45 .9852 L .05 .8648 Q 0 .85 0 .8135 L 0 .1365 Q 0 .1 .0387 .0742 L .1113 .0258 Q .15 0 .2047 0 Z" />
-              </clipPath>
-            </defs>
-          </svg>
-          <div className="relative h-full w-full bg-gradient-to-br from-[#f9d976] via-[#e6b741] to-[#b38020] flex flex-col p-4 text-[#2c2005] font-sans">
-            {/* Background Texture/Shines */}
-            <div className="absolute top-0 right-0 w-full h-1/2 bg-gradient-to-bl from-white/30 to-transparent pointer-events-none" style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}></div>
-            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" style={{ clipPath: "polygon(0 100%, 0 0, 100% 100%)" }}></div>
-            
-            {/* Top Left Stats & Position */}
-            <div className="absolute top-6 left-5 flex flex-col items-center z-10">
-              <div className="text-5xl font-black tracking-tighter leading-none opacity-40" title="Próximamente: promedio de la temporada">{reservado}</div>
-              <div className="text-xl font-bold uppercase tracking-widest mt-1">{pos}</div>
-              <div className="w-8 h-[2px] bg-[#5c4a1e] mt-1 mb-1"></div>
-              <div className="w-8 h-6 flex items-center justify-center">
-                <span className="text-2xl">🇦🇷</span>
-              </div>
-              {equipoJugador?.shieldUrl && (
-                <div className="mt-1 w-8 h-8 flex items-center justify-center text-xl bg-zinc-900/10 rounded-full overflow-hidden">
-                  <img src={equipoJugador.shieldUrl} alt={`Escudo de ${equipoJugador.name}`} className="w-full h-full object-cover" />
-                </div>
-              )}
-            </div>
-
-            {/* Player Image / Emoji */}
-            <div className="mt-2 w-full h-40 flex items-end justify-center z-0">
-              <div className="w-32 h-32 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center border-4 border-[#e6b741] drop-shadow-lg">
-                {emojiFoto?.startsWith('http') ? (
-                  <img src={emojiFoto} alt="Perfil" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-5xl">{emojiFoto}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Name */}
-            <div className="mt-1 w-full text-center z-10 flex flex-col items-center">
-              <div className="w-48 h-[1px] bg-[#7a6427]/60 mb-1"></div>
-              <h2 className="text-2xl font-black uppercase tracking-widest text-[#1a1303] truncate w-full px-2">{apodo}</h2>
-              <div className="w-48 h-[1px] bg-[#7a6427]/60 mt-1"></div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="w-full mt-2 grid grid-cols-[1fr_auto_1fr] gap-x-2 text-[#2c2005] font-bold text-sm px-4 z-10">
-              {/* Left Column */}
-              <div className="flex flex-col gap-1 items-start pl-2">
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">EDAD</span>
-                  <span className="text-lg font-black leading-none w-8 text-right">{edad}</span>
-                </div>
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">GOL</span>
-                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
-                </div>
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">PAR</span>
-                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="w-[1px] bg-[#7a6427]/40 h-full"></div>
-
-              {/* Right Column */}
-              <div className="flex flex-col gap-1 items-start pl-2">
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">PIE</span>
-                  <span className="text-lg font-black leading-none w-8 text-right">{pierna}</span>
-                </div>
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">ASI</span>
-                  <span className="text-lg font-black leading-none w-8 text-right opacity-40" title="Próximamente: historial de partidos">{reservado}</span>
-                </div>
-                <div className="flex gap-2 justify-start items-center">
-                  <span className="uppercase w-8 text-left text-xs">POS</span>
-                  <span className="text-lg font-black leading-none w-8 text-right">{pos}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer: el equipo del jugador; sin equipo, la marca. Con mb-16
-                sube fuera de la punta de la ficha: abajo del todo el clip lo
-                comia y el nombre del equipo se cortaba. */}
-            <div className="mt-auto mb-16 pt-2 w-full flex flex-col items-center justify-center opacity-80 z-10">
-              <div className="text-[10px] font-black tracking-[0.2em] uppercase truncate w-full text-center">
-                {equipoNombre || 'Fulbeando'}
-              </div>
-            </div>
-          </div>
-        </div>
+          <TarjetaJugador ref={cartaRef} datos={datos} />
         </div>
 
         <div className="w-full max-w-sm mt-8 space-y-3 shrink-0">
-          <button 
-            onClick={async () => {
-              if (navigator.share) {
-                try {
-                  await navigator.share({
-                    title: '¡Mirá mi carta en Fulbeando!',
-                    text: '¡Esta es mi carta de jugador en Fulbeando! Entrá a ver mis estadísticas y armemos un equipo.',
-                    url: window.location.href,
-                  });
-                } catch (err) {
-                  console.error('Error sharing:', err);
-                }
-              } else {
-                navigator.clipboard.writeText(window.location.href);
-                alert('¡Enlace a tu perfil copiado al portapapeles!');
-              }
-            }}
+          <button
+            onClick={compartirCarta}
             className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl active:scale-95 transition-transform"
           >
-            <Share2 className="w-4 h-4" /> Compartir mi racha
+            <Share2 className="w-4 h-4" /> Compartir mi carta
+          </button>
+          <button
+            onClick={publicarEnComunidad}
+            disabled={publicando}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-zinc-950 font-bold py-3 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
+          >
+            {publicando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+            {publicando ? 'Publicando...' : 'Publicar en la comunidad'}
           </button>
         </div>
       </div>
-
-
-      <MenuNavegacion />
     </div>
   );
 };
 // ==========================================
 // PANTALLA 5: Tus Reservas / Turnos
 // ==========================================
+const formatearFechaArg = (fechaISO: string): string => {
+  if (!fechaISO) return '';
+  const partes = fechaISO.split('-');
+  if (partes.length === 3) {
+    const [y, m, d] = partes;
+    return `${d}/${m}/${y}`;
+  }
+  return fechaISO;
+};
+
 export const Screen5Reservas = () => {
+  const navigate = useNavigate();
+  const { usuario } = useSesion();
+  const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [prediosNombres, setPrediosNombres] = useState<Record<string, string>>({});
+  const [cargando, setCargando] = useState(true);
+
+  // Compartir con el equipo
+  const [turnoCompartir, setTurnoCompartir] = useState<Turno | null>(null);
+  const [equiposCapitan, setEquiposCapitan] = useState<any[]>([]);
+  const [equipoSelId, setEquipoSelId] = useState<string>('');
+  const [publicandoConvocatoria, setPublicandoConvocatoria] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const [toastCompartir, setToastCompartir] = useState<string | null>(null);
+
+  const avisoCompartir = (msg: string) => {
+    setToastCompartir(msg);
+    setTimeout(() => setToastCompartir(null), 3500);
+  };
+
+  const cargarReservas = React.useCallback(async () => {
+    if (!usuario?.uid) {
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
+    try {
+      const hoy = aFechaISO();
+      const res = await listarTurnosDelOrganizador(usuario.uid, hoy);
+      setTurnos(res);
+
+      const ids = [...new Set(res.map((t) => t.predioId))];
+      const mapa: Record<string, string> = {};
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const p = await obtenerPredio(id);
+            if (p?.nombre) mapa[id] = p.nombre;
+          } catch (e) {
+            console.error('Error al obtener predio:', id, e);
+          }
+        })
+      );
+      setPrediosNombres(mapa);
+    } catch (err) {
+      console.error('Error al cargar turnos del organizador:', err);
+    } finally {
+      setCargando(false);
+    }
+  }, [usuario?.uid]);
+
+  React.useEffect(() => {
+    cargarReservas();
+  }, [cargarReservas]);
+
+  const handleAbrirCompartir = async (t: Turno) => {
+    setTurnoCompartir(t);
+    setCopiado(false);
+    if (usuario?.uid) {
+      try {
+        const teams = await obtenerEquiposDeUsuario(usuario.uid);
+        const dondeEsCapitan = teams.filter((eq) => eq.captainId === usuario.uid);
+        const disponibles = dondeEsCapitan.length > 0 ? dondeEsCapitan : teams;
+        setEquiposCapitan(disponibles);
+        if (disponibles.length > 0 && disponibles[0]) {
+          setEquipoSelId(disponibles[0].id);
+        }
+      } catch (err) {
+        console.error('Error al cargar equipos:', err);
+      }
+    }
+  };
+
+  const armarTextoPartido = (t: Turno) => {
+    const pNombre = prediosNombres[t.predioId] || 'Complejo Deportivo';
+    const saldo = t.precioTotal - t.montoSena;
+    return `⚽ *¡PARTIDO CONFIRMADO EN FULBEANDO!* ⚽\n\n` +
+      `📍 *Predio:* ${pNombre}\n` +
+      `📅 *Fecha:* ${formatearFechaArg(t.fecha)}\n` +
+      `⏰ *Horario:* ${t.horaInicio} - ${t.horaFin} hs\n` +
+      `💵 *Seña abonada:* $${t.montoSena.toLocaleString()}\n` +
+      `💰 *A pagar en cancha:* $${saldo.toLocaleString()} (Total: $${t.precioTotal.toLocaleString()})\n\n` +
+      `¡Entren a la app para confirmar asistencia y armar la táctica!`;
+  };
+
+  const handleCompartirWhatsApp = () => {
+    if (!turnoCompartir) return;
+    const txt = armarTextoPartido(turnoCompartir);
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(txt)}`;
+    if (navigator.share) {
+      navigator.share({
+        title: '¡Partido Confirmado!',
+        text: txt,
+      }).catch(() => {
+        window.open(url, '_blank');
+      });
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleCopiarTexto = async () => {
+    if (!turnoCompartir) return;
+    const txt = armarTextoPartido(turnoCompartir);
+    try {
+      await navigator.clipboard.writeText(txt);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+      avisoCompartir('¡Datos del partido copiados al portapapeles!');
+    } catch {
+      avisoCompartir('No se pudo copiar');
+    }
+  };
+
+  const handlePublicarConvocatoria = async () => {
+    if (!turnoCompartir || !usuario?.uid || !equipoSelId) return;
+    setPublicandoConvocatoria(true);
+    try {
+      const pNombre = prediosNombres[turnoCompartir.predioId] || 'Complejo Deportivo';
+      const fechaTexto = `${formatearFechaArg(turnoCompartir.fecha)} ${turnoCompartir.horaInicio}hs (${pNombre})`;
+      await actualizarConvocatoriaEquipo(equipoSelId, {
+        fecha: fechaTexto,
+        predioNombre: pNombre,
+        turnoId: turnoCompartir.id,
+        confirmados: [usuario.uid],
+        bajas: [],
+      });
+      const eq = equiposCapitan.find((e) => e.id === equipoSelId);
+      avisoCompartir(`¡Convocatoria publicada en ${eq?.name || 'tu equipo'}!`);
+      setTimeout(() => setTurnoCompartir(null), 1200);
+    } catch (err: any) {
+      console.error('Error al publicar convocatoria:', err);
+      avisoCompartir(err?.message || 'Error al publicar convocatoria');
+    } finally {
+      setPublicandoConvocatoria(false);
+    }
+  };
+
+  const equipoSeleccionadoObj = equiposCapitan.find((e) => e.id === equipoSelId);
+
   return (
-    <div className="h-full bg-zinc-950 flex flex-col font-sans">
-      <div className="shrink-0">
-        <NavegacionHeader />
+    <div className="h-full bg-canvas flex flex-col font-sans text-white overflow-hidden relative">
+      {/* Toast notificador */}
+      <Toast mensaje={toastCompartir} />
+
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-28">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-black text-white">Tus Reservas</h2>
+              <p className="text-zinc-400 text-xs mt-1">Partidos y turnos programados en complejos.</p>
+            </div>
+            <button
+              onClick={cargarReservas}
+              className="text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg transition"
+            >
+              Actualizar
+            </button>
+          </div>
+
+          {cargando ? (
+            <div className="flex flex-col items-center justify-center py-20 text-emerald-500 font-bold text-sm">
+              <span className="h-8 w-8 animate-radar-pulse rounded-full bg-emerald-500 mb-3" />
+              Cargando tus reservas...
+            </div>
+          ) : turnos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/40">
+              <Calendar className="w-14 h-14 text-zinc-600 mb-4" />
+              <h3 className="text-lg font-bold text-zinc-200 mb-2">No tenés reservas activas</h3>
+              <p className="text-zinc-400 text-sm max-w-sm mb-6">
+                Cuando reserves un turno y cargues la seña en un predio, vas a poder seguir el estado de confirmación acá.
+              </p>
+              <button
+                onClick={() => navigate('/radar')}
+                className="bg-emerald-500 text-zinc-950 font-black px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition"
+              >
+                Buscar Cancha en el Radar
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {turnos.map((t) => {
+                const esConfirmado = t.estado === 'confirmado';
+                const esPendiente = t.estado === 'bloqueado_temporal';
+
+                return (
+                  <div
+                    key={t.id}
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition space-y-3"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-white">
+                            {formatearFechaArg(t.fecha)}
+                          </span>
+                          <span className="text-sm font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                            {t.horaInicio} - {t.horaFin} hs
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          Predio: <span className="text-zinc-200 font-semibold">{prediosNombres[t.predioId] || t.predioId}</span>
+                        </p>
+                      </div>
+
+                      <span
+                        className={`text-[11px] font-black uppercase px-2.5 py-1 rounded-full ${
+                          esConfirmado
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : esPendiente
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {esConfirmado
+                          ? 'Confirmado'
+                          : esPendiente
+                          ? 'Esperando validación'
+                          : t.estado}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs text-zinc-400 pt-2 border-t border-zinc-800/80">
+                      <span>
+                        Seña: <strong className="text-white">${t.montoSena.toLocaleString()}</strong>
+                      </span>
+                      <span>
+                        Total: <strong className="text-zinc-300">${t.precioTotal.toLocaleString()}</strong>
+                      </span>
+                    </div>
+
+                    {/* Botón Compartir con el equipo para reservas confirmadas */}
+                    {esConfirmado && (
+                      <div className="pt-2 border-t border-zinc-800">
+                        <button
+                          onClick={() => handleAbrirCompartir(t)}
+                          className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          Compartir con el equipo
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex-1 p-6 flex flex-col justify-center items-center pb-24 text-center">
-        <Calendar className="w-16 h-16 text-emerald-500 mb-6" />
-        <h2 className="text-2xl font-black text-white mb-2">Tus Reservas</h2>
-        <p className="text-zinc-400 text-sm max-w-[280px]">
-          Acá vas a poder ver todos los turnos que tenés reservados o en espera de confirmación.
-        </p>
-      </div>
-      <MenuNavegacion />
+
+      {/* Modal Compartir Reserva con el Equipo */}
+      {turnoCompartir && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div role="dialog" aria-modal="true" aria-label="Compartir reserva con el equipo" className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl animate-slide-up">
+            <button
+              onClick={() => setTurnoCompartir(null)}
+              aria-label="Cerrar"
+              className="absolute top-5 right-5 text-zinc-500 hover:text-white p-2"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-amber-500 text-xs font-black uppercase mb-1">
+              <Share2 className="w-4 h-4" />
+              Compartir con el equipo
+            </div>
+            <h3 className="text-xl font-black text-white mb-2">Partido Confirmado</h3>
+            <p className="text-xs text-zinc-400 mb-5">
+              Compartí los datos de la reserva con tu plantel o abriles la convocatoria en la app.
+            </p>
+
+            {/* Tarjeta resumen de la reserva */}
+            <div className="bg-canvas border border-zinc-800/80 rounded-2xl p-4 mb-5 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-400">Predio</span>
+                <span className="text-sm font-bold text-white">
+                  {prediosNombres[turnoCompartir.predioId] || turnoCompartir.predioId}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-400">Fecha</span>
+                <span className="text-sm font-bold text-white">
+                  {formatearFechaArg(turnoCompartir.fecha)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-400">Horario</span>
+                <span className="text-sm font-bold text-emerald-400">
+                  {turnoCompartir.horaInicio} - {turnoCompartir.horaFin} hs
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-zinc-900">
+                <span className="text-xs text-zinc-400">Resta pagar en cancha</span>
+                <span className="text-sm font-black text-zinc-200">
+                  ${(turnoCompartir.precioTotal - turnoCompartir.montoSena).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Opción 1: Abrir Convocatoria en la app */}
+            {equiposCapitan.length > 0 && (
+              <div className="mb-4 p-4 bg-canvas/60 border border-zinc-800 rounded-2xl">
+                <label className="text-[11px] font-black uppercase text-amber-500 block mb-2">
+                  Publicar en la pantalla de equipo
+                </label>
+                {equiposCapitan.length > 1 && (
+                  <select
+                    aria-label="Equipo donde publicar la convocatoria"
+                    value={equipoSelId}
+                    onChange={(e) => setEquipoSelId(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-xs font-bold mb-3 outline-none"
+                  >
+                    {equiposCapitan.map((eq) => (
+                      <option key={eq.id} value={eq.id}>
+                        {eq.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  onClick={handlePublicarConvocatoria}
+                  disabled={publicandoConvocatoria}
+                  className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-3 px-4 rounded-xl text-xs transition active:scale-95 disabled:opacity-60 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
+                >
+                  {publicandoConvocatoria ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Users className="w-4 h-4" />
+                      Abrir convocatoria en {equipoSeleccionadoObj?.name || 'mi equipo'}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Opción 2: Compartir por WhatsApp o Copiar */}
+            <div className="space-y-2">
+              <button
+                onClick={handleCompartirWhatsApp}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 px-4 rounded-xl text-sm transition active:scale-95 shadow-lg"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Enviar a WhatsApp del Equipo
+              </button>
+
+              <button
+                onClick={handleCopiarTexto}
+                className="w-full flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 px-4 rounded-xl text-xs transition active:scale-95"
+              >
+                {copiado ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    ¡Copiado al portapapeles!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copiar detalles del partido
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -698,10 +1053,16 @@ export const Screen6LaunchChallenge = () => {
   const [diaHora, setDiaHora] = useState('');
   const [cancha, setCancha] = useState('Sí, ya la alquilamos');
   
-  const [partidos, setPartidos] = useState([
-    { id: 1, modalidad: 'F5', diaHora: 'Jueves 21:00hs', cancha: 'Sí, ya la alquilamos', estado: 'Confirmado', rival: 'Los Pibes' },
-    { id: 2, modalidad: 'F7', diaHora: 'Sábado 18:00hs', cancha: 'No, buscamos cancha a medias', estado: 'En Radar', rival: null }
-  ]);
+  interface PartidoItem {
+    id: number | string;
+    modalidad: string;
+    diaHora: string;
+    cancha: string;
+    estado: string;
+    rival: string | null;
+  }
+
+  const [partidos, setPartidos] = useState<PartidoItem[]>([]);
 
   const [toastMessage, setToastMessage] = useState('');
 
@@ -714,7 +1075,7 @@ export const Screen6LaunchChallenge = () => {
       fechaFormateada = dateObj.toLocaleString('es-AR', { weekday: 'long', hour: '2-digit', minute:'2-digit' });
     }
 
-    const nuevoPartido = {
+    const nuevoPartido: PartidoItem = {
       id: Date.now(),
       modalidad,
       diaHora: fechaFormateada,
@@ -729,21 +1090,18 @@ export const Screen6LaunchChallenge = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto p-6 pb-28">
-        {toastMessage && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm z-[9999] animate-bounce shadow-xl border-2 border-zinc-950">
-            {toastMessage}
-          </div>
-        )}
+    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
+        <Toast mensaje={toastMessage} />
 
       {!mostrarFormulario ? (
         <>
-          <div className="flex justify-between items-center mb-6 mt-4">
+          {/* Header con pr-14 para no pisarse jamas con el boton Cerrar (X) de la modal */}
+          <div className="flex justify-between items-center mb-6 mt-1 pr-14">
             <h2 className="text-2xl font-black text-amber-500">Mis Partidos</h2>
             <button 
               onClick={() => setMostrarFormulario(true)}
-              className="bg-amber-500/10 text-amber-500 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-colors"
+              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 px-3.5 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer whitespace-nowrap"
             >
               + Lanzar Desafío
             </button>
@@ -751,8 +1109,12 @@ export const Screen6LaunchChallenge = () => {
 
           <div className="space-y-4">
             {partidos.length === 0 && (
-              <div className="text-center py-8 text-zinc-500 font-bold border border-zinc-800 rounded-2xl border-dashed">
-                Aún no tenés partidos ni desafíos activos.
+              <div className="text-center py-12 px-6 text-zinc-400 border border-zinc-800/80 rounded-2xl border-dashed bg-zinc-900/40">
+                <div className="text-3xl mb-3">🛡️</div>
+                <p className="font-bold text-white text-base mb-1">Aún no tenés partidos ni desafíos activos</p>
+                <p className="text-xs text-zinc-500 max-w-xs mx-auto">
+                  Tocá en "+ Lanzar Desafío" para buscar un rival en tu zona y publicarlo en el Radar.
+                </p>
               </div>
             )}
             {partidos.map(p => (
@@ -762,7 +1124,7 @@ export const Screen6LaunchChallenge = () => {
                     <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-xs font-black">{p.modalidad}</span>
                     <h3 className="font-bold">{p.rival ? `vs ${p.rival}` : 'Buscando rival...'}</h3>
                   </div>
-                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${p.estado === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500 animate-pulse'}`}>
+                  <span className={`text-[11px] font-black uppercase px-2 py-1 rounded-full ${p.estado === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500 animate-pulse'}`}>
                     {p.estado}
                   </span>
                 </div>
@@ -804,8 +1166,9 @@ export const Screen6LaunchChallenge = () => {
             </div>
             
             <div>
-              <label className="text-xs font-bold text-zinc-500 uppercase">Día y Hora</label>
+              <label htmlFor="desafio-diahora" className="text-xs font-bold text-zinc-500 uppercase">Día y Hora</label>
               <input 
+                id="desafio-diahora"
                 type="datetime-local" 
                 value={diaHora}
                 onChange={(e) => setDiaHora(e.target.value)}
@@ -814,8 +1177,9 @@ export const Screen6LaunchChallenge = () => {
             </div>
 
             <div>
-              <label className="text-xs font-bold text-zinc-500 uppercase">¿Tienen Cancha?</label>
+              <label htmlFor="desafio-cancha" className="text-xs font-bold text-zinc-500 uppercase">¿Tienen Cancha?</label>
               <select 
+                id="desafio-cancha"
                 value={cancha}
                 onChange={(e) => setCancha(e.target.value)}
                 className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none"
@@ -836,8 +1200,6 @@ export const Screen6LaunchChallenge = () => {
         </>
       )}
       </div>
-
-      <MenuNavegacion />
     </div>
   );
 };
@@ -846,6 +1208,7 @@ export const Screen6LaunchChallenge = () => {
 // PANTALLA 7: Pestaña Mi Equipo
 // ==========================================
 export const Screen7MyTeam = () => {
+  const navigate = useNavigate();
   const [equipoActivo, setEquipoActivo] = useState(0);
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
@@ -856,6 +1219,7 @@ export const Screen7MyTeam = () => {
   const [convFecha, setConvFecha] = useState('Jueves 21:00hs');
   const [inviteUsername, setInviteUsername] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+  const [subPestanaPlantel, setSubPestanaPlantel] = useState<'confirmados' | 'todos'>('confirmados');
 
   // Busqueda de jugadores REAL (Firestore). Antes había un `mockUsuarios`
   // inventado: "Enviar Notificación" no escribía nada en ninguna parte.
@@ -866,6 +1230,7 @@ export const Screen7MyTeam = () => {
     { uid: string; username: string; apodo: string; emoji: string } | null
   >(null);
   const [buscando, setBuscando] = useState(false);
+  const [enviandoInvitacion, setEnviandoInvitacion] = useState(false);
   const busquedaRef = React.useRef(0);
 
   // Modal de configuración: se cargan del equipo activo al abrirlo.
@@ -878,6 +1243,12 @@ export const Screen7MyTeam = () => {
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevoFormato, setNuevoFormato] = useState('F5');
   const [nuevoGenero, setNuevoGenero] = useState<'Masculino' | 'Femenino' | 'Mixto'>('Masculino');
+
+  // Modal Al Radar (Faltan jugadores para completar)
+  const [mostrarModalRadar, setMostrarModalRadar] = useState(false);
+  const [jugadoresFaltantes, setJugadoresFaltantes] = useState(2);
+  const [posicionRadar, setPosicionRadar] = useState<string>('Cualquiera');
+  const [enviandoAlRadar, setEnviandoAlRadar] = useState(false);
 
   const sesion = useSesion();
   // La identidad es el `uid`: comparar por parte del email no matchea contra
@@ -892,6 +1263,8 @@ export const Screen7MyTeam = () => {
 
   const [equipos, setEquipos] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
+
+  const confirmar = useConfirmar();
 
   const aviso = (mensaje: string) => {
     setToastMessage(mensaje);
@@ -912,38 +1285,133 @@ export const Screen7MyTeam = () => {
       l: t.stats?.losses || 0,
       emoji: t.shieldUrl || '🛡️',
       isCapitan: t.captainId === sesion.user?.uid,
-      soyMiembro: t.members.some((m: any) => m.uid === sesion.user?.uid),
-      plantel: t.members.map((m: any) => ({
-        id: m.uid,
-        username: m.name,
-        apodo: m.name,
-        emoji: m.uid === t.captainId ? '👑' : '🏃‍♂️',
-        // Fuente estructural de la capitania: `captainId`. El `role` del
-        // documento puede traer datos viejos y no tiene por que coincidir.
-        isCapitan: m.uid === t.captainId,
-      })),
-      convocatoria: null,
+      soyMiembro: t.members.some((m: any) => m.uid === sesion.user?.uid && !m.esTemporal),
+      esRefuerzoTemporal: Boolean(
+        t.convocatoria?.confirmados?.includes(sesion.user?.uid) &&
+          (t.convocatoria?.refuerzos?.some((r: any) => r.uid === sesion.user?.uid) ||
+            t.members.some((m: any) => m.uid === sesion.user?.uid && m.esTemporal)),
+      ),
+      ultimoPartido: t.ultimoPartido || null,
+      estadisticasJugadores: t.estadisticasJugadores || {},
+      plantel: t.members
+        .filter((m: any) => !m.esTemporal)
+        .map((m: any) => {
+          const st = (t.estadisticasJugadores && t.estadisticasJugadores[m.uid]) || {
+            goles: 0,
+            asistencias: 0,
+            partidosJugados: 0,
+            mvpCount: 0,
+          };
+          const med = calcularMediaJugador({
+            partidosJugados: st.partidosJugados,
+            goles: st.goles,
+            asistencias: st.asistencias,
+            mvpCount: st.mvpCount,
+            posicion: m.position || 'DEL',
+          });
+          return {
+            id: m.uid,
+            username: m.name,
+            apodo: m.name,
+            emoji: m.uid === t.captainId ? '👑' : '🏃‍♂️',
+            isCapitan: m.uid === t.captainId,
+            esTemporal: false,
+            stats: st,
+            media: med,
+          };
+        }),
+      confirmadosDelPartido: (() => {
+        const confIds: string[] = Array.isArray(t.convocatoria?.confirmados)
+          ? t.convocatoria.confirmados
+          : [];
+        const miembrosConf = t.members
+          .filter((m: any) => !m.esTemporal && confIds.includes(m.uid))
+          .map((m: any) => {
+            const st = (t.estadisticasJugadores && t.estadisticasJugadores[m.uid]) || {
+              goles: 0,
+              asistencias: 0,
+              partidosJugados: 0,
+              mvpCount: 0,
+            };
+            const med = calcularMediaJugador({
+              partidosJugados: st.partidosJugados,
+              goles: st.goles,
+              asistencias: st.asistencias,
+              mvpCount: st.mvpCount,
+              posicion: m.position || 'DEL',
+            });
+            return {
+              id: m.uid,
+              username: m.name,
+              apodo: m.name,
+              emoji: m.uid === t.captainId ? '👑' : '🏃‍♂️',
+              isCapitan: m.uid === t.captainId,
+              esTemporal: false,
+              stats: st,
+              media: med,
+            };
+          });
+        const refuerzosConf = (Array.isArray(t.convocatoria?.refuerzos) ? t.convocatoria.refuerzos : [])
+          .filter((r: any) => confIds.includes(r.uid))
+          .map((r: any) => {
+            const st = (t.estadisticasJugadores && t.estadisticasJugadores[r.uid]) || {
+              goles: 0,
+              asistencias: 0,
+              partidosJugados: 0,
+              mvpCount: 0,
+            };
+            const med = calcularMediaJugador({
+              partidosJugados: st.partidosJugados,
+              goles: st.goles,
+              asistencias: st.asistencias,
+              mvpCount: st.mvpCount,
+              posicion: 'DEL',
+            });
+            return {
+              id: r.uid,
+              username: r.nombre || r.name || 'Refuerzo',
+              apodo: r.nombre || r.name || 'Refuerzo',
+              emoji: '⚡',
+              isCapitan: false,
+              esTemporal: true,
+              stats: st,
+              media: med,
+            };
+          });
+        return [...miembrosConf, ...refuerzosConf];
+      })(),
+      convocatoria: t.convocatoria
+        ? {
+            ...t.convocatoria,
+            confirmados: Array.isArray(t.convocatoria.confirmados) ? t.convocatoria.confirmados : [],
+            bajas: Array.isArray(t.convocatoria.bajas) ? t.convocatoria.bajas : [],
+          }
+        : null,
     }),
     [sesion.user?.uid],
   );
 
-  /** Vuelve a leer "mis equipos" y devuelve cuántos hay. */
+  /** Escucha en tiempo real "mis equipos" y las convocatorias/cambios del plantel. */
+  React.useEffect(() => {
+    if (!sesion.user) {
+      setEquipos([]);
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
+    const unsubscribe = escucharEquiposDeUsuario(sesion.user.uid, (dbTeams) => {
+      setEquipos(dbTeams.map(mapearEquipo));
+      setCargando(false);
+    });
+    return () => unsubscribe();
+  }, [sesion.user?.uid, mapearEquipo]);
+
   const recargarEquipos = React.useCallback(async (): Promise<number> => {
     if (!sesion.user) return 0;
     const dbTeams = await obtenerEquiposDeUsuario(sesion.user.uid);
     setEquipos(dbTeams.map(mapearEquipo));
-    setCargando(false);
     return dbTeams.length;
   }, [sesion.user, mapearEquipo]);
-
-  React.useEffect(() => {
-    if (!sesion.user) return;
-    setCargando(true);
-    recargarEquipos().catch((err) => {
-      console.error(err);
-      setCargando(false);
-    });
-  }, [sesion.user, recargarEquipos]);
 
   // Banner de invitación: una sola lectura, y solo cuando se abre un link.
   React.useEffect(() => {
@@ -1032,7 +1500,7 @@ export const Screen7MyTeam = () => {
     const pregunta = isSelf
       ? '¿Estás seguro que querés salir del equipo?'
       : '¿Estás seguro que querés liberar a este jugador?';
-    if (!window.confirm(pregunta)) return;
+    if (!(await confirmar(pregunta, { titulo: isSelf ? 'Salir del equipo' : 'Liberar jugador', textoConfirmar: isSelf ? 'Salir' : 'Liberar', peligro: true }))) return;
 
     try {
       if (isSelf) await salirDelEquipo(teamId, sesion.user.uid);
@@ -1047,7 +1515,7 @@ export const Screen7MyTeam = () => {
   /** Cede la capitanía y la administración a otro integrante del plantel. */
   const handleDelegateCaptain = async (teamId: string, playerId: string) => {
     if (!sesion.user) return;
-    if (!window.confirm('¿Cederle la capitanía a este jugador? Vos pasás a ser un jugador normal.')) return;
+    if (!(await confirmar('¿Cederle la capitanía a este jugador? Vos pasás a ser un jugador normal.', { titulo: 'Delegar capitanía', textoConfirmar: 'Delegar' }))) return;
 
     try {
       await delegarCapitania(teamId, sesion.user.uid, playerId);
@@ -1102,17 +1570,22 @@ export const Screen7MyTeam = () => {
   const buscarInvitados = (valor: string) => {
     const token = ++busquedaRef.current;
     const termino = valor.trim();
-    if (termino.length < 2) {
+    if (termino.length < 1) {
       setUsuariosBuscados([]);
       setBuscando(false);
       return;
     }
     setBuscando(true);
-    buscarJugadores(termino)
+    buscarJugadores(termino, 10, sesion.user?.uid)
       .then((r) => {
         if (token !== busquedaRef.current) return;
+        // El mismo que busca no puede aparecer en el listado, ni miembros que ya estén en el equipo
+        const miembrosActuales = new Set((equipo?.plantel ?? []).map((m: any) => m.id));
+        if (sesion.user?.uid) miembrosActuales.add(sesion.user.uid);
+
+        const disponibles = r.filter((m) => !miembrosActuales.has(m.uid));
         setUsuariosBuscados(
-          r.map((m) => ({ uid: m.uid, username: m.username, apodo: m.name, emoji: m.avatarUrl || '⚽' })),
+          disponibles.map((m) => ({ uid: m.uid, username: m.username, apodo: m.name, emoji: m.avatarUrl || '⚽' })),
         );
       })
       .catch((err) => {
@@ -1127,14 +1600,16 @@ export const Screen7MyTeam = () => {
 
   const handleCreateConvocatoria = () => {
     if (!equipo) return;
+    const nuevaConv = {
+      fecha: convFecha,
+      confirmados: currentUid ? [currentUid] : [],
+      bajas: [],
+    };
+    actualizarConvocatoriaEquipo(equipo.id, nuevaConv).catch(console.error);
     const nuevosEquipos = [...equipos];
     nuevosEquipos[equipoActivo] = {
       ...equipo,
-      convocatoria: {
-        fecha: convFecha,
-        confirmados: [],
-        bajas: [],
-      },
+      convocatoria: nuevaConv,
     };
     setEquipos(nuevosEquipos);
     setMostrarModalConvocatoria(false);
@@ -1148,17 +1623,85 @@ export const Screen7MyTeam = () => {
          const myPlayerId = eq.plantel.find((p: any) => p.id === currentUid)?.id;
          if(!myPlayerId) return eq;
          
-         const newConf = eq.convocatoria.confirmados.filter((id: any) => id !== myPlayerId);
-         const newBajas = eq.convocatoria.bajas.filter((id: any) => id !== myPlayerId);
+         const newConf = (eq.convocatoria.confirmados || []).filter((id: any) => id !== myPlayerId);
+         const newBajas = (eq.convocatoria.bajas || []).filter((id: any) => id !== myPlayerId);
          
          if(status === 'voy') newConf.push(myPlayerId);
          if(status === 'bajo') newBajas.push(myPlayerId);
 
-         return { ...eq, convocatoria: { ...eq.convocatoria, confirmados: newConf, bajas: newBajas } };
+         const convActualizada = { ...eq.convocatoria, confirmados: newConf, bajas: newBajas };
+         actualizarConvocatoriaEquipo(teamId, convActualizada).catch(console.error);
+
+         return { ...eq, convocatoria: convActualizada };
       }
       return eq;
     });
     setEquipos(nuevosEquipos);
+  };
+
+  /**
+   * Publica la alerta al Radar cuando no se completa el equipo.
+   */
+  const handleEnviarAlRadar = async () => {
+    if (!equipo || !equipo.convocatoria || !sesion.user) return;
+    setEnviandoAlRadar(true);
+    try {
+      const predio = equipo.convocatoria.predioNombre || equipo.convocatoria.predio || 'Complejo Deportivo';
+      const cancha = equipo.convocatoria.canchaNombre || equipo.convocatoria.cancha || 'Cancha reservada';
+      const fecha = equipo.convocatoria.fecha || 'Próximo partido';
+
+      const textoAlerta = `¡No completamos! Necesitamos a los ${jugadoresFaltantes} jugadores necesarios para jugar en ${predio} (${cancha}). Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`;
+
+      // Geo del usuario o fallback
+      const geoPunto = sesion.usuario?.geo
+        ? { lat: sesion.usuario.geo.lat, lng: sesion.usuario.geo.lng }
+        : { lat: -34.6037, lng: -58.3816 };
+      const geoIndex = aGeoIndex(geoPunto);
+
+      // Creamos el desafío en Firestore (/challenges) para que figure en el Radar
+      const desafioRef = doc(collection(db, COLECCIONES.desafios));
+      await setDoc(desafioRef, {
+        id: desafioRef.id,
+        creatorId: sesion.user.uid,
+        equipoId: equipo.id,
+        equipoNombre: equipo.nombre,
+        equipoEscudoUrl: equipo.emoji?.startsWith('http') ? equipo.emoji : null,
+        modalidad: (equipo.formato || 'F5') as any,
+        estadoCancha: 'CON_CANCHA',
+        estado: 'ABIERTO',
+        turnoId: equipo.convocatoria.turnoId ?? null,
+        predioId: equipo.convocatoria.predioId ?? null,
+        posicionBuscada: posicionRadar !== 'Cualquiera' ? posicionRadar : null,
+        fechaUnix: Date.now() + 24 * 3600 * 1000,
+        descripcion: textoAlerta,
+        geo: geoIndex,
+        equiposAceptantes: [],
+        createdAt: Date.now(),
+      });
+
+      // Actualizamos la convocatoria del equipo en Firestore
+      const convActualizada = {
+        ...equipo.convocatoria,
+        alertaRadarEnviada: true,
+        jugadoresFaltantes,
+        posicionRadar,
+        alertaRadarId: desafioRef.id,
+      };
+      await actualizarConvocatoriaEquipo(equipo.id, convActualizada);
+
+      // Actualización optimista local
+      setEquipos((prev) =>
+        prev.map((eq) => (eq.id === equipo.id ? { ...eq, convocatoria: convActualizada } : eq))
+      );
+
+      setMostrarModalRadar(false);
+      aviso(`¡Alerta enviada al Radar! Se buscan ${jugadoresFaltantes} jugadores.`);
+    } catch (err: any) {
+      console.error('Error al enviar alerta al radar:', err);
+      aviso(err?.message || 'Error al enviar alerta al radar');
+    } finally {
+      setEnviandoAlRadar(false);
+    }
   };
 
   /** Link de invitación: lleva al equipo, no a la pantalla de siempre. */
@@ -1188,22 +1731,38 @@ export const Screen7MyTeam = () => {
   };
 
   /**
-   * El equipo se arma con el link: las reglas de `usuarios/{uid}` no dejan que
-   * el capitan escriba el perfil de un tercero, así que lo único honesto que
-   * podemos hacer desde acá es dejar el link en el portapapeles.
+   * Envía la invitación formal en Firestore y dispara el push alert al jugador invitado.
    */
   const handleSendInvite = async () => {
-    if (!usuarioSeleccionado || !equipo) return;
+    if (!usuarioSeleccionado || !equipo || !sesion.user) return;
+    setEnviandoInvitacion(true);
     try {
-      await navigator.clipboard.writeText(linkDeInvitacion(equipo.id));
-      aviso(`Link de invitación para ${usuarioSeleccionado.apodo} copiado`);
-    } catch {
-      aviso(linkDeInvitacion(equipo.id));
+      const nombreCapitan = sesion.usuario?.nombre
+        ? `${sesion.usuario.nombre} ${sesion.usuario.apellido ?? ''}`.trim()
+        : (sesion.user.displayName || 'Capitán');
+
+      await enviarInvitacionAEquipo(
+        sesion.user.uid,
+        nombreCapitan,
+        usuarioSeleccionado.uid,
+        usuarioSeleccionado.apodo,
+        { id: equipo.id, name: equipo.nombre, shieldUrl: equipo.emoji },
+      );
+
+      // Copiar también el link de invitación en portapapeles por comodidad
+      navigator.clipboard?.writeText(linkDeInvitacion(equipo.id)).catch(() => {});
+
+      aviso(`¡Invitación enviada a ${usuarioSeleccionado.apodo}! Le llegará un alerta push.`);
+      setInviteUsername('');
+      setUsuarioSeleccionado(null);
+      setUsuariosBuscados([]);
+      setMostrarInvitar(false);
+    } catch (err: any) {
+      console.error('Error al enviar invitación:', err);
+      aviso(err?.message || 'No se pudo enviar la invitación');
+    } finally {
+      setEnviandoInvitacion(false);
     }
-    setInviteUsername('');
-    setUsuarioSeleccionado(null);
-    setUsuariosBuscados([]);
-    setMostrarInvitar(false);
   };
 
   const bannerInvitacion = equipoInvitado ? (
@@ -1231,21 +1790,22 @@ export const Screen7MyTeam = () => {
 
   const modalCrearEquipo = mostrarCrear && (
     <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
-        <button onClick={() => setMostrarCrear(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+      <div role="dialog" aria-modal="true" aria-label="Crear equipo" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+        <button onClick={() => setMostrarCrear(false)} aria-label="Cerrar" className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
         <h3 className="text-xl font-black mb-1">Crear equipo</h3>
         <p className="text-sm text-zinc-400 mb-6">
           Quedás como capitán. Podés tener hasta {MAX_EQUIPOS_POR_JUGADOR} equipos a la vez.
         </p>
 
-        <label className="text-xs font-bold text-zinc-500 uppercase">Nombre del equipo</label>
+        <label htmlFor="equipo-nombre" className="text-xs font-bold text-zinc-500 uppercase">Nombre del equipo</label>
         <input
+          id="equipo-nombre"
           type="text"
           value={nuevoNombre}
           onChange={(e) => setNuevoNombre(e.target.value)}
           maxLength={60}
           placeholder="Los Pibes de Lomas"
-          className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+          className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
         />
 
         <label className="text-xs font-bold text-zinc-500 uppercase">Formato de juego</label>
@@ -1284,16 +1844,12 @@ export const Screen7MyTeam = () => {
     </div>
   );
 
-  if (cargando) return <div className="h-full bg-zinc-950 flex justify-center items-center text-white">Cargando equipos...</div>;
+  if (cargando) return <CargandoFulbeando />;
 
   if (equipos.length === 0 || !equipo) {
     return (
-      <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
-        {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
-            {toastMessage}
-          </div>
-        )}
+      <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+        <Toast mensaje={toastMessage} />
         <div className="flex-1 overflow-y-auto">
           {bannerInvitacion}
           <div className="flex flex-col justify-center items-center p-6 text-center min-h-[60vh]">
@@ -1309,20 +1865,15 @@ export const Screen7MyTeam = () => {
           </div>
         </div>
         {modalCrearEquipo}
-        <MenuNavegacion />
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto pb-28">
+    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+      <div className="flex-1 overflow-y-auto pb-24 md:pb-8">
         {/* Toast Notification */}
-        {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-zinc-950 px-6 py-3 rounded-full font-black text-sm shadow-xl animate-bounce">
-            {toastMessage}
-          </div>
-        )}
+        <Toast mensaje={toastMessage} />
 
         {bannerInvitacion}
 
@@ -1351,7 +1902,7 @@ export const Screen7MyTeam = () => {
       {/* Header Equipo */}
       <div className="bg-zinc-900 p-6 pt-12 rounded-b-[40px] text-center relative border-b border-zinc-800">
         {equipo.isCapitan && (
-          <button onClick={abrirConfig} className="absolute top-8 right-6 text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-800 p-3 rounded-full">
+          <button onClick={abrirConfig} aria-label="Configurar equipo" className="absolute top-8 right-6 text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-800 p-3 rounded-full">
             <Settings className="w-5 h-5" />
           </button>
         )}
@@ -1364,7 +1915,7 @@ export const Screen7MyTeam = () => {
           }}
         >
           {equipo.emoji?.startsWith('http') ? (
-             <img src={equipo.emoji} alt="Escudo" className="w-full h-full object-cover" />
+             <img src={equipo.emoji} alt={`Escudo de ${equipo.nombre}`} className="w-full h-full object-cover" />
           ) : (
              equipo.emoji
           )}
@@ -1376,13 +1927,19 @@ export const Screen7MyTeam = () => {
         </div>
         <input 
           type="file" 
+          aria-label="Subir escudo del equipo"
           ref={fileInputRef} 
           className="hidden" 
           accept="image/*" 
           onChange={handleImageUpload} 
         />
         <h2 className="text-2xl font-black uppercase">{equipo.nombre}</h2>
-            <p className="text-zinc-400 text-sm mt-1">Capitán: {equipo.capitanNombre}</p>
+        {equipo.esRefuerzoTemporal && (
+          <div className="inline-flex items-center gap-1.5 mt-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider animate-pulse">
+            ⚡ Refuerzo para el partido de hoy
+          </div>
+        )}
+        <p className="text-zinc-400 text-sm mt-1">Capitán: {equipo.capitanNombre}</p>
         <div className="flex justify-center gap-4 mt-4 text-sm font-bold">
           <div className="text-emerald-500">{equipo.w} PG</div>
           <div className="text-zinc-500">{equipo.d} PE</div>
@@ -1400,11 +1957,43 @@ export const Screen7MyTeam = () => {
                 <p className="text-sm text-zinc-400 font-bold">{equipo.convocatoria.fecha}</p>
               </div>
               {equipo.isCapitan && (
-                <button className="text-xs font-black bg-blue-600 text-white px-3 py-1.5 rounded-lg active:scale-95 transition-transform">
-                  Al Radar
+                <button
+                  onClick={() => {
+                    const formatoNum = parseInt((equipo.formato || 'F5').replace(/\D/g, '')) || 5;
+                    const yaConfirmados = (equipo.convocatoria.confirmados || []).length;
+                    const faltan = Math.max(1, formatoNum - yaConfirmados);
+                    setJugadoresFaltantes(faltan);
+                    setMostrarModalRadar(true);
+                  }}
+                  className={`text-xs font-black px-3.5 py-1.5 rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md ${
+                    equipo.convocatoria.alertaRadarEnviada
+                      ? 'bg-blue-600/30 text-blue-300 border border-blue-500/50 hover:bg-blue-600/50'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
+                  }`}
+                >
+                  <Radio className={`w-3.5 h-3.5 ${equipo.convocatoria.alertaRadarEnviada ? 'animate-pulse text-blue-400' : ''}`} />
+                  {equipo.convocatoria.alertaRadarEnviada ? 'Radar Activo' : 'Al Radar'}
                 </button>
               )}
             </div>
+
+            {/* Badge de alerta activa en Radar */}
+            {equipo.convocatoria.alertaRadarEnviada && (
+              <div className="flex items-center justify-between bg-blue-950/40 border border-blue-500/30 rounded-xl p-2.5 mb-3 text-xs">
+                <div className="flex items-center gap-2 text-blue-200 font-bold truncate">
+                  <Radio className="w-4 h-4 text-blue-400 animate-pulse shrink-0" />
+                  <span className="truncate">
+                    En Radar: faltan {equipo.convocatoria.jugadoresFaltantes || 1} jugador(es)
+                  </span>
+                </div>
+                <button
+                  onClick={() => navigate('/radar')}
+                  className="text-blue-400 hover:text-white font-black uppercase text-[11px] underline ml-2 shrink-0"
+                >
+                  Ver en mapa
+                </button>
+              </div>
+            )}
             
             {equipo.isCapitan && equipo.convocatoria.confirmados.length > 0 && (
               <button 
@@ -1415,15 +2004,15 @@ export const Screen7MyTeam = () => {
               </button>
             )}
 
-            <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-3">
+            <div className="flex justify-between items-center bg-canvas p-3 rounded-xl border border-zinc-800 mb-3">
               <div className="text-center flex-1">
                 <div className="text-xl font-black text-emerald-500">{equipo.convocatoria.confirmados.length}</div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Confirmados</div>
+                <div className="text-[11px] uppercase font-bold text-zinc-500">Confirmados</div>
               </div>
               <div className="w-px h-8 bg-zinc-800"></div>
               <div className="text-center flex-1">
                 <div className="text-xl font-black text-red-500">{equipo.convocatoria.bajas.length}</div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Bajas</div>
+                <div className="text-[11px] uppercase font-bold text-zinc-500">Bajas</div>
               </div>
             </div>
 
@@ -1452,33 +2041,91 @@ export const Screen7MyTeam = () => {
             </div>
           </div>
         ) : (
-          equipo.isCapitan ? (
-            <button 
-              onClick={() => setMostrarModalConvocatoria(true)}
-              className="w-full bg-zinc-900 border border-dashed border-zinc-700 text-zinc-400 font-bold py-4 rounded-2xl active:scale-95 transition-transform"
-            >
-              + Armar Convocatoria
-            </button>
-          ) : (
-            <div className="text-center py-4 text-zinc-600 font-bold text-sm bg-zinc-900 rounded-2xl border border-zinc-800">
-              No hay próximo partido programado
-            </div>
-          )
+          <div className="space-y-4">
+            {equipo.ultimoPartido && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-lg">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-[11px] uppercase font-black tracking-wider text-emerald-400">Último Partido Finalizado</span>
+                  </div>
+                  <span className="text-xs font-bold text-zinc-400">{equipo.ultimoPartido.fecha}</span>
+                </div>
+                
+                {equipo.ultimoPartido.predioNombre && (
+                  <p className="text-sm font-black text-white mb-3">
+                    📍 {equipo.ultimoPartido.predioNombre} {equipo.ultimoPartido.canchaNombre ? `· ${equipo.ultimoPartido.canchaNombre}` : ''}
+                  </p>
+                )}
+
+                {/* MVP Destacado */}
+                {equipo.ultimoPartido.mvpNombre && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-xl shrink-0">
+                      {equipo.ultimoPartido.mvpEmoji || '👑'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] uppercase font-black text-amber-400 tracking-wider block">
+                        ⭐ Figura de la Cancha (MVP)
+                      </span>
+                      <span className="text-sm font-black text-white truncate block">
+                        {equipo.ultimoPartido.mvpNombre}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Resumen de Goles y Asistencias cargadas */}
+                {equipo.ultimoPartido.stats && Object.keys(equipo.ultimoPartido.stats).length > 0 && (
+                  <div className="bg-canvas p-3 rounded-xl border border-zinc-800/80">
+                    <span className="text-[11px] uppercase font-black text-zinc-500 tracking-wider block mb-2">
+                      Goles y Asistencias Registrados
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(equipo.ultimoPartido.stats).map(([uid, s]: [string, any]) => {
+                        if (!s.goles && !s.asistencias) return null;
+                        const j = equipo.plantel.find((p: any) => p.id === uid);
+                        const nombre = j?.apodo || 'Jugador';
+                        return (
+                          <div key={uid} className="bg-zinc-900 border border-zinc-700/60 px-2.5 py-1 rounded-lg text-xs flex items-center gap-2">
+                            <span className="font-bold text-zinc-300">{nombre}:</span>
+                            {s.goles > 0 && <span className="font-black text-emerald-400">⚽ {s.goles}</span>}
+                            {s.asistencias > 0 && <span className="font-black text-amber-400">👟 {s.asistencias}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {equipo.isCapitan ? (
+              <button 
+                onClick={() => setMostrarModalConvocatoria(true)}
+                className="w-full bg-zinc-900 border border-dashed border-zinc-700 hover:border-amber-500/50 hover:text-white text-zinc-400 font-bold py-4 rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                + Armar Nueva Convocatoria
+              </button>
+            ) : (
+              <div className="text-center py-4 text-zinc-600 font-bold text-sm bg-zinc-900 rounded-2xl border border-zinc-800">
+                No hay próximo partido programado
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Lista de Jugadores */}
+      {/* Lista de Jugadores: dividida en Confirmados (con convocatoria) o Plantel Completo (sin convocatoria) */}
       <div className="p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-bold text-zinc-500 uppercase">Plantel ({equipo.plantel.length}/{MAX_MEMBROS_EQUIPO})</h3>
-          <button onClick={() => setMostrarInvitar(true)} className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform">+ Invitar</button>
-        </div>
-        
-        <div className="space-y-3">
-          {equipo.plantel.map((jugador: any) => {
+        {(() => {
+          const jugadoresConfirmados = equipo.confirmadosDelPartido || [];
+
+          const renderTarjetaJugador = (jugador: any, permitirGestion: boolean) => {
             const isMe = jugador.id === currentUid;
-            const canRemove = equipo.isCapitan && !isMe;
-            const canLeave = isMe && !equipo.isCapitan;
+            const canRemove = permitirGestion && equipo.isCapitan && !isMe;
+            const canLeave = permitirGestion && isMe && !equipo.isCapitan;
+            const esRefuerzo = Boolean(jugador.esTemporal);
 
             return (
               <div key={jugador.id} className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
@@ -1489,10 +2136,51 @@ export const Screen7MyTeam = () => {
                     jugador.emoji
                   )}
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-sm">{jugador.apodo}</h4>
-                  <p className="text-xs text-zinc-500 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : 'JUGADOR'}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm truncate">{jugador.apodo}</h4>
+                    {esRefuerzo && (
+                      <span className="text-[11px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-black shrink-0">
+                        ⚡ Refuerzo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : esRefuerzo ? 'REFUERZO DEL PARTIDO' : 'JUGADOR'}</p>
                 </div>
+
+                {/* Estadísticas de Jugador y Media / OVR */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-col items-end text-[11px] font-bold text-zinc-400">
+                    <div className="flex items-center gap-1.5">
+                      <span title="Goles">⚽ {jugador.stats?.goles || 0}</span>
+                      <span title="Asistencias">👟 {jugador.stats?.asistencias || 0}</span>
+                    </div>
+                    <span className="text-[11px] text-zinc-500">{jugador.stats?.partidosJugados || 0} PJ</span>
+                  </div>
+                  <div 
+                    className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-zinc-950 font-black text-xs flex items-center justify-center shadow-md border border-amber-400/50 shrink-0"
+                    title="Media / OVR de rendimiento"
+                  >
+                    {jugador.media || 62}
+                  </div>
+                </div>
+                {esRefuerzo && equipo.isCapitan && (
+                  <button 
+                    onClick={() => {
+                      setUsuarioSeleccionado({
+                        uid: jugador.id,
+                        username: jugador.username || jugador.apodo,
+                        apodo: jugador.apodo,
+                        emoji: jugador.emoji,
+                      });
+                      setMostrarInvitar(true);
+                    }}
+                    className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors shrink-0"
+                    title="Invitar a ser miembro permanente del plantel"
+                  >
+                    + Sumar al Plantel
+                  </button>
+                )}
                 {canRemove && (
                   <div className="flex flex-col gap-1">
                     <button 
@@ -1519,14 +2207,89 @@ export const Screen7MyTeam = () => {
                 )}
               </div>
             );
-          })}
-        </div>
+          };
+
+          if (equipo.convocatoria) {
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSubPestanaPlantel('confirmados')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                        subPestanaPlantel === 'confirmados'
+                          ? 'bg-emerald-500 text-zinc-950 shadow-lg'
+                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      ✓ Confirmados ({jugadoresConfirmados.length})
+                    </button>
+                    <button
+                      onClick={() => setSubPestanaPlantel('todos')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                        subPestanaPlantel === 'todos'
+                          ? 'bg-amber-500 text-zinc-950 shadow-lg'
+                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                      }`}
+                    >
+                      Plantel ({equipo.plantel.length})
+                    </button>
+                  </div>
+                  {subPestanaPlantel === 'todos' && (
+                    <button
+                      onClick={() => setMostrarInvitar(true)}
+                      className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform"
+                    >
+                      + Invitar
+                    </button>
+                  )}
+                </div>
+
+                {subPestanaPlantel === 'confirmados' ? (
+                  jugadoresConfirmados.length === 0 ? (
+                    <div className="text-center py-8 bg-zinc-900/60 rounded-2xl border border-dashed border-zinc-800 p-6 space-y-2">
+                      <p className="text-sm font-bold text-zinc-400">Aún no hay jugadores confirmados</p>
+                      <p className="text-xs text-zinc-600">A medida que los integrantes pongan '✓ Voy' o se sumen refuerzos del Radar, irán apareciendo acá.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {jugadoresConfirmados.map((jugador: any) => renderTarjetaJugador(jugador, false))}
+                    </div>
+                  )
+                ) : (
+                  <div className="space-y-3">
+                    {equipo.plantel.map((jugador: any) => renderTarjetaJugador(jugador, true))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-zinc-500 uppercase">
+                  Plantel del Equipo ({equipo.plantel.length}/{MAX_MEMBROS_EQUIPO})
+                </h3>
+                <button
+                  onClick={() => setMostrarInvitar(true)}
+                  className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform"
+                >
+                  + Invitar
+                </button>
+              </div>
+              <div className="space-y-3">
+                {equipo.plantel.map((jugador: any) => renderTarjetaJugador(jugador, true))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modal Configuración */}
       {mostrarConfig && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Configurar equipo" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
              <h3 className="text-xl font-black mb-2">Configurar Equipo</h3>
              <p className="text-sm text-zinc-400 mb-6">Ajustá cómo querés que {equipo.nombre} aparezca en el radar.</p>
              
@@ -1546,7 +2309,7 @@ export const Screen7MyTeam = () => {
 
              <label className="text-xs font-bold text-zinc-500 uppercase">Escudo</label>
              <p className="text-[11px] text-zinc-600 mb-2">Tocá la foto del equipo en el encabezado para subir una imagen.</p>
-             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
+             <div className="flex justify-between mt-2 mb-8 bg-canvas p-2 rounded-xl border border-zinc-800">
                {['🛡️', '⚔️', '🦅', '🦁', '⭐'].map(emoji => (
                  <button key={emoji} onClick={() => setEscudoSel(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${escudoSel === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
                ))}
@@ -1561,8 +2324,8 @@ export const Screen7MyTeam = () => {
       {mostrarInvitar && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
           {/* ... (el resto del modal invitar queda igual pero omito el contenido completo aca y lo dejo como estaba) */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
-             <button onClick={() => setMostrarInvitar(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+          <div role="dialog" aria-modal="true" aria-label="Invitar jugador" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <button onClick={() => setMostrarInvitar(false)} aria-label="Cerrar" className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
              <h3 className="text-xl font-black mb-2">Invitar Jugador</h3>
              <p className="text-sm text-zinc-400 mb-6">Sumá un nuevo talento a {equipo.nombre}.</p>
              
@@ -1576,14 +2339,13 @@ export const Screen7MyTeam = () => {
                <div className="flex-grow border-t border-zinc-800"></div>
              </div>
 
-             <div className={`flex items-center w-full bg-zinc-950 border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
+             <div className={`flex items-center w-full bg-canvas border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
                <Search className="w-4 h-4 ml-4 text-zinc-500 shrink-0" />
                 <input 
+                  aria-label="Buscar jugador por usuario"
                   type="text" 
                   value={inviteUsername}
                   onChange={(e) => {
-                    // Sin pasar a minúsculas: el rango de Firestore compara por
-                    // code point y "lio" no matchearía contra "Lionel".
                     const val = e.target.value.slice(0, 40);
                     setInviteUsername(val);
                     setUsuarioSeleccionado(null);
@@ -1592,12 +2354,13 @@ export const Screen7MyTeam = () => {
                   className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
                   placeholder="buscar por nombre o apellido"
                 />
+                {buscando && <Loader2 className="w-4 h-4 mr-3 text-amber-500 animate-spin shrink-0" />}
                 {usuarioSeleccionado && <span className="pr-4 text-emerald-500">✓</span>}
              </div>
 
              {/* Resultados de Búsqueda */}
              {!usuarioSeleccionado && usuariosBuscados.length > 0 && (
-               <div className="bg-zinc-950 border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
+               <div className="bg-canvas border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
                   {usuariosBuscados.map(u => (
                     <div 
                       key={u.uid}
@@ -1623,21 +2386,28 @@ export const Screen7MyTeam = () => {
                  ))}
                </div>
              )}
-              {!usuarioSeleccionado && inviteUsername.trim().length >= 2 && usuariosBuscados.length === 0 && !buscando && (
-                <div className="text-xs text-red-400 font-bold mb-4 px-2">No encontramos a nadie con ese nombre</div>
+              {!usuarioSeleccionado && inviteUsername.trim().length >= 1 && usuariosBuscados.length === 0 && !buscando && (
+                <div className="text-xs text-red-400 font-bold mb-4 px-2">No encontramos a ningún jugador con ese nombre</div>
               )}
               {usuarioSeleccionado && (
                 <div className="text-xs text-emerald-400 font-bold mb-4 px-2">
-                  Invitás a {usuarioSeleccionado.apodo}. El equipo se arma con el link.
+                  Invitando a {usuarioSeleccionado.apodo}. Al enviar, le saldrá un alerta push para unirse.
                 </div>
               )}
 
               <button 
                 onClick={handleSendInvite} 
-                disabled={!usuarioSeleccionado}
-                className={`w-full font-black py-4 rounded-xl transition-all mt-2 ${usuarioSeleccionado ? 'bg-amber-500 text-zinc-950 active:scale-95' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
+                disabled={!usuarioSeleccionado || enviandoInvitacion}
+                className={`w-full font-black py-4 rounded-xl transition-all mt-2 flex items-center justify-center gap-2 ${usuarioSeleccionado && !enviandoInvitacion ? 'bg-amber-500 text-zinc-950 active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}
               >
-                Copiar link de invitación
+                {enviandoInvitacion ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Enviando invitación...
+                  </>
+                ) : (
+                  'Enviar invitación'
+                )}
               </button>
           </div>
         </div>
@@ -1646,17 +2416,18 @@ export const Screen7MyTeam = () => {
       {/* Modal Armar Convocatoria */}
       {mostrarModalConvocatoria && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
-             <button onClick={() => setMostrarModalConvocatoria(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
+          <div role="dialog" aria-modal="true" aria-label="Armar convocatoria" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
+             <button onClick={() => setMostrarModalConvocatoria(false)} aria-label="Cerrar" className="absolute top-6 right-6 text-zinc-500 hover:text-white">✕</button>
              <h3 className="text-xl font-black mb-2">Armar Convocatoria</h3>
              <p className="text-sm text-zinc-400 mb-6">Llamá a tu equipo a jugar el próximo partido.</p>
 
-             <label className="text-xs font-bold text-zinc-500 uppercase">Fecha y Hora</label>
+             <label htmlFor="conv-fecha" className="text-xs font-bold text-zinc-500 uppercase">Fecha y Hora</label>
              <input 
+                id="conv-fecha"
                 type="text" 
                 value={convFecha}
                 onChange={(e) => setConvFecha(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+                className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
              />
 
              <button 
@@ -1671,20 +2442,19 @@ export const Screen7MyTeam = () => {
       </div>
 
       {modalCrearEquipo}
-      <MenuNavegacion />
       {/* Modal Cargar Estadísticas */}
       {mostrarModalEstadisticas && equipo && (
-        <div className="fixed inset-0 z-[200] bg-zinc-950/90 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
+        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-canvas/90 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-black italic text-emerald-500">3er TIEMPO</h2>
-            <button onClick={() => setMostrarModalEstadisticas(false)} className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
+            <button onClick={() => setMostrarModalEstadisticas(false)} aria-label="Cerrar" className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
           </div>
           
           <div className="flex-1 overflow-y-auto space-y-6">
             <div>
               <h3 className="font-bold text-amber-500 mb-4">Elegir MVP del Partido ⭐</h3>
               <div className="grid grid-cols-2 gap-2">
-                {equipo.plantel.filter((p: any) => equipo.convocatoria?.confirmados.includes(p.id)).map((p: any) => (
+                {(equipo.confirmadosDelPartido || []).map((p: any) => (
                   <button 
                     key={p.id}
                     onClick={() => setMvpId(p.id)}
@@ -1700,7 +2470,7 @@ export const Screen7MyTeam = () => {
             <div>
               <h3 className="font-bold text-emerald-500 mb-4">Goles y Asistencias</h3>
               <div className="space-y-2">
-                {equipo.plantel.filter((p: any) => equipo.convocatoria?.confirmados.includes(p.id)).map((p: any) => {
+                {(equipo.confirmadosDelPartido || []).map((p: any) => {
                   const s = statsPartido[p.id] || { goles: 0, asistencias: 0 };
                   const updateStats = (field: 'goles'|'asistencias', val: number) => {
                     setStatsPartido(prev => ({...prev, [p.id]: { ...s, [field]: Math.max(0, s[field] + val) }}));
@@ -1713,7 +2483,7 @@ export const Screen7MyTeam = () => {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex flex-col items-center">
-                          <span className="text-[9px] uppercase font-bold text-zinc-500">Goles</span>
+                          <span className="text-[11px] uppercase font-bold text-zinc-500">Goles</span>
                           <div className="flex items-center gap-2">
                             <button onClick={() => updateStats('goles', -1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-red-500">-</button>
                             <span className="font-black w-3 text-center">{s.goles}</span>
@@ -1721,7 +2491,7 @@ export const Screen7MyTeam = () => {
                           </div>
                         </div>
                         <div className="flex flex-col items-center">
-                          <span className="text-[9px] uppercase font-bold text-zinc-500">Asist.</span>
+                          <span className="text-[11px] uppercase font-bold text-zinc-500">Asist.</span>
                           <div className="flex items-center gap-2">
                             <button onClick={() => updateStats('asistencias', -1)} className="w-6 h-6 bg-zinc-800 rounded flex items-center justify-center text-red-500">-</button>
                             <span className="font-black w-3 text-center">{s.asistencias}</span>
@@ -1737,15 +2507,168 @@ export const Screen7MyTeam = () => {
           </div>
           
           <button 
-            onClick={() => {
-              setToastMessage('Estadísticas guardadas con éxito');
-              setTimeout(() => setToastMessage(''), 3000);
+            onClick={async () => {
+              if (equipo) {
+                try {
+                  await finalizarTercerTiempoYPartido(equipo.id, {
+                    mvpId,
+                    stats: statsPartido,
+                  });
+                } catch (err) {
+                  console.warn('Error guardando estadísticas de tercer tiempo:', err);
+                }
+              }
+              setToastMessage('¡Estadísticas y goles del 3er tiempo guardados con éxito! ⚽');
+              setTimeout(() => setToastMessage(''), 3500);
               setMostrarModalEstadisticas(false);
             }}
-            className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-4 active:scale-95 transition-transform"
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl mt-4 active:scale-95 transition-transform cursor-pointer"
           >
-            Confirmar Carga
+            Confirmar Carga y Finalizar Partido
           </button>
+        </div>
+      )}
+
+      {/* Modal Al Radar: Pregunta cuántos jugadores faltan y envía alerta */}
+      {mostrarModalRadar && equipo?.convocatoria && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div role="dialog" aria-modal="true" aria-label="Convocar al radar" className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setMostrarModalRadar(false)}
+              aria-label="Cerrar"
+              className="absolute top-5 right-5 text-zinc-500 hover:text-white p-2"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-blue-400 text-xs font-black uppercase mb-1">
+              <Radio className="w-4 h-4 animate-pulse" />
+              Lanzar Alerta al Radar
+            </div>
+            <h3 className="text-xl font-black text-white mb-2">Completar Equipo</h3>
+            <p className="text-xs text-zinc-400 mb-5">
+              Publicá una alerta en el mapa para que jugadores libres de la zona se sumen a este partido.
+            </p>
+
+            {/* Datos del partido */}
+            <div className="bg-canvas border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500">Predio / Cancha</span>
+                <span className="font-bold text-white truncate max-w-[200px]">
+                  {equipo.convocatoria.predioNombre || equipo.convocatoria.predio || 'Cancha confirmada'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500">Fecha y Horario</span>
+                <span className="font-bold text-emerald-400">
+                  {equipo.convocatoria.fecha}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500">Confirmados del equipo</span>
+                <span className="font-bold text-zinc-300">
+                  {(equipo.convocatoria.confirmados || []).length} jugadores
+                </span>
+              </div>
+            </div>
+
+            {/* Pregunta: ¿Cuántos jugadores se necesitan para completar? */}
+            <div className="mb-5">
+              <label className="text-xs font-black uppercase text-amber-500 block mb-3">
+                ¿Cuántos jugadores se necesitan para completar?
+              </label>
+              
+              <div className="flex items-center justify-center gap-5 bg-canvas p-4 rounded-2xl border border-zinc-800 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setJugadoresFaltantes((prev) => Math.max(1, prev - 1))}
+                  className="w-12 h-12 rounded-2xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white font-black text-2xl flex items-center justify-center transition"
+                >
+                  -
+                </button>
+                <div className="text-center min-w-[100px]">
+                  <span className="text-4xl font-black text-amber-500">{jugadoresFaltantes}</span>
+                  <span className="text-[11px] uppercase font-bold text-zinc-500 block mt-0.5">
+                    {jugadoresFaltantes === 1 ? 'jugador' : 'jugadores'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setJugadoresFaltantes((prev) => Math.min(10, prev + 1))}
+                  className="w-12 h-12 rounded-2xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white font-black text-2xl flex items-center justify-center transition"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Botones de selección rápida */}
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setJugadoresFaltantes(num)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-black transition ${
+                      jugadoresFaltantes === num
+                        ? 'bg-amber-500 text-zinc-950'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Posición sugerida */}
+            <div className="mb-5">
+              <label className="text-[11px] font-bold text-zinc-400 uppercase block mb-2">
+                Posición que buscan (opcional)
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {['Cualquiera', 'Arquero', 'Defensor', 'Mediocampista', 'Delantero'].map((pos) => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setPosicionRadar(pos)}
+                    className={`py-2 px-1 text-[11px] rounded-xl font-bold truncate transition ${
+                      posicionRadar === pos
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {pos}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Vista previa del mensaje */}
+            <div className="bg-canvas/80 border border-blue-500/30 rounded-2xl p-3.5 mb-5">
+              <div className="text-[11px] font-black uppercase text-blue-400 mb-1">Mensaje en el Radar</div>
+              <p className="text-xs text-zinc-300 italic font-medium leading-relaxed">
+                "📢 ¡No completamos! Necesitamos a los {jugadoresFaltantes} jugadores necesarios para jugar en{' '}
+                {equipo.convocatoria.predioNombre || equipo.convocatoria.predio || 'el predio'} (
+                {equipo.convocatoria.canchaNombre || equipo.convocatoria.cancha || 'Cancha'}). Fecha: {equipo.convocatoria.fecha}. ¡Sumate a {equipo.nombre}!"
+              </p>
+            </div>
+
+            {/* Botón de acción */}
+            <button
+              onClick={handleEnviarAlRadar}
+              disabled={enviandoAlRadar}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-4 rounded-xl text-sm transition active:scale-95 disabled:opacity-60 shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+            >
+              {enviandoAlRadar ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Radio className="w-5 h-5" />
+                  Enviar Alerta al Radar
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
       
@@ -1774,7 +2697,12 @@ export const Screen8VenueRegistration = () => {
     direccion: '',
     barrio: 'Centro',
     ciudad: 'Buenos Aires',
-    telefono: ''
+    telefono: '',
+    tipoSena: 'fijo' as 'fijo' | 'porcentaje',
+    montoSena: '4000',
+    porcentajeSena: '50',
+    alias: '',
+    titular: ''
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1786,22 +2714,29 @@ export const Screen8VenueRegistration = () => {
     setCargando(true);
     try {
       const { crearPredio } = await import('@/modules/predios/repositorio');
+      const senaNum = Number(formData.montoSena);
+      const pctNum = Number(formData.porcentajeSena);
       await crearPredio({
         nombre: formData.nombre || 'Mi Complejo',
         direccion: formData.direccion || 'Av. Siempre Viva 123',
         barrio: formData.barrio,
         ciudad: formData.ciudad,
         telefono: formData.telefono || '1122334455',
-        // El dueno aun no cargó datos bancarios: se dejan vacíos y `cbu` en null.
-// `montoSena` es obligatorio, asi que se usa el default del proyecto.
-cobro: { cbu: null, alias: '', titular: '', montoSena: MONTO_SENA_DEFAULT },
+        cobro: { 
+          cbu: null, 
+          alias: formData.alias.trim(), 
+          titular: formData.titular.trim(), 
+          tipoSena: formData.tipoSena,
+          montoSena: senaNum > 0 ? senaNum : MONTO_SENA_DEFAULT,
+          porcentajeSena: pctNum > 0 ? Math.min(100, pctNum) : 50
+        },
         duenoUid: sesion.user.uid,
         punto: { 
           lat: location.latitude ?? -34.6037, 
           lng: location.longitude ?? -58.3816 
         }
       });
-      navigate('/venue-subscription');
+      navigate('/venue-dashboard');
     } catch (err) {
       console.error('Error creando predio:', err);
       setCargando(false);
@@ -1809,27 +2744,28 @@ cobro: { cbu: null, alias: '', titular: '', montoSena: MONTO_SENA_DEFAULT },
   };
 
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col font-sans text-white pb-safe overflow-y-auto">
+    <div className="h-full bg-canvas p-6 flex flex-col font-sans text-white pb-28 md:pb-8 overflow-y-auto">
+      <CargandoFulbeando visible={cargando} />
       <h2 className="text-2xl font-black mt-8">Da de alta tu Complejo</h2>
       <p className="text-zinc-400 text-sm mt-2 mb-8">Completá los datos para aparecer en el radar de los jugadores.</p>
 
       <div className="space-y-6 flex-1">
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Nombre del Predio</label>
-          <input name="nombre" value={formData.nombre} onChange={handleChange} type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <input aria-label="Nombre del complejo" name="nombre" value={formData.nombre} onChange={handleChange} type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
         </div>
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Dirección</label>
-          <input name="direccion" value={formData.direccion} onChange={handleChange} type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <input aria-label="Dirección" name="direccion" value={formData.direccion} onChange={handleChange} type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Barrio / Localidad</label>
-            <input name="barrio" value={formData.barrio} onChange={handleChange} type="text" placeholder="Ej: Palermo" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+            <input aria-label="Barrio / localidad" name="barrio" value={formData.barrio} onChange={handleChange} type="text" placeholder="Ej: Palermo" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
           </div>
           <div>
             <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ciudad</label>
-            <input name="ciudad" value={formData.ciudad} onChange={handleChange} type="text" placeholder="Ej: CABA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+            <input aria-label="Ciudad" name="ciudad" value={formData.ciudad} onChange={handleChange} type="text" placeholder="Ej: CABA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
           </div>
         </div>
         <div>
@@ -1851,13 +2787,75 @@ cobro: { cbu: null, alias: '', titular: '', montoSena: MONTO_SENA_DEFAULT },
         </div>
         <div>
           <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Teléfono de Contacto</label>
-          <input name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="Ej: 11 1234 5678" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <input aria-label="Teléfono" name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="Ej: 11 1234 5678" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+        </div>
+
+        <div className="pt-4 border-t border-zinc-800 space-y-4">
+          <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+            Cobro de Seña y Datos Bancarios
+          </h3>
+          <div>
+            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Modalidad de la Seña</label>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, tipoSena: 'fijo' }))}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                  formData.tipoSena === 'fijo'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                }`}
+              >
+                💵 Monto Fijo ($)
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, tipoSena: 'porcentaje' }))}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                  formData.tipoSena === 'porcentaje'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400'
+                }`}
+              >
+                📊 Porcentaje (%)
+              </button>
+            </div>
+            {formData.tipoSena === 'fijo' ? (
+              <div>
+                <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Monto de la Seña Fija ($)</label>
+                <input aria-label="Monto de la seña" name="montoSena" value={formData.montoSena} onChange={handleChange} type="number" min="0" step="500" placeholder="Ej: 4000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-bold text-emerald-400" />
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Porcentaje de Seña (%)</label>
+                <input aria-label="Porcentaje de la seña" name="porcentajeSena" value={formData.porcentajeSena} onChange={handleChange} type="number" min="5" max="100" step="5" placeholder="Ej: 50" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-bold text-emerald-400" />
+              </div>
+            )}
+            <p className="text-[11px] text-zinc-500 mt-1">Monto que debe transferir el jugador para congelar la reserva.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Alias (MP / Banco)</label>
+              <input aria-label="Alias de transferencia" name="alias" value={formData.alias} onChange={handleChange} type="text" placeholder="Ej: complejo.mp" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-mono text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Titular de la cuenta</label>
+              <input aria-label="Titular de la cuenta" name="titular" value={formData.titular} onChange={handleChange} type="text" placeholder="Ej: Juan Pérez" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm" />
+            </div>
+          </div>
         </div>
       </div>
 
-      <button onClick={handleSubmit} disabled={cargando} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl mt-6 disabled:opacity-50">
-        {cargando ? 'CREANDO...' : 'CONTINUAR'}
-      </button>
+      {/* Botón con margen inferior suficiente para no quedar tapado por la barra de navegación en celulares */}
+      <div className="pt-6 pb-4 mt-4">
+        <button 
+          onClick={handleSubmit} 
+          disabled={cargando} 
+          className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {cargando ? 'GUARDANDO COMPLEJO...' : 'GUARDAR Y CONTINUAR'}
+        </button>
+      </div>
     </div>
   );
 };
@@ -1868,7 +2866,7 @@ cobro: { cbu: null, alias: '', titular: '', montoSena: MONTO_SENA_DEFAULT },
 export const Screen9VenueSubscription = () => {
   const navigate = useNavigate();
   return (
-    <div className="h-full bg-zinc-950 p-6 flex flex-col items-center justify-center font-sans text-white text-center">
+    <div className="h-full bg-canvas p-6 flex flex-col items-center justify-center font-sans text-white text-center">
       <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
         <Building className="w-10 h-10 text-emerald-500" />
       </div>
@@ -1883,8 +2881,8 @@ export const Screen9VenueSubscription = () => {
           <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Gestión de reservas inteligente</li>
         </ul>
         
-        <button onClick={() => navigate('/venue-dashboard')} className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl flex items-center justify-center gap-2">
-          Abonar y Activar
+        <button onClick={() => navigate('/venue-dashboard')} className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition">
+          Ir a Mi Panel de Canchas
         </button>
       </div>
     </div>
@@ -1896,7 +2894,7 @@ export const Screen9VenueSubscription = () => {
 // ==========================================
 export const Screen10VenueDashboard = () => {
   return (
-    <div className="h-full bg-zinc-950 p-6 font-sans text-white">
+    <div className="mx-auto h-full w-full max-w-3xl bg-canvas p-6 font-sans text-white">
       <header className="flex justify-between items-center mb-8 mt-4">
         <div>
           <h1 className="text-2xl font-black">El Templo 🏟️</h1>

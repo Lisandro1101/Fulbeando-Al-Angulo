@@ -19,6 +19,7 @@ export type PlayerRole = 'GK' | 'DEF' | 'MID' | 'FWD' | 'DT'
 
 export interface PlayerStats {
   goals: number
+  assists?: number
   matchesPlayed: number
   mvpCount: number
   fairPlayIndex: number
@@ -49,7 +50,7 @@ export const PERFIL_DEPORTIVO_VACIO: PerfilDeportivo = {
   disponibleHoy: false,
   notificacionesRadar: true,
   playerRole: null,
-  stats: { goals: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 100 },
+  stats: { goals: 0, assists: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 100 },
   rating: 5.0,
   teamIds: [],
 }
@@ -68,6 +69,12 @@ export interface Usuario extends Auditoria {
   geo: GeoIndex | null
   /** Barrio / zona declarada para la busqueda por zona. */
   zona: string | null
+  /**
+   * Municipio / Partido declarado. Es el nivel que agrupa el feed "Mi zona":
+   * mas amplio que `zona` (barrio/localidad). Opcional porque los documentos
+   * creados antes de este campo no lo traen.
+   */
+  municipio?: string | null
   fotoUrl: string | null
   /**
    * Fecha de nacimiento en `AAAA-MM-DD`, cargada en el registro.

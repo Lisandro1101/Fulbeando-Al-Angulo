@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
   setDoc,
@@ -161,6 +162,22 @@ export const renunciarPostulacion = async (alertaId: string, uid: string): Promi
 export const listarPostulaciones = async (alertaId: string): Promise<Postulacion[]> => {
   const snap = await getDocs(refPostulaciones(alertaId))
   return snap.docs.map((d) => d.data() as Postulacion)
+}
+
+/** Escucha en tiempo real las postulaciones a una alerta de Falta 1. */
+export const escucharPostulaciones = (
+  alertaId: string,
+  callback: (postulaciones: Postulacion[]) => void,
+): (() => void) => {
+  return onSnapshot(
+    refPostulaciones(alertaId),
+    (snap) => {
+      callback(snap.docs.map((d) => d.data() as Postulacion))
+    },
+    (err) => {
+      console.warn(`Error escuchando postulaciones de alerta ${alertaId}:`, err)
+    },
+  )
 }
 
 /** Confirmar un suplente incrementa `confirmados` y cierra el radar si se completa. */

@@ -1,0 +1,4 @@
+{"contexto":"D3-aprobacion:comprobante","imagen":false,"naturalWidth":0,"mensaje":"No encontramos el comprobante de esta solicitud.","aprobacionHabilitada":false}
+{"contexto":"D3-aprobacion:HALLAZGO","severidad":"ALTA","titulo":"El dueño no puede ver la imagen del comprobante","imagenVisible":false,"naturalWidth":0,"mensajeEnPantalla":"No encontramos el comprobante de esta solicitud.","aprobacionHabilitada":false,"nota":"Si la imagen falla pero el botón \"¿Aprobar turno?\" queda habilitado, el dueño valida a ciegas."}
+{"contexto":"D1-panel:estado","solicitudesPendientes":1,"grillaDeHoyVacia":false,"nota":"El fixture de la Fase 2 creó turnos desde el 12/10; el día de hoy queda sin turnos."}
+{"contexto":"D1-panel:veredicto","estructuraCompleta":true,"solicitudesPendientes":1,"nota":"El número depende de D2/D3; la estructura del panel es lo que se valida acá."}

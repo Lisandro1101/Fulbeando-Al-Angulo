@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   setDoc,
   updateDoc,
@@ -14,7 +15,7 @@ import { COLECCIONES, appEnv } from '@/core/config'
 import { db } from '@/core/firebase'
 import { auditoriaInicial, auditoriaUpdate, ts, type Escritura } from '@/core/firestore'
 import { aGeoIndex } from '@/core/geo'
-import type { Punto } from '@/core/geo/geohash'
+import { haversineKm, prefijosQueCubren, type Punto } from '@/core/geo/geohash'
 
 const col = () => collection(db, COLECCIONES.predios)
 export const ref = (id: string) => doc(db, COLECCIONES.predios, id)
@@ -114,6 +115,48 @@ export const listarPrediosPublicos = async (barrio?: string): Promise<Predio[]> 
   }
   const snap = await getDocs(query(col(), ...condiciones))
   return snap.docs.map((d) => d.data() as Predio).filter((p) => p.deletedAt === null)
+}
+
+export interface PredioCercano extends Predio {
+  distanciaKm: number
+}
+
+/** Radio por encima del cual se abandona el filtro geoespacial (coincide con el tope del mapa). */
+const RADAR_TOPE_GEO_KM = 50
+
+/**
+ * Predios publicos dentro del radio, filtrados (Haversine) y ordenados por
+ * distancia. Usa el mismo motor geoespacial que desafios y equipos:
+ * `array-contains-any` sobre `geo.prefijos`, y el radio exacto lo decide
+ * `haversineKm`. Reemplaza a `listarPrediosPublicos` en el radar: ese trae TODO
+ * el padron y el filtro por radio quedaba en el cliente.
+ */
+export const listarPrediosCercanos = async (
+  punto: Punto,
+  radioKm: number,
+  max = 50,
+): Promise<PredioCercano[]> => {
+  const esRadioGrande = radioKm > RADAR_TOPE_GEO_KM
+  const prefijos = esRadioGrande ? [] : prefijosQueCubren(punto, radioKm, 5)
+  if (!esRadioGrande && prefijos.length === 0) return []
+
+  const q = esRadioGrande
+    ? query(col(), where('verificado', '==', true), where('estado', '==', 'activo'), limit(max))
+    : query(
+        col(),
+        where('verificado', '==', true),
+        where('estado', '==', 'activo'),
+        where('geo.prefijos', 'array-contains-any', prefijos),
+        limit(max),
+      )
+
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => d.data() as Predio)
+    .filter((p) => p.deletedAt === null)
+    .map((p) => ({ ...p, distanciaKm: haversineKm(punto, p.geo) }))
+    .filter((p) => p.distanciaKm <= radioKm)
+    .sort((a, b) => a.distanciaKm - b.distanciaKm)
 }
 
 /**

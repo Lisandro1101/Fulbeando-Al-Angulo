@@ -24,6 +24,7 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
 // prefijos a mano. `geohash.ts` no tiene imports, asi que tsx lo resuelve bien
 // desde aca sin necesitar el alias `@/`.
 import { encodeGeohash, prefijosQueCubrenBD } from '../app/src/core/geo/geohash'
+import { calcularGeoZona } from '../app/src/core/geo/zonas'
 
 // El projectId tiene que ser EXACTAMENTE el que usa el bundle de la app:
 // los emuladores guardan los datos en un namespace por proyecto y, si
@@ -169,6 +170,7 @@ async function seedData() {
       },
 
       // --- Agentes libres: aparecen en la capa "Jugadores" del mapa ---
+      // PRIVACIDAD: No se usan coordenadas fijas/privadas, sino geocerca de su barrio (centroide + dispersión)
       {
         uid: 'user-libre-1',
         nombre: 'Matías',
@@ -185,7 +187,7 @@ async function seedData() {
         // Es el capitan de "Los Pibes de Lomas": el puente tiene que estar.
         teamIds: ['team-pibes-lomas'],
         disponible: true,
-        punto: LOMAS,
+        usarGeocercaZona: true,
       },
       {
         uid: 'user-libre-2',
@@ -202,7 +204,7 @@ async function seedData() {
         rating: 6.8,
         teamIds: ['team-pibes-lomas'],
         disponible: true,
-        punto: LANUS,
+        usarGeocercaZona: true,
       },
       {
         uid: 'user-libre-3',
@@ -219,7 +221,7 @@ async function seedData() {
         rating: 6.5,
         teamIds: [],
         disponible: true,
-        punto: BANFIELD,
+        usarGeocercaZona: true,
       },
       // --------------------------------------------------------------- //
       // DUENOS DE PREDIO
@@ -306,11 +308,17 @@ async function seedData() {
             rating: u.rating ?? 5,
             teamIds: u.teamIds ?? [],
           },
-      // Mismo radio que `aGeoIndex` (RADAR_RADIO_KM = 5): un prefijo de 2 km
-      // y una query de 5 km se pisan, pero no cubren igual.
-      geo: u.punto ? geo(u.punto.lat, u.punto.lng) : null,
+      // Geo: si usa geocerca por privacidad, se calcula centroide + dispersión del barrio.
+      // Si no, punto fijo (para estadios/predios).
+      geo: (u as any).usarGeocercaZona && u.zona
+        ? calcularGeoZona(u.zona, { seed: usuarios.indexOf(u), radioDispersionMetros: 400 })
+        : (u as any).punto
+        ? geo((u as any).punto.lat, (u as any).punto.lng)
+        : null,
       zona: u.zona ?? null,
       fotoUrl: u.fotoUrl ?? null,
+      fcmToken: `fcm-token-${u.uid}`,
+      fcmTokens: [`fcm-token-${u.uid}`],
       estado: 'activo',
       createdAt: serverTimestamp,
       updatedAt: serverTimestamp,
@@ -383,11 +391,11 @@ async function seedData() {
         direccion: 'Av. Hipólito Yrigoyen 4500',
         barrio: 'Lanús',
         ciudad: 'Buenos Aires',
-telefono: '+5491122334402',
-    duenoUid: 'user-dueno-templo',
+        telefono: '+5491122334402',
+        duenoUid: 'user-dueno-templo',
         verificado: true,
         punto: LANUS,
-        cobro: { titular: 'El Templo SA', alias: 'eltemplo.futbol', cbu: '2850590940090418135201', montoSena: 12000 },
+        cobro: { titular: 'El Templo SA', alias: 'eltemplo.futbol', cbu: '2850590940090418135201', montoSena: 4000 },
         canchasResumen: [
           { id: 'cancha-1', nombre: 'La Bombonerita', tipo: 'F5' as const, techada: false, precioHora: 8000 },
           { id: 'cancha-2', nombre: 'La Techada', tipo: 'F7' as const, techada: true, precioHora: 11000 },
@@ -399,11 +407,11 @@ telefono: '+5491122334402',
         direccion: 'Av. Argentina 1200',
         barrio: 'Lomas de Zamora',
         ciudad: 'Buenos Aires',
-telefono: '+5491122334421',
-    duenoUid: 'user-dueno-lomas',
+        telefono: '+5491122334421',
+        duenoUid: 'user-dueno-lomas',
         verificado: true,
         punto: LOMAS,
-        cobro: { titular: 'Lomas Sport', alias: 'lomas.sport', cbu: '2850590940090418135202', montoSena: 10000 },
+        cobro: { titular: 'Lomas Sport', alias: 'lomas.sport', cbu: '2850590940090418135202', montoSena: 3500 },
         canchasResumen: [
           { id: 'cancha-1', nombre: 'Cancha 1', tipo: 'F5' as const, techada: false, precioHora: 7500 },
         ],
@@ -414,19 +422,27 @@ telefono: '+5491122334421',
         direccion: 'Av. Monte 120',
         barrio: 'Banfield',
         ciudad: 'Buenos Aires',
-telefono: '+5491122334422',
-    duenoUid: 'user-dueno-banfield',
+        telefono: '+5491122334422',
+        duenoUid: 'user-dueno-banfield',
         verificado: false, // A proposito: sirve para probar el filtro de publicos.
         punto: BANFIELD,
-        cobro: { titular: 'Club Banfield', alias: 'banfield.f5', cbu: null, montoSena: 9000 },
+        cobro: { titular: 'Club Banfield', alias: 'banfield.f5', cbu: null, montoSena: 4000 },
         canchasResumen: [
           { id: 'cancha-1', nombre: 'Cancha techada', tipo: 'F7' as const, techada: true, precioHora: 9500 },
         ],
       },
     ]
 
+    const franjasBase: Array<[string, string]> = [
+      ['18:00', '19:00'],
+      ['19:00', '20:00'],
+      ['20:00', '21:00'],
+    ]
+    const hoy = new Date()
+
     for (const p of predios) {
-      await db.collection('predios').doc(p.id).set({
+      const predioRef = db.collection('predios').doc(p.id)
+      await predioRef.set({
         id: p.id,
         nombre: p.nombre,
         direccion: p.direccion,
@@ -445,7 +461,60 @@ telefono: '+5491122334422',
         updatedAt: serverTimestamp,
         deletedAt: null,
       })
-      console.log(`   ✔️  ${p.nombre} (${p.barrio}) — ${p.canchasResumen.length} canchas${p.verificado ? '' : ' · sin verificar'}`)
+
+      // Subcolección `canchas` que lee `listarCanchas` y el `GeneradorGrilla`
+      for (const c of p.canchasResumen) {
+        await predioRef.collection('canchas').doc(c.id).set({
+          id: c.id,
+          predioId: p.id,
+          nombre: c.nombre,
+          tipo: c.tipo,
+          techada: c.techada ?? false,
+          precioHora: c.precioHora,
+          activa: true,
+          createdAt: serverTimestamp,
+          updatedAt: serverTimestamp,
+          deletedAt: null,
+        })
+
+        // Generar 7 días de turnos iniciales disponibles si el predio está verificado
+        if (p.verificado) {
+          for (let i = 0; i < 7; i++) {
+            const fechaD = new Date(hoy.getTime() + i * 86_400_000)
+            const fechaStr = fechaD.toISOString().slice(0, 10)
+            for (const [horaInicio, horaFin] of franjasBase) {
+              const turnoId = `${p.id}~${c.id}~${fechaStr}T${horaInicio}`
+              await db.collection('turnos').doc(turnoId).set({
+                id: turnoId,
+                predioId: p.id,
+                canchaId: c.id,
+                fecha: fechaStr,
+                horaInicio,
+                horaFin,
+                estado: 'disponible',
+                origen: 'carga_manual_dueno',
+                precioTotal: Number(c.precioHora),
+                montoSena: Number(p.cobro.montoSena),
+                organizadorUid: null,
+                organizadorNombre: null,
+                organizadorTelefono: null,
+                comprobantePendiente: false,
+                motivoRechazo: null,
+                bloqueadoHasta: null,
+                expiracionNotificada: false,
+                canceladoPor: null,
+                geo: geo(p.punto.lat, p.punto.lng),
+                partidoId: null,
+                createdAt: serverTimestamp,
+                updatedAt: serverTimestamp,
+                deletedAt: null,
+              })
+            }
+          }
+        }
+      }
+
+      console.log(`   ✔️  ${p.nombre} (${p.barrio}) — ${p.canchasResumen.length} canchas creadas${p.verificado ? ' + turnos generados' : ' · sin verificar'}`)
     }
 
     // ---------------------------------------------------------------- //
@@ -515,6 +584,93 @@ telefono: '+5491122334422',
         createdAt: Date.now(),
       })
       console.log(`   ✔️  ${d.equipoNombre} busca rival ${d.modalidad}`)
+    }
+
+    // ---------------------------------------------------------------- //
+    // 5. PARTIDOS Y POSTULACIONES — Flujo de Jugador Libre
+    // ---------------------------------------------------------------- //
+    console.log('\n⚽  Creando Partidos y Postulaciones de Jugadores Libres...')
+
+    const partidos = [
+      {
+        id: 'partido-lanus-01',
+        organizadorId: 'user-lio-10', // Lionel es el organizador (recibirá notificaciones push)
+        nombre: 'F5 Amistoso en El Templo',
+        predioId: 'predio-lanus-01',
+        canchaId: 'cancha-1',
+        barrio: 'Lanús',
+        fecha: '2026-10-15',
+        hora: '20:00',
+        modalidad: 'F5',
+        cuposDisponibles: 1,
+        posicionBuscada: 'defensor',
+        estado: 'abierto',
+        punto: LANUS,
+        postulaciones: [
+          {
+            jugadorId: 'user-libre-1',
+            nombre: 'Matías El Rústico',
+            posicion: 'defensor',
+            telefono: '+5491122334411',
+            fotoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Rustico',
+            mensaje: 'Me sumo de central, avisen si falta 1.',
+            estado: 'pendiente' as const,
+          },
+        ],
+      },
+      {
+        id: 'partido-lomas-02',
+        organizadorId: 'user-diego-10', // Diego Armando es el organizador
+        nombre: 'F7 Fútbol de Viernes',
+        predioId: 'predio-lomas-02',
+        canchaId: 'cancha-1',
+        barrio: 'Lomas de Zamora',
+        fecha: '2026-10-16',
+        hora: '19:00',
+        modalidad: 'F7',
+        cuposDisponibles: 2,
+        posicionBuscada: 'arquero',
+        estado: 'abierto',
+        punto: LOMAS,
+        postulaciones: [],
+      },
+    ]
+
+    for (const p of partidos) {
+      const partidoRef = db.collection('partidos').doc(p.id)
+      await partidoRef.set({
+        id: p.id,
+        organizadorId: p.organizadorId,
+        nombre: p.nombre,
+        predioId: p.predioId,
+        canchaId: p.canchaId,
+        barrio: p.barrio,
+        fecha: p.fecha,
+        hora: p.hora,
+        modalidad: p.modalidad,
+        cuposDisponibles: p.cuposDisponibles,
+        posicionBuscada: p.posicionBuscada,
+        estado: p.estado,
+        geo: geo(p.punto.lat, p.punto.lng),
+        createdAt: serverTimestamp,
+        updatedAt: serverTimestamp,
+      })
+
+      for (const post of p.postulaciones) {
+        await partidoRef.collection('postulaciones').doc(post.jugadorId).set({
+          jugadorId: post.jugadorId,
+          nombre: post.nombre,
+          posicion: post.posicion,
+          telefono: post.telefono,
+          fotoUrl: post.fotoUrl,
+          mensaje: post.mensaje,
+          estado: post.estado,
+          creadoAt: serverTimestamp,
+        })
+        console.log(`      ↳ Postulación de ${post.nombre} registrada en ${p.id}`)
+      }
+
+      console.log(`   ✔️  Partido ${p.nombre} (${p.barrio}) creado — Organizador: ${p.organizadorId}`)
     }
 
     console.log('\n✅ SEED OK. Todos los datos son ficticios (Zona Sur).\n')

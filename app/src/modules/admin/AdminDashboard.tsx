@@ -25,6 +25,7 @@ import {
 } from '@/modules/solicitudes/repositorio'
 import { listarPrediosParaVerificar, verificarPredio } from '@/modules/predios/repositorio'
 import { listarReportesAbiertos } from '@/modules/reportes/repositorio'
+import { ImportadorDatos } from '@/modules/admin/pantallas/ImportadorDatos'
 
 /**
  * Conteo sin bajar los documentos. Devuelve `null` (y no rompe la pantalla)
@@ -193,6 +194,9 @@ export const AdminDashboard = () => {
           <a href="#predios" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
             🏟️ Canchas / B2B ({predios.length})
           </a>
+          <a href="#datos" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
+            📥 Importar datos
+          </a>
           <a href="#" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
             💰 Banners y Pauta
           </a>
@@ -270,6 +274,10 @@ export const AdminDashboard = () => {
             <p className="text-xs text-purple-400 mt-2">{predios.length} sin verificar</p>
           </div>
         </div>
+
+        {/* Importador de datos de prueba: sube el Excel y lo carga via la
+            Cloud Function callable (Admin SDK), sin pelear con las rules. */}
+        <ImportadorDatos />
 
         {/* Tabla de Arbitraje: ahora con los reportes abiertos reales */}
         <section
@@ -369,6 +377,7 @@ export const AdminDashboard = () => {
                   {rechazando === s.uid && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <input
+                        aria-label="Motivo del rechazo"
                         value={motivo}
                         onChange={(e) => setMotivo(e.target.value)}
                         placeholder="Motivo (lo ve el usuario)"

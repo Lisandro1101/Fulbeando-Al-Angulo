@@ -4,7 +4,7 @@ import { Loader2, Lock, Plus, Unlock, X } from 'lucide-react'
 import type { Predio, Turno } from '@/domain'
 import { canchasDe } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'
-import { listarPrediosDelDueno } from '@/modules/predios/repositorio'
+import { actualizarCobro, listarPrediosDelDueno } from '@/modules/predios/repositorio'
 import {
   aprobarTurno,
   bloquearManualmente,
@@ -20,7 +20,6 @@ import { GeneradorGrilla } from '@/modules/predios/componentes/GeneradorGrilla'
 import { GestorCanchas } from '@/modules/canchas/componentes/GestorCanchas'
 import { ModalValidacion } from '@/modules/predios/componentes/ModalValidacion'
 import { Etiqueta, Pantalla, Tarjeta } from '@/modules/ui/pantalla'
-import { NavegacionHeader } from '@/modules/ui/NavegacionHeader'
 
 const DIAS = 7
 
@@ -36,8 +35,10 @@ export default function DashboardDueno() {
   const [turnoEnRevision, setTurnoEnRevision] = useState<Turno | null>(null)
   const [abrirGenerador, setAbrirGenerador] = useState(false)
   const [abrirGestorCanchas, setAbrirGestorCanchas] = useState(false)
+  const [abrirConfigCobro, setAbrirConfigCobro] = useState(false)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [procesandoTurnoId, setProcesandoTurnoId] = useState<string | null>(null)
 
   const esDueno = sesion.actor !== null && sesion.actor.rol === 'dueno_predio'
   const predio = useMemo(
@@ -87,6 +88,54 @@ export default function DashboardDueno() {
 
   useEffect(() => {
     void recargar()
+  }, [recargar])
+
+  const manejarBloqueoManual = useCallback(async (turnoId: string) => {
+    setProcesandoTurnoId(turnoId)
+    // 1. Actualización optimista inmediata en la grilla: cambia a rojo (ocupado) al instante
+    setTurnos((prev) =>
+      prev.map((t) =>
+        t.id === turnoId
+          ? { ...t, estado: 'cancelado', origen: 'bloqueo_manual_dueno', canceladoPor: 'dueno' }
+          : t,
+      ),
+    )
+    // 2. Cerrar el modal inmediatamente para fluidez instantánea
+    setCelda(null)
+
+    try {
+      await bloquearManualmente(turnoId)
+    } catch (err) {
+      console.error('Error al bloquear turno:', err)
+      setError('No se pudo marcar el turno como ocupado.')
+      void recargar()
+    } finally {
+      setProcesandoTurnoId(null)
+    }
+  }, [recargar])
+
+  const manejarLiberarTurno = useCallback(async (turnoId: string) => {
+    setProcesandoTurnoId(turnoId)
+    // 1. Actualización optimista inmediata en la grilla: cambia a verde (disponible) al instante
+    setTurnos((prev) =>
+      prev.map((t) =>
+        t.id === turnoId
+          ? { ...t, estado: 'disponible', origen: 'carga_manual_dueno', canceladoPor: null }
+          : t,
+      ),
+    )
+    // 2. Cerrar el modal inmediatamente
+    setCelda(null)
+
+    try {
+      await liberarTurno(turnoId)
+    } catch (err) {
+      console.error('Error al liberar turno:', err)
+      setError('No se pudo liberar el turno.')
+      void recargar()
+    } finally {
+      setProcesandoTurnoId(null)
+    }
   }, [recargar])
 
   // Mientras haya solicitudes sin validar, la cola se refresca sola.
@@ -143,10 +192,7 @@ export default function DashboardDueno() {
   const actor = sesion.actor!
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-canvas pb-safe">
-      <div className="shrink-0">
-        <NavegacionHeader />
-      </div>
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
       <Pantalla
         titulo="Panel del predio"
         subtitulo={predio?.nombre ?? ''}
@@ -220,13 +266,22 @@ export default function DashboardDueno() {
               )}
             </Tarjeta>
 
-            <button
-              type="button"
-              className="btn-primary w-full"
-              onClick={() => setAbrirGestorCanchas(true)}
-            >
-              VER/EDITAR CANCHAS
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="btn-primary w-full"
+                onClick={() => setAbrirGestorCanchas(true)}
+              >
+                VER/EDITAR CANCHAS
+              </button>
+              <button
+                type="button"
+                className="btn-ghost border border-zinc-700 bg-zinc-900/90 hover:bg-zinc-800 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                onClick={() => setAbrirConfigCobro(true)}
+              >
+                CONFIGURAR SEÑA Y COBRO
+              </button>
+            </div>
 
             {abrirGenerador && predio && (
               <div
@@ -256,8 +311,8 @@ export default function DashboardDueno() {
                     predio={predio}
                     fecha={fecha}
                     onGenerado={async () => {
-                      await recargar()
                       setAbrirGenerador(false)
+                      await recargar()
                     }}
                   />
                 </div>
@@ -321,16 +376,38 @@ export default function DashboardDueno() {
         <ModalValidacion
           turno={turnoEnRevision}
           onAprobar={async (turno) => {
-            await aprobarTurno(turno.id, actor)
+            const tId = turno.id
             setTurnoEnRevision(null)
             setCelda(null)
-            await recargar()
+            // Actualización optimista a confirmado / reservado
+            setTurnos((prev) =>
+              prev.map((t) =>
+                t.id === tId ? { ...t, estado: 'confirmado', comprobantePendiente: false } : t,
+              ),
+            )
+            setPendientes((prev) => prev.filter((t) => t.id !== tId))
+            try {
+              await aprobarTurno(tId, actor)
+            } finally {
+              await recargar()
+            }
           }}
           onRechazar={async (turno, motivo) => {
-            await rechazarTurno(turno.id, actor, motivo)
+            const tId = turno.id
             setTurnoEnRevision(null)
             setCelda(null)
-            await recargar()
+            // Actualización optimista a disponible
+            setTurnos((prev) =>
+              prev.map((t) =>
+                t.id === tId ? { ...t, estado: 'disponible', comprobantePendiente: false } : t,
+              ),
+            )
+            setPendientes((prev) => prev.filter((t) => t.id !== tId))
+            try {
+              await rechazarTurno(tId, actor, motivo)
+            } finally {
+              await recargar()
+            }
           }}
           onCerrar={() => setTurnoEnRevision(null)}
         />
@@ -376,7 +453,7 @@ export default function DashboardDueno() {
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setCelda(null)
+            if (e.target === e.currentTarget && !procesandoTurnoId) setCelda(null)
           }}
         >
           <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
@@ -392,6 +469,7 @@ export default function DashboardDueno() {
               <button
                 type="button"
                 onClick={() => setCelda(null)}
+                disabled={Boolean(procesandoTurnoId)}
                 aria-label="Cerrar"
                 className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
               >
@@ -402,27 +480,31 @@ export default function DashboardDueno() {
               {celda.turno.estado === 'confirmado' && (
                 <button
                   type="button"
-                  className="btn-ghost flex-1"
-                  onClick={async () => {
-                    await bloquearManualmente(celda.turno.id)
-                    setCelda(null)
-                    await recargar()
-                  }}
+                  className="btn-ghost flex-1 flex items-center justify-center gap-2"
+                  disabled={Boolean(procesandoTurnoId)}
+                  onClick={() => void manejarBloqueoManual(celda.turno.id)}
                 >
-                  <Lock className="h-4 w-4" /> Marcar tomado por fuera
+                  {procesandoTurnoId === celda.turno.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Lock className="h-4 w-4" />
+                  )}
+                  Marcar tomado por fuera
                 </button>
               )}
               {celda.turno.estado === 'cancelado' && (
                 <button
                   type="button"
-                  className="btn-ghost flex-1"
-                  onClick={async () => {
-                    await liberarTurno(celda.turno.id)
-                    setCelda(null)
-                    await recargar()
-                  }}
+                  className="btn-ghost flex-1 flex items-center justify-center gap-2"
+                  disabled={Boolean(procesandoTurnoId)}
+                  onClick={() => void manejarLiberarTurno(celda.turno.id)}
                 >
-                  <Unlock className="h-4 w-4" /> Liberar turno
+                  {procesandoTurnoId === celda.turno.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlock className="h-4 w-4" />
+                  )}
+                  Liberar turno
                 </button>
               )}
             </div>
@@ -436,7 +518,7 @@ export default function DashboardDueno() {
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setCelda(null)
+            if (e.target === e.currentTarget && !procesandoTurnoId) setCelda(null)
           }}
         >
           <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
@@ -450,6 +532,7 @@ export default function DashboardDueno() {
               <button
                 type="button"
                 onClick={() => setCelda(null)}
+                disabled={Boolean(procesandoTurnoId)}
                 aria-label="Cerrar"
                 className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
               >
@@ -459,18 +542,252 @@ export default function DashboardDueno() {
             <button
               type="button"
               className="btn-primary w-full flex items-center justify-center gap-2"
-              onClick={async () => {
-                await bloquearManualmente(celda.turno.id)
-                setCelda(null)
-                await recargar()
-              }}
+              disabled={Boolean(procesandoTurnoId)}
+              onClick={() => void manejarBloqueoManual(celda.turno.id)}
             >
-              <Lock className="h-4 w-4" /> Marcar como ocupado
+              {procesandoTurnoId === celda.turno.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Lock className="h-4 w-4" />
+              )}
+              Marcar como ocupado
             </button>
           </div>
         </div>
       )}
+      {abrirConfigCobro && predio && (
+        <ModalConfigCobro
+          predio={predio}
+          onGuardado={(nuevoCobro) => {
+            setPredios((prev) =>
+              prev.map((p) => (p.id === predio.id ? { ...p, cobro: nuevoCobro } : p)),
+            )
+          }}
+          onCerrar={() => setAbrirConfigCobro(false)}
+        />
+      )}
     </Pantalla>
+    </div>
+  )
+}
+
+function ModalConfigCobro({
+  predio,
+  onGuardado,
+  onCerrar,
+}: {
+  predio: Predio
+  onGuardado: (nuevoCobro: Predio['cobro']) => void
+  onCerrar: () => void
+}) {
+  const [tipoSena, setTipoSena] = useState<'fijo' | 'porcentaje'>(predio.cobro?.tipoSena ?? 'fijo')
+  const [sena, setSena] = useState(String(predio.cobro?.montoSena ?? 4000))
+  const [porcentaje, setPorcentaje] = useState(String(predio.cobro?.porcentajeSena ?? 50))
+  const [alias, setAlias] = useState(predio.cobro?.alias ?? '')
+  const [titular, setTitular] = useState(predio.cobro?.titular ?? '')
+  const [cbu, setCbu] = useState(predio.cobro?.cbu ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGuardando(true)
+    setError(null)
+    const montoSena = Number(sena) > 0 ? Number(sena) : 4000
+    const porcentajeSena = Number(porcentaje) > 0 ? Math.min(100, Number(porcentaje)) : 50
+    const cobroActualizado = {
+      montoSena,
+      tipoSena,
+      porcentajeSena,
+      alias: alias.trim(),
+      titular: titular.trim(),
+      cbu: cbu.trim() || null,
+    }
+    try {
+      await actualizarCobro(predio.id, cobroActualizado)
+      onGuardado(cobroActualizado)
+      onCerrar()
+    } catch {
+      setError('No pudimos guardar los datos de cobro.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCerrar()
+      }}
+    >
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-card bg-canvas-raised p-5 sm:rounded-card">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-ink">Configurar Seña y Cobro</h2>
+            <p className="text-xs text-ink-muted">
+              Define el monto que deben abonar los jugadores para congelar el turno.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Cerrar"
+            className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={guardar} className="space-y-4">
+          {/* Modalidad de Seña */}
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-ink uppercase tracking-wide">
+              Modalidad de la seña
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTipoSena('fijo')}
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                  tipoSena === 'fijo'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                }`}
+              >
+                💵 Monto Fijo ($)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoSena('porcentaje')}
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                  tipoSena === 'porcentaje'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                }`}
+              >
+                📊 Porcentaje (%)
+              </button>
+            </div>
+          </div>
+
+          {tipoSena === 'fijo' ? (
+            <div>
+              <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-sena">
+                Monto fijo de la seña ($ por turno)
+              </label>
+              <input
+                id="modal-sena"
+                type="number"
+                min="0"
+                step="500"
+                value={sena}
+                onChange={(e) => setSena(e.target.value)}
+                className="field font-bold text-pitch"
+                placeholder="Ej: 4000"
+                required
+              />
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Se cobrará este importe fijo para cualquier cancha (siempre que no supere el valor del turno).
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-porcentaje">
+                Porcentaje del valor de la cancha (%)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="modal-porcentaje"
+                  type="number"
+                  min="5"
+                  max="100"
+                  step="5"
+                  value={porcentaje}
+                  onChange={(e) => setPorcentaje(e.target.value)}
+                  className="field font-bold text-pitch w-28 text-center"
+                  placeholder="Ej: 50"
+                  required
+                />
+                <div className="flex gap-1.5 flex-1">
+                  {[30, 50, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setPorcentaje(String(pct))}
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
+                        Number(porcentaje) === pct
+                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Ejemplo: para una cancha de $10.000 y seña del {porcentaje || 50}%, la seña será de ${((10000 * (Number(porcentaje) || 50)) / 100).toLocaleString('es-AR')}.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-alias">
+              Alias de cobro (Mercado Pago / Banco)
+            </label>
+            <input
+              id="modal-alias"
+              type="text"
+              value={alias}
+              onChange={(e) => setAlias(e.target.value)}
+              className="field font-mono"
+              placeholder="Ej: complejo.futbol.mp"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-titular">
+              Titular de la cuenta
+            </label>
+            <input
+              id="modal-titular"
+              type="text"
+              value={titular}
+              onChange={(e) => setTitular(e.target.value)}
+              className="field"
+              placeholder="Ej: Juan Pérez"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-cbu">
+              CBU / CVU (opcional)
+            </label>
+            <input
+              id="modal-cbu"
+              type="text"
+              value={cbu}
+              onChange={(e) => setCbu(e.target.value)}
+              className="field font-mono text-xs"
+              placeholder="22 dígitos"
+            />
+          </div>
+
+          {error && <p className="text-xs text-occupied font-semibold">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={guardando}
+            className="btn-primary w-full flex items-center justify-center gap-2 py-3"
+          >
+            {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {guardando ? 'Guardando...' : 'Guardar configuración'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

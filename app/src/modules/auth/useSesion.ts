@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, createElement, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import type { Actor, Usuario } from '@/domain'
-import { asegurarUsuario } from '@/modules/usuarios/repositorio'
+import { asegurarUsuario, obtenerUsuario } from '@/modules/usuarios/repositorio'
 import { idsDePredios } from '@/modules/predios/repositorio'
 import { getRedirectResult } from 'firebase/auth'
 import { auth } from '@/core/firebase'
@@ -14,33 +14,64 @@ export interface EstadoSesion {
   /** Permisos ya resueltos, listos para las reglas y para la UI. */
   actor: Actor | null
   error: string | null
+  refrescar?: () => Promise<void>
 }
 
 const INICIAL: EstadoSesion = { cargando: true, user: null, usuario: null, actor: null, error: null }
 
-/**
- * Sincroniza la sesion de Firebase Auth con el doc de `usuarios`.
- * El primer ingreso crea el perfil en Firestore con rol jugador.
- */
-export function useSesion(): EstadoSesion {
+const SesionContext = createContext<EstadoSesion>(INICIAL)
+
+let redirectPromise: Promise<void> | null = null
+
+function verificarRedireccionGoogle() {
+  if (!redirectPromise) {
+    redirectPromise = getRedirectResult(auth)
+      .then((redirectResult) => {
+        if (redirectResult) {
+          console.log("Resultado de redirección:", redirectResult.user)
+        }
+      })
+      .catch((err) => {
+        console.error("Error capturado tras la redirección:", err)
+      })
+  }
+  return redirectPromise
+}
+
+export function SesionProvider({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<EstadoSesion>(INICIAL)
 
-  useEffect(() => {
-    const alCambiar = async (user: User | null) => {
-      // Intentamos capturar posibles errores de la redirección de Google
-      try {
-        const redirectResult = await getRedirectResult(auth);
-        if (redirectResult) {
-          console.log("Resultado de redirección:", redirectResult.user);
-        }
-      } catch (err) {
-        console.error("Error capturado tras la redirección:", err);
+  const recargar = async () => {
+    const currentUser = auth.currentUser
+    if (!currentUser) return
+    try {
+      const u = await obtenerUsuario(currentUser.uid)
+      if (u) {
+        const prediosIds = u.rol === 'dueno_predio' ? await idsDePredios(u.uid) : []
+        setEstado((prev) => ({
+          ...prev,
+          usuario: u,
+          actor: { uid: u.uid, rol: u.rol, prediosIds },
+        }))
       }
+    } catch (e) {
+      console.error('Error al refrescar usuario:', e)
+    }
+  }
 
+  useEffect(() => {
+    let montado = true
+
+    // Captura una sola vez si hubo redirección OAuth de Google
+    void verificarRedireccionGoogle()
+
+    const alCambiar = async (user: User | null) => {
+      if (!montado) return
       if (!user) {
         setEstado({ ...INICIAL, cargando: false })
         return
       }
+
       try {
         // Una sola lectura: `asegurarUsuario` devuelve el doc si ya existia, y
         // si hay que crearlo lo escribe con la fecha de nacimiento del registro
@@ -59,33 +90,51 @@ export function useSesion(): EstadoSesion {
         // Solo `dueno_predio`: el rol 'dueno' del modelo legacy ya no existe en `Rol`.
         const prediosIds = usuario?.rol === 'dueno_predio' ? await idsDePredios(user.uid) : []
 
-        setEstado({
-          cargando: false,
-          user,
-          usuario,
-          actor: usuario ? { uid: usuario.uid, rol: usuario.rol, prediosIds } : null,
-          error: null,
-        })
+        if (montado) {
+          setEstado({
+            cargando: false,
+            user,
+            usuario,
+            actor: usuario ? { uid: usuario.uid, rol: usuario.rol, prediosIds } : null,
+            error: null,
+            refrescar: recargar,
+          })
+        }
       } catch (error) {
-        setEstado({
-          ...INICIAL,
-          cargando: false,
-          user,
-          error: mensajeDe(error, 'Error al cargar el perfil.'),
-        })
+        if (montado) {
+          setEstado({
+            ...INICIAL,
+            cargando: false,
+            user,
+            error: mensajeDe(error, 'Error al cargar el perfil.'),
+            refrescar: recargar,
+          })
+        }
       }
     }
 
-    // Falta de configuracion de Firebase: se informa en pantalla en vez de romper.
     try {
-      return observarSesion(alCambiar)
+      const desuscribir = observarSesion(alCambiar)
+      return () => {
+        montado = false
+        desuscribir?.()
+      }
     } catch (error) {
       setEstado({ ...INICIAL, cargando: false, error: mensajeDe(error, 'Error al iniciar sesion.') })
       return undefined
     }
   }, [])
 
-  return useMemo(() => estado, [estado])
+  const valor = useMemo(() => estado, [estado])
+
+  return createElement(SesionContext.Provider, { value: valor }, children)
+}
+
+/**
+ * Hook para sincronizar componentes con la sesión global provista por SesionProvider.
+ */
+export function useSesion(): EstadoSesion {
+  return useContext(SesionContext)
 }
 
 const mensajeDe = (error: unknown, porDefecto: string): string =>

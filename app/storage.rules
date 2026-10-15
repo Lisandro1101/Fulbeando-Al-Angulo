@@ -69,6 +69,21 @@ service firebase.storage {
       allow delete: if false;
     }
 
+    /**
+     * Fotos del muro social: `posts/{uid}/{archivo}`.
+     * El caller pasa `folder = posts/${uid}`. Igual que avatares, la lectura
+     * queda abierta (el feed pinta las fotos con `<img src>`); la escritura solo
+     * en el propio espacio. El MVP no admite video: solo imagenes.
+     */
+    match /posts/{uid}/{archivo} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+
     // Cualquier otra ruta del bucket queda prohibida.
     match /{allPaths=**} {
       allow read, write: if false;

@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Loader2, MapPin, Users, X } from 'lucide-react'
 import type { Alerta, Postulacion } from '@/domain'
 import { faltanJugadores, estaActiva } from '@/domain'
 import { formatearFechaCorta } from '@/core/tiempo'
 import {
   confirmarSuplente,
-  listarPostulaciones,
+  escucharPostulaciones,
   postularse,
   rechazarSuplente,
   renunciarPostulacion,
 } from '@/modules/alertas/repositorio'
+import { notificarPostulacionAlerta } from '@/modules/teams/teamService'
 
 /**
  * Tarjeta de una alerta "Falta 1" dentro del radar. El jugador se postula con
@@ -37,19 +38,13 @@ export function TarjetaAlerta({
   const [error, setError] = useState<string | null>(null)
   const [verPostulantes, setVerPostulantes] = useState(puedeConfirmar)
 
-  const cargar = useCallback(async () => {
-    try {
-      const lista = await listarPostulaciones(alerta.id)
+  useEffect(() => {
+    const unsub = escucharPostulaciones(alerta.id, (lista) => {
       setPostulaciones(lista)
       setMiEstado(lista.find((p) => p.uid === uid)?.estado ?? null)
-    } catch {
-      setError('No pudimos cargar los postulantes.')
-    }
+    })
+    return () => unsub()
   }, [alerta.id, uid])
-
-  useEffect(() => {
-    void cargar()
-  }, [cargar])
 
   const activa = estaActiva(alerta, Date.now())
   const completa = !faltanJugadores(alerta)
@@ -60,7 +55,15 @@ export function TarjetaAlerta({
     setError(null)
     try {
       await postularse(alerta.id, { uid, nombre, posicion })
-      await cargar()
+      if (alerta.creadoPorUid && alerta.creadoPorUid !== uid) {
+        await notificarPostulacionAlerta(uid, nombre, alerta.creadoPorUid, {
+          id: alerta.id,
+          fecha: alerta.fecha,
+          horaInicio: alerta.horaInicio,
+          horaFin: alerta.horaFin,
+          posicion: posicion ?? null,
+        }).catch((err) => console.warn('Error notificando al organizador:', err))
+      }
       await onCambio()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No pudimos sumarte.')
@@ -73,7 +76,6 @@ export function TarjetaAlerta({
     setOcupado(true)
     try {
       await renunciarPostulacion(alerta.id, uid)
-      await cargar()
       await onCambio()
     } finally {
       setOcupado(false)
@@ -182,7 +184,6 @@ export function TarjetaAlerta({
                       className="btn-ghost h-8 w-8 px-0"
                       onClick={async () => {
                         await confirmarSuplente(alerta.id, p.uid)
-                        await cargar()
                         await onCambio()
                       }}
                     >
@@ -194,7 +195,6 @@ export function TarjetaAlerta({
                       className="btn-ghost h-8 w-8 px-0"
                       onClick={async () => {
                         await rechazarSuplente(alerta.id, p.uid)
-                        await cargar()
                       }}
                     >
                       <X className="h-4 w-4" />

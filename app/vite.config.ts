@@ -16,9 +16,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Fulbeando',
-        short_name: 'Fulbeando',
-        description: 'Reservá canchas y sumate al equipo que falta.',
+        name: 'Al Ángulo',
+        short_name: 'Al Ángulo',
+        description: 'Al Ángulo - Reservá canchas y sumate al equipo que falta.',
         theme_color: '#0F172A',
         background_color: '#0F172A',
         display: 'standalone',
@@ -59,7 +59,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallbackDenylist: [/^\/__/],
-        importScripts: ['/firebase-messaging-sw.js']
+        importScripts: ['/firebase-messaging-sw.js'],
+        clientsClaim: true,
+        skipWaiting: true,
+        cleanupOutdatedCaches: true,
       },
       devOptions: { enabled: false },
     }),

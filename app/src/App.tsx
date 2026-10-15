@@ -2,12 +2,13 @@ import { RouterProvider } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { router } from '@/app/rutas'
 import { LimiteDeError } from '@/app/LimiteDeError'
-import { useSesion } from '@/modules/auth/useSesion'
+import { SesionProvider, useSesion } from '@/modules/auth/useSesion'
+import { ProveedorConfirm, CargandoFulbeando } from '@/modules/ui/overlays'
 import { faltaConfigFirebase } from '@/core/config'
 
 // Onboarding delegado a Screen2RoleSelector y Screen3PlayerOnboarding en UI unificada
 
-export default function App() {
+function AppContenido() {
   const sesion = useSesion()
 
   // Sin configuracion de Firebase no se puede seguir: se explica que falta.
@@ -26,15 +27,21 @@ export default function App() {
       </div>
     </div>
   ) : sesion.cargando ? (
-    <div className="grid h-full place-items-center bg-canvas">
-      <div className="flex flex-col items-center gap-3">
-        <span className="h-10 w-10 animate-radar-pulse rounded-full bg-pitch" />
-        <p className="text-sm text-ink-muted">Cargando Fulbeando...</p>
-      </div>
-    </div>
+    <CargandoFulbeando />
   ) : (
     <RouterProvider router={router} />
   )
 
   return <LimiteDeError>{pantalla}</LimiteDeError>
 }
+
+export default function App() {
+  return (
+    <SesionProvider>
+      <ProveedorConfirm>
+        <AppContenido />
+      </ProveedorConfirm>
+    </SesionProvider>
+  )
+}
+

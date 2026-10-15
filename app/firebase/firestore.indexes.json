@@ -10,10 +10,22 @@
       ]
     },
     {
-      "comment": "Capa de equipos del area (listarEquiposCercanos): se consulta solo por prefijo geoespacial, con limite duro en el cliente.",
-      "collectionGroup": "teams",
+      "comment": "Radar de alertas (alertas/repositorio.ts): prefijo geoespacial + estado activa + fecha del dia. Los equipos (teams) se consultan solo por geo.prefijos, que es un indice de campo unico automatico: declararlo aca hace fallar el deploy.",
+      "collectionGroup": "alertas",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Radar de predios (listarPrediosCercanos): publicados (verificado+activo) dentro del radio. Sin este indice la query geoespacial de predios falla con 'The query requires an index'.",
+      "collectionGroup": "predios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "verificado", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
       ]
     },
@@ -53,6 +65,7 @@
         { "fieldPath": "perfilDeportivo.notificacionesRadar", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "geo.prefijos", "arrayConfig": "CONTAINS" }
+      ]
     },
     {
       "comment": "Buscador de jugadores por nombre.",
@@ -61,6 +74,24 @@
       "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "nombre", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "comment": "Feed de la comunidad: pestana 'Mi zona' por municipio/partido (autorMunicipio + cronologico).",
+      "collectionGroup": "publicaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autorMunicipio", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "comment": "Feed de la comunidad: pestana 'Siguiendo' (autores seguidos + cronologico).",
+      "collectionGroup": "publicaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autorUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
   ],

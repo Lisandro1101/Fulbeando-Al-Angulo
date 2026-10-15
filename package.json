@@ -8,19 +8,28 @@
     "dev:functions": "npm run build:watch --prefix \"app/firebase/functions\"",
     "dev:emulators": "tsx scripts/firebase.ts emulators:start",
     "seed:wait": "wait-on tcp:127.0.0.1:8080 tcp:127.0.0.1:9099 && tsx scripts/seed-emuladores.ts",
+    "clean:emulators": "tsx scripts/limpiar-emuladores.ts",
     "seed:verify": "tsx scripts/verificar-seed.ts",
+    "backfill:predios": "tsx scripts/backfill-predios-geo.ts --emulador",
+    "backfill:predios:dry": "tsx scripts/backfill-predios-geo.ts --emulador --dry-run",
+    "backfill:predios:prod": "tsx scripts/backfill-predios-geo.ts",
     "login:verify": "tsx scripts/probar-login.ts",
+    "datos:generar": "tsx scripts/generar-xlsx.ts",
+    "datos:importar": "tsx scripts/importar-datos-prueba.ts",
     "dev:app": "npm run dev --prefix app",
     "test:rules": "tsx scripts/firebase.ts emulators:exec --only firestore \"tsx scripts/test-reglas-equipos.ts && tsx scripts/test-reglas-turnos.ts\"",
     "build:app": "npm run build --prefix app",
     "deploy:hosting": "npm run build:app && tsx scripts/deploy-hosting.ts",
-    "deploy:preview": "npm run build:app && tsx scripts/deploy-hosting.ts --preview pre-produccion"
+    "deploy:preview": "npm run build:app && tsx scripts/deploy-hosting.ts --preview pre-produccion",
+    "deploy:rules": "npm run test:rules && tsx scripts/deploy-hosting.ts --rules",
+    "deploy:prod": "npm run test:rules && npm run build:app && tsx scripts/deploy-hosting.ts --all"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
     "concurrently": "^10.0.5",
     "firebase-admin": "^11.8.0",
     "tsx": "^4.23.15",
-    "wait-on": "^9.5.1"
+    "wait-on": "^9.5.1",
+    "xlsx": "^0.18.5"
   }
 }

@@ -6,6 +6,12 @@
 export interface CompressionOptions {
   maxSize: number; 
   quality: number; // Rango de 0.0 a 1.0 (0.8 es el sweet-spot)
+  /**
+   * `true` (default): recorta al centro en 1:1 (avatares, escudos).
+   * `false`: conserva la relación de aspecto original (fotos de posts), así la
+   * imagen no se recorta al subir y se ve completa en el feed.
+   */
+  recortarCuadrado?: boolean;
 }
 
 /**
@@ -56,18 +62,38 @@ export const optimizeAvatarImage = async (
 ): Promise<Blob> => {
   
   const img = await loadImage(file);
-  
-  // 1. CÁLCULO DE CROPPER (Formato 1:1 - Cuadrado Perfecto)
-  // Obtenemos el lado más chico para no deformar (estirar) la imagen original, 
-  // y calculamos los márgenes (offsets) para recortar exactamente el centro de la foto.
-  const minDimension = Math.min(img.width, img.height);
-  const startX = (img.width - minDimension) / 2;
-  const startY = (img.height - minDimension) / 2;
+  const recortarCuadrado = options.recortarCuadrado ?? true;
+
+  // 1. CÁLCULO DE DIMENSIONES DE DESTINO
+  //   - Avatares (recortarCuadrado): recorte central 1:1 sin deformar.
+  //   - Fotos de feed: se conserva el aspecto; el lado mayor se ajusta a
+  //     `maxSize` y el otro queda proporcional. Nunca se agranda una imagen
+  //     chica.
+  let sx = 0;
+  let sy = 0;
+  let sw = img.width;
+  let sh = img.height;
+  let destW: number;
+  let destH: number;
+
+  if (recortarCuadrado) {
+    const minDimension = Math.min(img.width, img.height);
+    sx = (img.width - minDimension) / 2;
+    sy = (img.height - minDimension) / 2;
+    sw = minDimension;
+    sh = minDimension;
+    destW = options.maxSize;
+    destH = options.maxSize;
+  } else {
+    const escala = Math.min(1, options.maxSize / Math.max(img.width, img.height));
+    destW = Math.max(1, Math.round(img.width * escala));
+    destH = Math.max(1, Math.round(img.height * escala));
+  }
 
   // 2. MOTOR RENDERIZADOR (Canvas Nativo)
   const canvas = document.createElement('canvas');
-  canvas.width = options.maxSize;
-  canvas.height = options.maxSize;
+  canvas.width = destW;
+  canvas.height = destH;
   const ctx = canvas.getContext('2d');
 
   if (!ctx) {
@@ -78,14 +104,9 @@ export const optimizeAvatarImage = async (
   ctx.fillStyle = '#0B0F19'; 
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 3. RECORTAR Y ESCALAR
+  // 3. RECORTAR (si aplica) Y ESCALAR
   // Parámetros: (sourceImg, Source X, Source Y, Source W, Source H, Dest X, Dest Y, Dest W, Dest H)
-  // Esto realiza un crop central y un resize de 4000px a 300px todo en un solo ciclo de CPU.
-  ctx.drawImage(
-    img, 
-    startX, startY, minDimension, minDimension, 
-    0, 0, options.maxSize, options.maxSize      
-  );
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, destW, destH);
 
   // 4. ESTRATEGIA DE FORMATO (WebP vs Fallback)
   const supportsWebP = isWebPSupported();

@@ -29,6 +29,7 @@ export interface AltaUsuario {
   telefono?: string | null
   rol: Rol
   zona?: string | null
+  municipio?: string | null
 }
 
 export const crearUsuario = async (alta: AltaUsuario): Promise<void> => {
@@ -39,6 +40,7 @@ export const crearUsuario = async (alta: AltaUsuario): Promise<void> => {
     ...alta,
     telefono: alta.telefono ?? null,
     zona: alta.zona ?? null,
+    municipio: alta.municipio ?? null,
     whatsappVerificado: false,
     perfilDeportivo: null,
     geo: null,

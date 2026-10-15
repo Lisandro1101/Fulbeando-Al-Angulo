@@ -6,13 +6,14 @@ import { cerrarSesion } from '@/modules/auth/servicio'
 import { messaging } from '@/core/firebase'
 import { PerfilBasicoCard, PerfilDeportivoCard, UbicacionCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
 import { EditorPredioCard } from '@/modules/cuenta/componentes/EditorPredio'
-import { NavegacionHeader } from '@/modules/ui/NavegacionHeader'
+import { Toast } from '@/modules/ui/overlays'
 import type { Usuario } from '@/domain'
 
 function NotificacionesCard() {
   const [permiso, setPermiso] = useState(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
   )
+  const [aviso, setAviso] = useState<string | null>(null)
 
   const solicitarPermiso = async () => {
     if (!('Notification' in window)) return
@@ -21,7 +22,8 @@ function NotificacionesCard() {
       setPermiso(permission)
       if (permission === 'granted' && messaging) {
         // En una app real acá se obtiene el token con getToken y se guarda en el doc de usuario
-        alert('¡Notificaciones activadas!')
+        setAviso('¡Notificaciones activadas!')
+        setTimeout(() => setAviso(null), 3500)
       }
     } catch (err) {
       console.error('Error al pedir permisos', err)
@@ -29,7 +31,9 @@ function NotificacionesCard() {
   }
 
   return (
-    <Tarjeta
+    <>
+      <Toast mensaje={aviso} tipo="exito" />
+      <Tarjeta
       titulo="Alertas y Notificaciones"
       descripcion="Recibí avisos cuando un partido cerca tuyo necesite jugadores."
     >
@@ -50,6 +54,7 @@ function NotificacionesCard() {
         )}
       </div>
     </Tarjeta>
+    </>
   )
 }
 
@@ -75,8 +80,7 @@ export default function Ajustes() {
 
   if (sesion.user === null) {
     return (
-      <div className="h-full bg-canvas pb-safe">
-        <NavegacionHeader />
+      <div className="h-full bg-canvas">
         <Pantalla titulo="Ajustes" subtitulo="Datos personales y disponibilidad para jugar.">
           <div className="space-y-4">
             <Tarjeta titulo="Iniciá sesión" descripcion="Necesitás una cuenta para editar tu perfil.">
@@ -90,8 +94,7 @@ export default function Ajustes() {
 
   if (usuario === null) {
     return (
-      <div className="h-full bg-canvas pb-safe">
-        <NavegacionHeader />
+      <div className="h-full bg-canvas">
         <Pantalla titulo="Ajustes">
           <p className="surface text-sm text-ink-muted">Cargando tu perfil...</p>
         </Pantalla>
@@ -100,10 +103,7 @@ export default function Ajustes() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-canvas pb-safe">
-      <div className="shrink-0">
-        <NavegacionHeader />
-      </div>
+    <div className="flex h-full flex-col overflow-hidden bg-canvas">
       <Pantalla titulo="Ajustes" subtitulo="Configura tu cuenta deportiva y de predio.">
         <div className="mb-4 flex gap-2">
           {esDueno ? (

@@ -31,7 +31,7 @@
         ]
       },
       {
-        "source": "/+(index.html|firebase-messaging-sw.js|sw.js)",
+        "source": "/+(index.html|firebase-messaging-sw.js|sw.js|registerSW.js|manifest.webmanifest)",
         "headers": [
           {
             "key": "Cache-Control",

@@ -8,11 +8,36 @@ export type EstadoPredio = 'activo' | 'inactivo'
  * Datos de cobro. El MVP NO procesa dinero: solo se visualizan para que el
  * organizador transfiera y suba el comprobante (regla de negocio 6.5).
  */
+export type TipoSena = 'fijo' | 'porcentaje'
+
 export interface DatosDeCobro {
   titular: string
   alias: string
   cbu: string | null
   montoSena: number
+  tipoSena?: TipoSena
+  porcentajeSena?: number
+}
+
+/**
+ * Calcula el monto de la seña en base a la configuración del predio y el valor del turno.
+ * - Si es porcentaje: calcula el % del precioTotal (redondeado).
+ * - Si es fijo: usa el monto fijo.
+ * - En ambos casos nunca supera el precioTotal del turno.
+ */
+export const calcularMontoSena = (
+  cobro: Pick<DatosDeCobro, 'montoSena' | 'tipoSena' | 'porcentajeSena'> | undefined | null,
+  precioTotal: number
+): number => {
+  if (!cobro) return Math.min(4000, precioTotal)
+  if (cobro.tipoSena === 'porcentaje') {
+    const pct = typeof cobro.porcentajeSena === 'number' && cobro.porcentajeSena > 0
+      ? cobro.porcentajeSena
+      : 50
+    return Math.min(precioTotal, Math.max(0, Math.round((precioTotal * pct) / 100)))
+  }
+  const fijo = cobro.montoSena > 0 ? cobro.montoSena : 4000
+  return Math.min(fijo, precioTotal)
 }
 
 /** Cancha resumida, embebida en el predio para pintar el mapa en una sola query. */

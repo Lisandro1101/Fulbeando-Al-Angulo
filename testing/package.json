@@ -1,0 +1,13 @@
+{
+  "name": "fulbeando-testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Artefactos de testing de Fulbeando (aislado de la app)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}
