@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Crosshair, Loader2, MapPin } from 'lucide-react'
 import type { NivelAutopercibido, PerfilDeportivo, PiernaHabil, Posicion, Usuario } from '@/domain'
 import { PERFIL_DEPORTIVO_VACIO } from '@/domain'
-import { actualizarPerfilDeportivo, guardarGeo } from '@/modules/usuarios/repositorio'
+import { actualizarPerfilDeportivo, actualizarZonaYMunicipio, guardarGeo } from '@/modules/usuarios/repositorio'
+import { DIVISION_GEOGRAFICA, calcularGeoZona, inferirMunicipio } from '@/core/geo/zonas'
 
 const POSICIONES: readonly Posicion[] = ['arquero', 'defensor', 'medio', 'delantero']
 const NIEVELE: readonly NivelAutopercibido[] = [1, 2, 3, 4, 5]
@@ -371,4 +372,182 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
       </div>
     </div>
   );
+}
+
+export function ZonaCard({
+  usuario,
+  onCambio,
+}: {
+  usuario: Usuario
+  onCambio: (usuario: Usuario) => void
+}) {
+  const [regionSeleccionada, setRegionSeleccionada] = useState<string>(() => {
+    if (usuario.municipio) {
+      for (const [reg, munis] of Object.entries(DIVISION_GEOGRAFICA)) {
+        if (Object.keys(munis).includes(usuario.municipio)) return reg
+      }
+    }
+    if (usuario.zona) {
+      const muni = inferirMunicipio(usuario.zona)
+      if (muni) {
+        for (const [reg, munis] of Object.entries(DIVISION_GEOGRAFICA)) {
+          if (Object.keys(munis).includes(muni)) return reg
+        }
+      }
+    }
+    return 'GBA Zona Sur'
+  })
+
+  const municipiosDeRegion = Object.keys(DIVISION_GEOGRAFICA[regionSeleccionada] || {})
+
+  const [municipioSeleccionado, setMunicipioSeleccionado] = useState<string>(() => {
+    if (usuario.municipio) return usuario.municipio
+    if (usuario.zona) {
+      const muni = inferirMunicipio(usuario.zona)
+      if (muni) return muni
+    }
+    return municipiosDeRegion[0] || 'Lomas de Zamora'
+  })
+
+  const localidadesDisponibles = DIVISION_GEOGRAFICA[regionSeleccionada]?.[municipioSeleccionado] || []
+
+  const [localidadElegida, setLocalidadElegida] = useState<string>(
+    usuario.zona || localidadesDisponibles[0] || municipioSeleccionado
+  )
+  const [guardando, setGuardando] = useState(false)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const zonaActualLegible = [usuario.zona, usuario.municipio].filter(Boolean).join(', ')
+
+  const guardar = async () => {
+    setGuardando(true)
+    setError(null)
+    setMensaje(null)
+    try {
+      const loc = localidadElegida || municipioSeleccionado
+      const muni = municipioSeleccionado
+      const geoZona = calcularGeoZona(loc)
+
+      await actualizarZonaYMunicipio(usuario.uid, {
+        zona: loc,
+        municipio: muni,
+        geo: usuario.geo ?? geoZona,
+      })
+
+      onCambio({
+        ...usuario,
+        zona: loc,
+        municipio: muni,
+        geo: usuario.geo ?? geoZona,
+      })
+
+      setMensaje('¡Zona y localidad guardadas con éxito!')
+      setTimeout(() => setMensaje(null), 3500)
+    } catch (err) {
+      console.error('Error al guardar zona:', err)
+      setError('No se pudo guardar la zona. Revisá tu conexión.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {zonaActualLegible ? (
+        <div className="flex items-center gap-2 p-3 bg-zinc-900 border border-emerald-500/30 rounded-xl text-xs text-zinc-300">
+          <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>
+            Zona actual declarada: <strong className="text-white">{zonaActualLegible}</strong>
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300">
+          <MapPin className="h-4 w-4 text-amber-400 shrink-0" />
+          <span>Todavía no tenés una zona declarada. Seleccionala abajo:</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="perfil-region" className="text-xs font-bold text-zinc-400 uppercase">
+            Región
+          </label>
+          <select
+            id="perfil-region"
+            value={regionSeleccionada}
+            onChange={(e) => {
+              const reg = e.target.value
+              setRegionSeleccionada(reg)
+              const munis = Object.keys(DIVISION_GEOGRAFICA[reg] || {})
+              const primerMuni = munis[0] || ''
+              setMunicipioSeleccionado(primerMuni)
+              const primerLoc = DIVISION_GEOGRAFICA[reg]?.[primerMuni]?.[0] || primerMuni
+              setLocalidadElegida(primerLoc)
+            }}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+          >
+            {Object.keys(DIVISION_GEOGRAFICA).map((reg) => (
+              <option key={reg} value={reg} className="bg-zinc-900">
+                {reg}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="perfil-municipio" className="text-xs font-bold text-zinc-400 uppercase">
+            Municipio / Partido (Mi Zona)
+          </label>
+          <select
+            id="perfil-municipio"
+            value={municipioSeleccionado}
+            onChange={(e) => {
+              const muni = e.target.value
+              setMunicipioSeleccionado(muni)
+              const primerLoc = DIVISION_GEOGRAFICA[regionSeleccionada]?.[muni]?.[0] || muni
+              setLocalidadElegida(primerLoc)
+            }}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+          >
+            {municipiosDeRegion.map((muni) => (
+              <option key={muni} value={muni} className="bg-zinc-900">
+                {muni}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="perfil-localidad" className="text-xs font-bold text-zinc-400 uppercase">
+            Barrio / Localidad
+          </label>
+          <select
+            id="perfil-localidad"
+            value={localidadElegida}
+            onChange={(e) => setLocalidadElegida(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+          >
+            {localidadesDisponibles.map((loc) => (
+              <option key={loc} value={loc} className="bg-zinc-900">
+                {loc}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {mensaje && <p className="text-sm text-emerald-400 font-semibold">{mensaje}</p>}
+      {error && <p className="text-sm text-red-500 font-semibold">{error}</p>}
+
+      <button
+        type="button"
+        onClick={guardar}
+        disabled={guardando}
+        className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-3 rounded-xl transition cursor-pointer active:scale-95 disabled:opacity-50"
+      >
+        {guardando ? 'Guardando zona...' : 'Guardar mi Zona'}
+      </button>
+    </div>
+  )
 }

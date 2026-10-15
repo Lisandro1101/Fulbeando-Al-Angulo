@@ -73,6 +73,21 @@ export const DIVISION_GEOGRAFICA: Record<string, EstructuraRegion> = {
 };
 
 /**
+ * Infiere el Municipio / Partido a partir del nombre de una localidad, barrio o ciudad.
+ */
+export function inferirMunicipio(zona?: string | null): string | null {
+  if (!zona) return null;
+  const z = zona.trim().toLowerCase();
+  for (const region of Object.values(DIVISION_GEOGRAFICA)) {
+    for (const [muni, locs] of Object.entries(region)) {
+      if (muni.toLowerCase() === z) return muni;
+      if (locs.some(loc => loc.toLowerCase() === z)) return muni;
+    }
+  }
+  return null;
+}
+
+/**
  * Centroides oficiales aproximados de todas las localidades y municipios.
  * Permiten posicionar el pin en el radar sin solicitar coordenadas privadas de hogares.
  */

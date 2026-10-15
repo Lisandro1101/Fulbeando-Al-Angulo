@@ -111,6 +111,17 @@ export const actualizarZona = async (uid: string, zona: string | null): Promise<
   await updateDoc(ref(uid), { zona, ...auditoriaUpdate() })
 }
 
+export const actualizarZonaYMunicipio = async (
+  uid: string,
+  datos: {
+    zona: string | null
+    municipio: string | null
+    geo?: GeoIndex | null
+  },
+): Promise<void> => {
+  await updateDoc(ref(uid), { ...datos, ...auditoriaUpdate() })
+}
+
 export const actualizarDatosBasicos = async (
   uid: string,
   cambios: {

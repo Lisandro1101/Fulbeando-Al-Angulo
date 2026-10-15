@@ -4,7 +4,7 @@ import { BotonIngreso } from '@/modules/auth/BotonIngreso'
 import { useSesion } from '@/modules/auth/useSesion'
 import { cerrarSesion } from '@/modules/auth/servicio'
 import { messaging } from '@/core/firebase'
-import { PerfilBasicoCard, PerfilDeportivoCard, UbicacionCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
+import { PerfilBasicoCard, PerfilDeportivoCard, UbicacionCard, ZonaCard } from '@/modules/cuenta/componentes/PerfilDeportivo'
 import { EditorPredioCard } from '@/modules/cuenta/componentes/EditorPredio'
 import { Toast } from '@/modules/ui/overlays'
 import type { Usuario } from '@/domain'
@@ -160,8 +160,15 @@ export default function Ajustes() {
               </Tarjeta>
 
               <Tarjeta
-                titulo="Ubicacion aproximada"
-                descripcion="Se usa solo para buscar partidos cerca tuyo."
+                titulo="Mi Zona / Localidad"
+                descripcion="Define tu partido y barrio para ver las publicaciones y partidos de tu zona en la Comunidad."
+              >
+                <ZonaCard usuario={usuario} onCambio={setOptimista} />
+              </Tarjeta>
+
+              <Tarjeta
+                titulo="Ubicación GPS aproximada"
+                descripcion="Se usa solo para buscar partidos y predios en tiempo real en el radar."
               >
                 <UbicacionCard usuario={usuario} onCambio={setOptimista} />
               </Tarjeta>

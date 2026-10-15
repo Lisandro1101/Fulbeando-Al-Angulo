@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Globe, MapPin, UserCheck, Sparkles, Image, MessageSquare, Filter } from 'lucide-react'
 import { useSesion } from '@/modules/auth/useSesion'
 import type { Publicacion } from '@/domain'
+import { inferirMunicipio } from '@/core/geo/zonas'
 import { alternarSeguir, escucharSiguiendo } from '../follows'
 import { escucharFeed, type FiltroFeed } from '../repositorio'
 import { Composer } from './Composer'
@@ -38,6 +40,7 @@ interface FeedProps {
  * Siguiendo) + filtros de categoria + lista de publicaciones con busqueda en tiempo real.
  */
 export const Feed = ({ busqueda = '' }: FeedProps) => {
+  const navigate = useNavigate()
   const { usuario } = useSesion()
   const [filtro, setFiltro] = useState<FiltroFeed>('comunidad')
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
@@ -46,7 +49,7 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
   const [cargando, setCargando] = useState(true)
 
   const miUid = usuario?.uid ?? null
-  const miMunicipio = usuario?.municipio ?? null
+  const miMunicipio = usuario?.municipio || inferirMunicipio(usuario?.zona) || usuario?.zona || null
   const claveSiguiendo = siguiendo.join(',')
 
   useEffect(() => {
@@ -126,7 +129,10 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
       return 'Todavía no seguís a nadie. Tocá "Seguir" en un post para ver sus novedades acá.'
     }
     if (filtro === 'zona') {
-      return 'No declaraste tu partido/localidad. Cargalo en tu perfil para ver publicaciones de tu zona.'
+      if (!miMunicipio) {
+        return 'No declaraste tu partido/localidad. Cargalo en tu perfil para ver publicaciones de tu zona.'
+      }
+      return `Todavía no hay publicaciones en ${miMunicipio}. ¡Sé el primero de tu zona en compartir!`
     }
     return 'No hay publicaciones todavía. ¡Sé el primero en compartir algo!'
   }
@@ -176,6 +182,26 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
         })}
       </div>
 
+      {/* Indicador de Zona Activa */}
+      {filtro === 'zona' && miMunicipio && (
+        <div className="flex items-center justify-between bg-zinc-900 border border-emerald-500/20 rounded-xl px-3.5 py-2 text-xs">
+          <div className="flex items-center gap-2 text-zinc-300">
+            <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              Publicaciones de <strong className="text-white">{miMunicipio}</strong>
+              {usuario?.zona && usuario.zona !== miMunicipio ? ` (${usuario.zona})` : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/ajustes')}
+            className="text-emerald-400 hover:text-emerald-300 font-bold text-[11px] underline cursor-pointer ml-2 whitespace-nowrap"
+          >
+            Cambiar zona
+          </button>
+        </div>
+      )}
+
       {cargando ? (
         <div className="space-y-4">
           {[0, 1, 2].map((i) => (
@@ -193,20 +219,42 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
           ))}
         </div>
       ) : postsFiltrados.length === 0 ? (
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center space-y-2">
-          <p className="text-zinc-300 text-sm font-medium">{vacio()}</p>
-          {(busqueda.trim() || tipoFiltro !== 'todos') && (
+        filtro === 'zona' && !miMunicipio ? (
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+              <MapPin className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-white font-bold text-base">No declaraste tu partido o localidad</h4>
+              <p className="text-zinc-400 text-xs max-w-sm mx-auto">
+                Cargalo en tu perfil para ver publicaciones de canchas, jugadores y equipos de tu zona.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => {
-                setTipoFiltro('todos')
-              }}
-              className="text-xs text-emerald-400 hover:underline font-bold"
+              onClick={() => navigate('/ajustes')}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-4 py-2.5 rounded-xl text-xs font-black shadow-md transition cursor-pointer active:scale-95"
             >
-              Restablecer filtros
+              <MapPin className="w-4 h-4" />
+              <span>Configurar mi zona en el perfil</span>
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center space-y-2">
+            <p className="text-zinc-300 text-sm font-medium">{vacio()}</p>
+            {(busqueda.trim() || tipoFiltro !== 'todos') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTipoFiltro('todos')
+                }}
+                className="text-xs text-emerald-400 hover:underline font-bold"
+              >
+                Restablecer filtros
+              </button>
+            )}
+          </div>
+        )
       ) : (
         <div className="space-y-4">
           {postsFiltrados.map((pub) => (
