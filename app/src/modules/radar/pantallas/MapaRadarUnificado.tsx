@@ -578,9 +578,39 @@ export const MapaRadarUnificado: React.FC = () => {
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
   const [mostrarModalDesafio, setMostrarModalDesafio] = useState(false);
+  const [equipoDesafioModal, setEquipoDesafioModal] = useState<EquipoEntity | null>(null);
 
   const [toastMessage, setToastMessage] = useState('');
   const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
+
+  // Auto-seleccionar equipo y abrir modal de desafío si vino por navegación o alerta push
+  useEffect(() => {
+    const st = location.state as { equipoId?: string; abrirDesafio?: boolean } | null;
+    if (st?.equipoId) {
+      obtenerEquipoPorId(st.equipoId).then((eq) => {
+        if (eq) {
+          const equipoFormateado = {
+            id: eq.id,
+            equipoId: eq.id,
+            type: 'equipo' as const,
+            nombre: eq.name || eq.nombre || 'Equipo',
+            lat: eq.geo?.lat ?? -34.6037,
+            lng: eq.geo?.lng ?? -58.3816,
+            distanciaKm: 0,
+            modalidad: eq.formato || 'F5',
+            cantidadJugadores: eq.members?.length || 0,
+            escudoUrl: eq.shieldUrl || eq.escudoUrl || null,
+            captainId: eq.captainId,
+          };
+          setSeleccionado(equipoFormateado);
+          if (st.abrirDesafio) {
+            setEquipoDesafioModal(equipoFormateado);
+            setMostrarModalDesafio(true);
+          }
+        }
+      }).catch(console.warn);
+    }
+  }, [location.state]);
 
   // Si se selecciona un predio y no vino con teléfono o dirección en el pin rápido, lo obtenemos
   useEffect(() => {
@@ -1207,6 +1237,9 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 <button
                   onClick={() => {
                     if (!usuario) { navigate('/login'); return; }
+                    if (seleccionado?.type === 'equipo') {
+                      setEquipoDesafioModal(seleccionado);
+                    }
                     setMostrarModalDesafio(true);
                   }}
                   className="w-full h-13 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 rounded-2xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(245,158,11,0.35)] cursor-pointer"
@@ -1376,29 +1409,36 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
       )}
 
       {/* Modal Pactar Desafío Rápido entre Capitanes */}
-      {mostrarModalDesafio && seleccionado?.type === 'equipo' && usuario && (
-        <ModalProponerDesafio
-          abierto={mostrarModalDesafio}
-          onCerrar={() => setMostrarModalDesafio(false)}
-          rival={{
-            equipoId: seleccionado.equipoId,
-            nombre: seleccionado.nombre,
-            modalidad: seleccionado.modalidad,
-            escudoUrl: seleccionado.escudoUrl,
-            captainId: seleccionado.captainId,
-            divisionInfo: seleccionado.divisionInfo,
-          }}
-          usuarioActual={{
-            uid: usuario.uid,
-            nombre: usuario.nombre,
-            apellido: usuario.apellido,
-          }}
-          onDesafioEnviado={(mensaje) => {
-            setToastMessage(mensaje);
-            setTimeout(() => setToastMessage(''), 4500);
-            setSeleccionado(null);
-          }}
-        />
+      {mostrarModalDesafio && (equipoDesafioModal || (seleccionado?.type === 'equipo' ? seleccionado : null)) && usuario && (
+        (() => {
+          const eqTarget = (equipoDesafioModal || seleccionado) as EquipoEntity;
+          return (
+            <ModalProponerDesafio
+              abierto={mostrarModalDesafio}
+              onCerrar={() => {
+                setMostrarModalDesafio(false);
+                setEquipoDesafioModal(null);
+              }}
+              rival={{
+                equipoId: eqTarget.equipoId,
+                nombre: eqTarget.nombre,
+                modalidad: eqTarget.modalidad,
+                escudoUrl: eqTarget.escudoUrl,
+                captainId: eqTarget.captainId,
+                divisionInfo: eqTarget.divisionInfo,
+              }}
+              usuarioActual={{
+                uid: usuario.uid,
+                nombre: usuario.nombre,
+                apellido: usuario.apellido,
+              }}
+              onDesafioEnviado={(mensaje) => {
+                setToastMessage(mensaje);
+                setTimeout(() => setToastMessage(''), 4500);
+              }}
+            />
+          );
+        })()
       )}
     </div>
   );

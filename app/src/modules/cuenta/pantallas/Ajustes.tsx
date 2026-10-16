@@ -37,22 +37,22 @@ function NotificacionesCard() {
       titulo="Alertas y Notificaciones"
       descripcion="Recibí avisos cuando un partido cerca tuyo necesite jugadores."
     >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-ink">Notificaciones Push</span>
-        {permiso === 'granted' ? (
-          <span className="text-sm font-bold text-pitch">Activadas</span>
-        ) : permiso === 'denied' ? (
-          <span className="text-sm font-bold text-urgent">Bloqueadas</span>
-        ) : (
-          <button
-            type="button"
-            onClick={solicitarPermiso}
-            className="rounded-full bg-pitch px-4 py-1.5 text-xs font-semibold text-canvas transition-transform hover:scale-105"
-          >
-            Activar Alertas
-          </button>
-        )}
-      </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-bold text-slate-900">Notificaciones Push</span>
+          {permiso === 'granted' ? (
+            <span className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">Activadas</span>
+          ) : permiso === 'denied' ? (
+            <span className="text-sm font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full">Bloqueadas</span>
+          ) : (
+            <button
+              type="button"
+              onClick={solicitarPermiso}
+              className="rounded-full bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all cursor-pointer"
+            >
+              Activar Alertas
+            </button>
+          )}
+        </div>
     </Tarjeta>
     </>
   )
@@ -110,10 +110,10 @@ export default function Ajustes() {
             <>
               <button
                 type="button"
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                className={`rounded-full px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer ${
                   tab === 'cuenta'
-                    ? 'bg-pitch text-canvas'
-                    : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/25'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:text-slate-900'
                 }`}
                 onClick={() => setTabActivo('cuenta')}
               >
@@ -121,10 +121,10 @@ export default function Ajustes() {
               </button>
               <button
                 type="button"
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                className={`rounded-full px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer ${
                   tab === 'predio'
-                    ? 'bg-pitch text-canvas'
-                    : 'bg-canvas-raised text-ink-muted hover:bg-ink-faint/10'
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/25'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:text-slate-900'
                 }`}
                 onClick={() => setTabActivo('predio')}
               >
@@ -134,7 +134,7 @@ export default function Ajustes() {
           ) : (
             <button
               type="button"
-              className="rounded-full bg-pitch px-4 py-1.5 text-sm font-semibold text-canvas"
+              className="rounded-full bg-gradient-to-r from-emerald-500 to-green-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-500/25 cursor-pointer"
               onClick={() => setTabActivo('jugador')}
             >
               Perfil de Jugador
@@ -206,7 +206,7 @@ export default function Ajustes() {
         <div className="mt-12 flex justify-center pb-24">
           <button
             type="button"
-            className="rounded-full border border-red-500/30 px-6 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10 active:bg-red-500/20"
+            className="rounded-full border border-rose-300 bg-white px-6 py-2.5 text-sm font-bold text-rose-600 shadow-sm transition-all hover:bg-rose-50 hover:border-rose-400 active:scale-95 cursor-pointer"
             onClick={() => {
               cerrarSesion().catch(console.error)
             }}

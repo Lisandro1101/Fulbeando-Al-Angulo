@@ -15,24 +15,24 @@ export function Pantalla({
 }) {
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-[#1E0D4A]">
-      {/* Panel de arriba: Morado deportivo #361982 con degradé dinámico */}
-      <header className="sticky top-0 z-20 border-b border-[#4C24B2]/40 bg-gradient-to-r from-[#361982] via-[#2A1367] to-[#361982] px-4 py-4 backdrop-blur-md shadow-lg">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 pr-12">
+      {/* Panel de arriba: Morado deportivo #361982 con degradé dinámico a pantalla completa */}
+      <header className="sticky top-0 z-20 border-b border-[#4C24B2]/40 bg-gradient-to-r from-[#361982] via-[#2A1367] to-[#361982] px-4 md:px-8 py-4 backdrop-blur-md shadow-lg">
+        <div className="flex w-full items-center justify-between gap-3">
           <div>
-            {titulo && <h1 className="text-lg font-black text-white tracking-wide">{titulo}</h1>}
+            {titulo && <h1 className="text-lg md:text-xl font-black text-white tracking-wide">{titulo}</h1>}
             {subtitulo && <p className="text-sm text-indigo-200/90 font-medium">{subtitulo}</p>}
           </div>
           {acciones && <div className="flex items-center gap-2 shrink-0">{acciones}</div>}
         </div>
       </header>
 
-      {/* Recuadro de contenido: Lienzo claro deportivo de alto contraste con animaciones fluidas */}
+      {/* Recuadro de contenido: Lienzo claro deportivo de alto contraste que ocupa el 100% del ancho disponible */}
       <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0]/70 text-slate-800">
         <motion.div 
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="mx-auto w-full max-w-3xl px-4 py-5 pb-nav"
+          className="w-full px-4 md:px-8 py-5 pb-28 md:pb-12 space-y-5"
         >
           {children}
         </motion.div>
@@ -58,7 +58,7 @@ export function Tarjeta({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 350, damping: 26 }}
-      className="rounded-2xl bg-gradient-to-b from-white via-white/98 to-[#F8FAFC] p-4 sm:p-5 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(54,25,130,0.06),0_1px_3px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_-6px_rgba(54,25,130,0.12)] text-slate-800 transition-shadow relative overflow-hidden"
+      className="w-full rounded-2xl bg-gradient-to-b from-white via-white/98 to-[#F8FAFC] p-4 sm:p-6 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(54,25,130,0.06),0_1px_3px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_30px_-6px_rgba(54,25,130,0.12)] text-slate-800 transition-shadow relative overflow-hidden"
     >
       <div className="flex items-start justify-between gap-3">
         <div>

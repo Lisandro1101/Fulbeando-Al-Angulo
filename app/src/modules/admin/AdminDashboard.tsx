@@ -180,37 +180,33 @@ export const AdminDashboard = () => {
   return (
     <div className="h-full bg-[#05080E] text-white font-sans flex flex-col md:flex-row">
       {/* Sidebar B2B */}
-      <aside className="w-full md:w-64 bg-pitch-900 border-r border-pitch-700 p-6 flex flex-col">
+      <aside className="w-full md:w-64 bg-gradient-to-b from-[#361982] via-[#281165] to-[#1c0a48] border-r border-[#4c24b2]/40 p-6 flex flex-col shadow-2xl">
         <h1 className="text-2xl font-black italic tracking-tighter text-white mb-8">
-          AL ÁNGULO <span className="text-neon-green text-sm">ADMIN</span>
+          AL ÁNGULO <span className="text-emerald-400 text-sm font-bold tracking-normal not-italic ml-1">ADMIN</span>
         </h1>
-        <nav className="flex-1 space-y-4 text-sm font-medium">
-          <a href="#vision-general" className="flex items-center text-neon-green bg-pitch-800 px-4 py-3 rounded-lg">
+        <nav className="flex-1 space-y-2 text-sm font-medium">
+          <a href="#vision-general" className="flex items-center text-emerald-300 font-bold bg-white/10 px-4 py-3 rounded-xl border-l-4 border-emerald-400 shadow-sm shadow-emerald-400/20">
             📊 Visión General
           </a>
-          <a href="#arbitraje" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
+          <a href="#arbitraje" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
             ⚖️ Sala de Arbitraje ({reportes.length})
           </a>
-          <a href="#predios" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
+          <a href="#predios" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
             🏟️ Canchas / B2B ({predios.length})
           </a>
-          <a href="#datos" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
+          <a href="#datos" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
             📥 Importar datos
-          </a>
-          <a href="#" className="flex items-center text-gray-400 hover:text-white px-4 py-2 transition-colors">
-            💰 Banners y Pauta
           </a>
         </nav>
 
-        {/* El panel esta fuera de AppLayout: sin este boton el superadmin no
-            tendria como salir (la app entera quedo vedada para su rol). */}
+        {/* Botón Cerrar Sesión */}
         <button
           type="button"
           onClick={() => void salir()}
-          className="mt-6 flex items-center gap-2 border border-pitch-700 px-4 py-2.5 text-sm font-semibold text-gray-400 transition-colors hover:bg-pitch-800 hover:text-white"
+          className="mt-6 flex items-center gap-2 border border-[#4c24b2]/60 rounded-xl px-4 py-2.5 text-sm font-semibold text-indigo-200 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
         >
           <LogOut className="h-4 w-4" />
-          Cerrar Sesion
+          Cerrar Sesión
         </button>
       </aside>
 

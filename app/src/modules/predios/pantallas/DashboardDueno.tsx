@@ -408,17 +408,17 @@ export default function DashboardDueno() {
                   if (e.target === e.currentTarget) setAbrirGenerador(false)
                 }}
               >
-                <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-gradient-to-b from-[#1E0D4A] to-[#140833] border border-[#4C24B2]/50 p-5 shadow-2xl text-white">
+                <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-8 shadow-2xl text-slate-800">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-base font-black text-white">Cargar turnos a mano</h2>
-                      <p className="text-sm text-indigo-200/80 font-medium">Define franjas y repeticiones</p>
+                      <h2 className="text-base font-extrabold text-slate-900">Cargar turnos a mano</h2>
+                      <p className="text-sm text-slate-500 font-medium">Define franjas y repeticiones</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setAbrirGenerador(false)}
                       aria-label="Cerrar"
-                      className="rounded-lg p-2 text-indigo-200 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all cursor-pointer"
                     >
                       <X className="h-5 w-5" />
                     </button>
@@ -544,17 +544,17 @@ export default function DashboardDueno() {
             if (e.target === e.currentTarget) setAbrirGestorCanchas(false)
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-8 shadow-2xl text-slate-800">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-ink">Gestor de Canchas</h2>
-                <p className="text-sm text-ink-muted">Administra las canchas del predio</p>
+                <h2 className="text-base font-extrabold text-slate-900">Gestor de Canchas</h2>
+                <p className="text-sm text-slate-500 font-medium">Administra las canchas del predio</p>
               </div>
               <button
                 type="button"
                 onClick={() => setAbrirGestorCanchas(false)}
                 aria-label="Cerrar"
-                className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -578,11 +578,11 @@ export default function DashboardDueno() {
             if (e.target === e.currentTarget && !procesandoTurnoId) setCelda(null)
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
+          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-2xl text-slate-800">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-ink">{celda.turno.horaInicio} - {celda.turno.horaFin}</h2>
-                <p className="mt-1 text-sm text-ink-muted">
+                <h2 className="text-base font-extrabold text-slate-900">{celda.turno.horaInicio} - {celda.turno.horaFin}</h2>
+                <p className="mt-1 text-sm text-slate-600 font-medium">
                   {celda.turno.estado === 'confirmado'
                     ? `Reservado por ${celda.turno.organizadorNombre ?? 'un jugador'}. Si lo tomaste por WhatsApp o mostrador, marcalo para que nadie lo reserve.`
                     : 'Turno tomado por fuera de la app. Liberarlo lo vuelve a ofrecer.'}
@@ -593,7 +593,7 @@ export default function DashboardDueno() {
                 onClick={() => setCelda(null)}
                 disabled={Boolean(procesandoTurnoId)}
                 aria-label="Cerrar"
-                className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -603,7 +603,7 @@ export default function DashboardDueno() {
                 {celda.turno.estado === 'confirmado' && (
                   <button
                     type="button"
-                    className="btn-ghost flex-1 flex items-center justify-center gap-2"
+                    className="btn-ghost flex-1 flex items-center justify-center gap-2 font-bold cursor-pointer"
                     disabled={Boolean(procesandoTurnoId)}
                     onClick={() => void manejarBloqueoManual(celda.turno.id)}
                   >
@@ -618,7 +618,7 @@ export default function DashboardDueno() {
                 {celda.turno.estado === 'cancelado' && (
                   <button
                     type="button"
-                    className="btn-ghost flex-1 flex items-center justify-center gap-2"
+                    className="btn-ghost flex-1 flex items-center justify-center gap-2 font-bold cursor-pointer"
                     disabled={Boolean(procesandoTurnoId)}
                     onClick={() => void manejarLiberarTurno(celda.turno.id)}
                   >
@@ -633,7 +633,7 @@ export default function DashboardDueno() {
               </div>
               <button
                 type="button"
-                className="btn-ghost w-full flex items-center justify-center gap-2 text-ink-muted hover:text-occupied text-xs"
+                className="btn-ghost w-full flex items-center justify-center gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 text-xs font-bold cursor-pointer"
                 disabled={Boolean(procesandoTurnoId)}
                 onClick={() => void manejarDesactivarTurno(celda.turno.id)}
               >
@@ -654,11 +654,11 @@ export default function DashboardDueno() {
             if (e.target === e.currentTarget && !procesandoTurnoId) setCelda(null)
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
+          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-2xl text-slate-800">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-ink">{celda.turno.horaInicio} - {celda.turno.horaFin}</h2>
-                <p className="mt-1 text-sm text-ink-muted">
+                <h2 className="text-base font-extrabold text-slate-900">{celda.turno.horaInicio} - {celda.turno.horaFin}</h2>
+                <p className="mt-1 text-sm text-slate-600 font-medium">
                   Este turno está libre. Si lo reservaste por fuera de la app (teléfono o mostrador), bloquéalo para evitar que lo tomen.
                 </p>
               </div>
@@ -667,7 +667,7 @@ export default function DashboardDueno() {
                 onClick={() => setCelda(null)}
                 disabled={Boolean(procesandoTurnoId)}
                 aria-label="Cerrar"
-                className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -675,7 +675,7 @@ export default function DashboardDueno() {
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                className="btn-primary w-full flex items-center justify-center gap-2"
+                className="btn-primary w-full flex items-center justify-center gap-2 font-bold cursor-pointer"
                 disabled={Boolean(procesandoTurnoId)}
                 onClick={() => void manejarBloqueoManual(celda.turno.id)}
               >
@@ -688,7 +688,7 @@ export default function DashboardDueno() {
               </button>
               <button
                 type="button"
-                className="btn-ghost w-full flex items-center justify-center gap-2 text-ink-muted hover:text-occupied text-xs"
+                className="btn-ghost w-full flex items-center justify-center gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 text-xs font-bold cursor-pointer"
                 disabled={Boolean(procesandoTurnoId)}
                 onClick={() => void manejarDesactivarTurno(celda.turno.id)}
               >
@@ -709,15 +709,15 @@ export default function DashboardDueno() {
             if (e.target === e.currentTarget && !habilitandoSlot) setSlotVacio(null)
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
+          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-2xl text-slate-800">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-ink">Habilitar Horario</h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                  Cancha <span className="font-semibold text-ink">{slotVacio.cancha.nombre}</span> a las{' '}
-                  <span className="font-semibold text-ink">{slotVacio.hora}</span> ({esHoy(fecha) ? 'Hoy' : formatearFechaCorta(fecha)})
+                <h2 className="text-base font-extrabold text-slate-900">Habilitar Horario</h2>
+                <p className="mt-1 text-sm text-slate-600 font-medium">
+                  Cancha <span className="font-bold text-slate-900">{slotVacio.cancha.nombre}</span> a las{' '}
+                  <span className="font-bold text-slate-900">{slotVacio.hora}</span> ({esHoy(fecha) ? 'Hoy' : formatearFechaCorta(fecha)})
                 </p>
-                <p className="mt-1 text-xs text-ink-muted">
+                <p className="mt-1 text-xs text-slate-500 font-medium">
                   Precio de lista: {formatearMoneda(slotVacio.cancha.precioHora)} por turno
                 </p>
               </div>
@@ -726,7 +726,7 @@ export default function DashboardDueno() {
                 onClick={() => setSlotVacio(null)}
                 disabled={habilitandoSlot}
                 aria-label="Cerrar"
-                className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -734,7 +734,7 @@ export default function DashboardDueno() {
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                className="btn-primary w-full flex items-center justify-center gap-2"
+                className="btn-primary w-full flex items-center justify-center gap-2 font-bold cursor-pointer"
                 disabled={habilitandoSlot}
                 onClick={() => void manejarHabilitarSlot(slotVacio)}
               >
@@ -747,7 +747,7 @@ export default function DashboardDueno() {
               </button>
               <button
                 type="button"
-                className="btn-ghost w-full"
+                className="btn-ghost w-full font-bold cursor-pointer"
                 disabled={habilitandoSlot}
                 onClick={() => {
                   setSlotVacio(null)
@@ -828,11 +828,11 @@ function ModalConfigCobro({
         if (e.target === e.currentTarget) onCerrar()
       }}
     >
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-card bg-canvas-raised p-5 sm:rounded-card">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-8 shadow-2xl text-slate-800">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-ink">Configurar Seña y Cobro</h2>
-            <p className="text-xs text-ink-muted">
+            <h2 className="text-base font-extrabold text-slate-900">Configurar Seña y Cobro</h2>
+            <p className="text-xs text-slate-500 font-medium">
               Define el monto que deben abonar los jugadores para congelar el turno.
             </p>
           </div>
@@ -840,7 +840,7 @@ function ModalConfigCobro({
             type="button"
             onClick={onCerrar}
             aria-label="Cerrar"
-            className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -849,17 +849,17 @@ function ModalConfigCobro({
         <form onSubmit={guardar} className="space-y-4">
           {/* Modalidad de Seña */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-ink uppercase tracking-wide">
+            <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase tracking-wide">
               Modalidad de la seña
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setTipoSena('fijo')}
-                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                   tipoSena === 'fijo'
-                    ? 'border-pitch bg-pitch-faint text-pitch shadow-sm'
-                    : 'border-ink-faint/30 bg-canvas text-ink-muted hover:text-ink'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 💵 Monto Fijo ($)
@@ -867,10 +867,10 @@ function ModalConfigCobro({
               <button
                 type="button"
                 onClick={() => setTipoSena('porcentaje')}
-                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                   tipoSena === 'porcentaje'
-                    ? 'border-pitch bg-pitch-faint text-pitch shadow-sm'
-                    : 'border-ink-faint/30 bg-canvas text-ink-muted hover:text-ink'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 📊 Porcentaje (%)
@@ -880,7 +880,7 @@ function ModalConfigCobro({
 
           {tipoSena === 'fijo' ? (
             <div>
-              <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-sena">
+              <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="modal-sena">
                 Monto fijo de la seña ($ por turno)
               </label>
               <input
@@ -890,17 +890,17 @@ function ModalConfigCobro({
                 step="500"
                 value={sena}
                 onChange={(e) => setSena(e.target.value)}
-                className="field font-bold text-pitch"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                 placeholder="Ej: 4000"
                 required
               />
-              <p className="mt-1 text-[11px] text-ink-muted">
+              <p className="mt-1 text-[11px] text-slate-500 font-medium">
                 Se cobrará este importe fijo para cualquier cancha (siempre que no supere el valor del turno).
               </p>
             </div>
           ) : (
             <div>
-              <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-porcentaje">
+              <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="modal-porcentaje">
                 Porcentaje del valor de la cancha (%)
               </label>
               <div className="flex items-center gap-2">
@@ -912,7 +912,7 @@ function ModalConfigCobro({
                   step="5"
                   value={porcentaje}
                   onChange={(e) => setPorcentaje(e.target.value)}
-                  className="field font-bold text-pitch w-28 text-center"
+                  className="w-28 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-900 text-center placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                   placeholder="Ej: 50"
                   required
                 />
@@ -922,10 +922,10 @@ function ModalConfigCobro({
                       key={pct}
                       type="button"
                       onClick={() => setPorcentaje(String(pct))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
                         Number(porcentaje) === pct
-                          ? 'border-pitch bg-pitch-faint text-pitch'
-                          : 'border-ink-faint/30 bg-canvas text-ink-muted hover:text-ink'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                       }`}
                     >
                       {pct}%
@@ -933,42 +933,44 @@ function ModalConfigCobro({
                   ))}
                 </div>
               </div>
-              <p className="mt-1 text-[11px] text-ink-muted">
+              <p className="mt-1 text-[11px] text-slate-500 font-medium">
                 Ejemplo: para una cancha de $10.000 y seña del {porcentaje || 50}%, la seña será de ${((10000 * (Number(porcentaje) || 50)) / 100).toLocaleString('es-AR')}.
               </p>
             </div>
           )}
 
-          <div>
-            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-alias">
-              Alias de cobro (Mercado Pago / Banco)
-            </label>
-            <input
-              id="modal-alias"
-              type="text"
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
-              className="field font-mono"
-              placeholder="Ej: complejo.futbol.mp"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="modal-alias">
+                Alias de cobro (Mercado Pago / Banco)
+              </label>
+              <input
+                id="modal-alias"
+                type="text"
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                placeholder="Ej: complejo.futbol.mp"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="modal-titular">
+                Titular de la cuenta
+              </label>
+              <input
+                id="modal-titular"
+                type="text"
+                value={titular}
+                onChange={(e) => setTitular(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                placeholder="Ej: Juan Pérez"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-titular">
-              Titular de la cuenta
-            </label>
-            <input
-              id="modal-titular"
-              type="text"
-              value={titular}
-              onChange={(e) => setTitular(e.target.value)}
-              className="field"
-              placeholder="Ej: Juan Pérez"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-bold text-ink" htmlFor="modal-cbu">
+            <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="modal-cbu">
               CBU / CVU (opcional)
             </label>
             <input
@@ -976,17 +978,17 @@ function ModalConfigCobro({
               type="text"
               value={cbu}
               onChange={(e) => setCbu(e.target.value)}
-              className="field font-mono text-xs"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
               placeholder="22 dígitos"
             />
           </div>
 
-          {error && <p className="text-xs text-occupied font-semibold">{error}</p>}
+          {error && <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl font-bold">{error}</p>}
 
           <button
             type="submit"
             disabled={guardando}
-            className="btn-primary w-full flex items-center justify-center gap-2 py-3"
+            className="btn-primary w-full flex items-center justify-center gap-2 py-3 cursor-pointer"
           >
             {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
             {guardando ? 'Guardando...' : 'Guardar configuración'}

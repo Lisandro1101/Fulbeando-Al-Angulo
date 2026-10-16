@@ -338,15 +338,33 @@ export const AlertaInvitacionPush: React.FC = () => {
               </button>
 
               {tipo === 'desafio_equipo' && (
-                <button
-                  type="button"
-                  onClick={() => setModoContraoferta(true)}
-                  disabled={Boolean(procesandoId)}
-                  className="w-full flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-800 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700/60 transition-all active:scale-95 text-xs cursor-pointer"
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                  Contraoferta Rápida
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate('/radar', {
+                        state: {
+                          equipoId: invitacionActual.equipoId,
+                          abrirDesafio: true,
+                        },
+                      });
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
+                  >
+                    <MessageSquareQuote className="w-3.5 h-3.5 text-amber-400" />
+                    Abrir Chat & Chips del Desafío
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setModoContraoferta(true)}
+                    disabled={Boolean(procesandoId)}
+                    className="w-full flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-800 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700/60 transition-all active:scale-95 text-xs cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    Contraoferta Rápida
+                  </button>
+                </>
               )}
 
               <button

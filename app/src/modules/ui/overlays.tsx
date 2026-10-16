@@ -100,13 +100,13 @@ export function CargandoFulbeando({
       aria-live="polite"
       aria-busy={visible}
       aria-hidden={!visible}
-      className={`fixed inset-0 z-[399] flex flex-col items-center justify-center gap-4 bg-canvas transition-opacity duration-300 ${
+      className={`fixed inset-0 z-[399] flex flex-col items-center justify-center gap-4 bg-[#0B0F19] text-white transition-opacity duration-300 ${
         visible ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
     >
       <h1 className="text-4xl font-black italic tracking-tighter text-white">FULBEANDO</h1>
       <span className="h-10 w-10 animate-radar-pulse rounded-full bg-pitch" />
-      {mensaje && <p className="text-sm text-ink-muted">{mensaje}</p>}
+      {mensaje && <p className="text-sm text-zinc-400 font-medium">{mensaje}</p>}
       <span className="sr-only">Cargando…</span>
     </div>
   )

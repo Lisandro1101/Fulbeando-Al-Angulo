@@ -53,7 +53,7 @@ export function ModalActivarRadar({
       }}
     >
       <form
-        className="w-full max-w-md rounded-t-card bg-canvas-raised p-4 sm:rounded-card"
+        className="w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-6 shadow-2xl text-slate-800"
         onSubmit={async (e) => {
           e.preventDefault()
           setEnviando(true)
@@ -72,10 +72,10 @@ export function ModalActivarRadar({
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-ink">
-              <Radar className="h-5 w-5 text-urgent" /> Falta 1
+            <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+              <Radar className="h-5 w-5 text-amber-500" /> Falta 1
             </h2>
-            <p className="text-sm text-ink-muted">
+            <p className="text-sm text-slate-500 font-medium">
               {formatearFechaCorta(turno.fecha)} · {turno.horaInicio} a {turno.horaFin}
             </p>
           </div>
@@ -84,25 +84,25 @@ export function ModalActivarRadar({
             onClick={onCerrar}
             disabled={enviando}
             aria-label="Cerrar"
-            className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <p className="mt-3 text-sm text-ink-muted">
-          Se avisa a los jugadores disponibles que esten cerca del predio. La sena ya fue
-          validada ({formatearMoneda(turno.montoSena)}), asi que solo falta armar el equipo.
+        <p className="mt-3 text-sm text-slate-600 font-medium">
+          Se avisa a los jugadores disponibles que estén cerca del predio. La seña ya fue
+          validada (<span className="font-bold text-slate-900">{formatearMoneda(turno.montoSena)}</span>), así que solo falta armar el equipo.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="radar-cantidad">
-              Cuantos faltan
+            <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="radar-cantidad">
+              Cuántos faltan
             </label>
             <input
               id="radar-cantidad"
-              className="field"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-amber-500 shadow-sm"
               type="number"
               min={1}
               max={11}
@@ -111,12 +111,12 @@ export function ModalActivarRadar({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="radar-posicion">
-              Posicion
+            <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="radar-posicion">
+              Posición
             </label>
             <select
               id="radar-posicion"
-              className="field"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-amber-500 shadow-sm"
               value={posicion}
               onChange={(e) => setPosicion(e.target.value as Posicion | 'cualquiera')}
             >
@@ -130,21 +130,21 @@ export function ModalActivarRadar({
         </div>
 
         <div className="mt-3">
-          <label className="mb-1 block text-xs text-ink-muted" htmlFor="radar-notas">
+          <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="radar-notas">
             Notas (opcional)
           </label>
           <input
             id="radar-notas"
-            className="field"
-            placeholder="Ej: nivel amateur, con bringing"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-amber-500 shadow-sm"
+            placeholder="Ej: nivel amateur, con buena onda"
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
           />
         </div>
 
-        {error && <p className="mt-3 text-sm text-occupied">{error}</p>}
+        {error && <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl font-bold">{error}</p>}
 
-        <button type="submit" className="btn-urgent mt-4 w-full" disabled={enviando}>
+        <button type="submit" className="btn-urgent mt-4 w-full font-black cursor-pointer shadow-lg shadow-amber-500/20" disabled={enviando}>
           {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Activar radar
         </button>

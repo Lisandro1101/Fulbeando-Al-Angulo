@@ -263,27 +263,27 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
       </div>
 
       {/* SECCIÓN DATOS DE COBRO Y SEÑA */}
-      <div className="rounded-2xl border border-zinc-800 bg-canvas-raised p-4 space-y-3">
-        <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-3 shadow-sm">
+        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wide">
           Cobro de señas y datos bancarios
         </h3>
-        <p className="text-xs text-ink-muted">
+        <p className="text-xs text-slate-500 font-medium">
           Los jugadores transferirán esta seña para congelar su reserva de turno.
         </p>
 
         {/* Selector de Modalidad */}
         <div>
-          <label className="mb-1.5 block text-xs font-bold text-ink uppercase tracking-wide">
+          <label className="mb-1.5 block text-xs font-bold text-slate-700 uppercase tracking-wide">
             Modalidad de la seña
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => cambiar('tipoSena', 'fijo')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                 borrador.tipoSena === 'fijo'
-                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                  : 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:border-slate-400'
               }`}
             >
               💵 Monto Fijo ($)
@@ -291,10 +291,10 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
             <button
               type="button"
               onClick={() => cambiar('tipoSena', 'porcentaje')}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                 borrador.tipoSena === 'porcentaje'
-                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                  : 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:border-slate-400'
               }`}
             >
               📊 Porcentaje (%)
@@ -304,12 +304,12 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
 
         {borrador.tipoSena === 'fijo' ? (
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-sena">
+            <label className="mb-1 block text-xs font-bold text-slate-600" htmlFor="predio-sena">
               Monto fijo de la seña por turno ($)
             </label>
             <input
               id="predio-sena"
-              className="field font-bold text-pitch"
+              className="field font-bold text-emerald-700"
               type="number"
               min="0"
               step="500"
@@ -320,13 +320,13 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
           </div>
         ) : (
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-porcentaje">
+            <label className="mb-1 block text-xs font-bold text-slate-600" htmlFor="predio-porcentaje">
               Porcentaje del valor de la cancha (%)
             </label>
             <div className="flex items-center gap-2">
               <input
                 id="predio-porcentaje"
-                className="field font-bold text-pitch w-28 text-center"
+                className="field font-bold text-emerald-700 w-28 text-center"
                 type="number"
                 min="5"
                 max="100"
@@ -341,10 +341,10 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
                     key={pct}
                     type="button"
                     onClick={() => cambiar('porcentajeSena', String(pct))}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition ${
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition cursor-pointer ${
                       Number(borrador.porcentajeSena) === pct
-                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
-                        : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm'
+                        : 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:border-slate-400'
                     }`}
                   >
                     {pct}%
@@ -352,7 +352,7 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
                 ))}
               </div>
             </div>
-            <p className="mt-1 text-[11px] text-ink-muted">
+            <p className="mt-1 text-[11px] text-slate-500">
               Ej: Para una cancha de $10.000 con {borrador.porcentajeSena || 50}%, la seña será de ${((10000 * (Number(borrador.porcentajeSena) || 50)) / 100).toLocaleString('es-AR')}.
             </p>
           </div>
@@ -360,7 +360,7 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-alias">
+            <label className="mb-1 block text-xs font-bold text-slate-600" htmlFor="predio-alias">
               Alias de transferencia
             </label>
             <input
@@ -373,7 +373,7 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-titular">
+            <label className="mb-1 block text-xs font-bold text-slate-600" htmlFor="predio-titular">
               Titular de la cuenta
             </label>
             <input
@@ -388,7 +388,7 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-cbu">
+          <label className="mb-1 block text-xs font-bold text-slate-600" htmlFor="predio-cbu">
             CBU / CVU (opcional)
           </label>
           <input
@@ -403,15 +403,15 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
       </div>
 
       <div>
-        <span className="mb-1 block text-xs text-ink-muted">Ubicacion exacta en el mapa</span>
-        <div className="rounded-xl bg-canvas-raised p-3">
+        <span className="mb-1 block text-xs font-bold text-slate-600">Ubicacion exacta en el mapa</span>
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                <MapPin className="h-4 w-4 shrink-0 text-pitch" />
+              <p className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+                <MapPin className="h-4 w-4 shrink-0 text-emerald-600" />
                 {location.loading ? 'Ubicando...' : 'Punto cargado'}
               </p>
-              <p className="truncate font-mono text-xs text-ink-muted">
+              <p className="truncate font-mono text-xs text-slate-500">
                 {punto.lat.toFixed(5)}, {punto.lng.toFixed(5)}
               </p>
             </div>
@@ -425,12 +425,12 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
               {location.loading ? '...' : 'Desde mi GPS'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 text-xs text-slate-500">
             Se muestra en el radar y en la ficha del predio. Si estas en la cancha, con tocar
             "Desde mi GPS" queda exacto.
           </p>
           {location.error && !location.isFallback && (
-            <p className="mt-1 text-xs text-occupied">{location.error}</p>
+            <p className="mt-1 text-xs text-rose-600">{location.error}</p>
           )}
         </div>
       </div>

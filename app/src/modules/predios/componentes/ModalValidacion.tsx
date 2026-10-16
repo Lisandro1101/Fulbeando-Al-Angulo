@@ -99,11 +99,11 @@ export function ModalValidacion({
         if (e.target === e.currentTarget && !ocupado) onCerrar()
       }}
     >
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-card bg-canvas-raised p-4 sm:rounded-card">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white border border-slate-200 p-5 sm:p-8 shadow-2xl text-slate-800">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-ink">Validar solicitud</h2>
-            <p className="text-sm text-ink-muted">
+            <h2 className="text-base font-extrabold text-slate-900">Validar solicitud</h2>
+            <p className="text-sm text-slate-500 font-medium">
               {venceHoy ? 'Hoy' : formatearFechaCorta(turno.fecha)} · {turno.horaInicio} a{' '}
               {turno.horaFin}
             </p>
@@ -113,20 +113,20 @@ export function ModalValidacion({
             onClick={onCerrar}
             disabled={ocupado}
             aria-label="Cerrar"
-            className="rounded-lg p-2 text-ink-muted hover:bg-canvas hover:text-ink disabled:opacity-40"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer disabled:opacity-40"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <dl className="mt-4 space-y-2 rounded-xl bg-canvas p-3 text-sm">
+        <dl className="mt-4 space-y-2 rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-sm">
           <Fila
             etiqueta="Organizador"
             valor={turno.organizadorNombre ?? 'Sin nombre'}
             secundario={turno.organizadorTelefono ?? undefined}
           />
           <Fila etiqueta="Alias de pago" valor={comprobante?.alias ?? turno.montoSena.toString()} />
-          <Fila etiqueta="Sena esperada" valor={formatearMoneda(turno.montoSena)} />
+          <Fila etiqueta="Seña esperada" valor={formatearMoneda(turno.montoSena)} />
           <Fila
             etiqueta="Monto declarado"
             valor={comprobante ? formatearMoneda(comprobante.monto) : 'sin comprobante'}
@@ -134,38 +134,38 @@ export function ModalValidacion({
         </dl>
 
         {turno.montoSena !== comprobante?.monto && comprobante !== null && (
-          <p className="mt-2 flex items-start gap-2 rounded-xl bg-urgent-faint/30 px-3 py-2 text-xs text-urgent">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="mt-2 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 font-medium">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             El monto del comprobante no coincide con la seña requerida.
           </p>
         )}
 
         <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-            Comprobante
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-700">
+            Comprobante de transferencia
           </p>
           {cargando ? (
-            <div className="grid h-48 place-items-center rounded-xl bg-canvas">
-              <Loader2 className="h-5 w-5 animate-spin text-ink-muted" />
+            <div className="grid h-48 place-items-center rounded-xl bg-slate-50 border border-slate-200">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
           ) : url ? (
             <a
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="block overflow-hidden rounded-xl bg-canvas"
+              className="block overflow-hidden rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-500 transition"
             >
               <img
                 src={url}
                 alt="Comprobante de transferencia"
-                className="max-h-80 w-full object-contain"
+                className="max-h-80 w-full object-contain bg-slate-100"
               />
-              <span className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-ink-muted">
-                <ExternalLink className="h-3.5 w-3.5" /> Abrir en otra pestana
+              <span className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-emerald-700 bg-white border-t border-slate-200">
+                <ExternalLink className="h-3.5 w-3.5" /> Abrir en otra pestaña
               </span>
             </a>
           ) : (
-            <p className="rounded-xl bg-canvas px-3 py-6 text-center text-sm text-occupied">
+            <p className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-6 text-center text-sm text-rose-700 font-semibold">
               {error ?? 'Sin comprobante adjunto.'}
             </p>
           )}
@@ -173,12 +173,12 @@ export function ModalValidacion({
 
         {pidiendoMotivo && (
           <div className="mt-4">
-            <label htmlFor="motivo-rechazo" className="mb-1 block text-xs text-ink-muted">
+            <label htmlFor="motivo-rechazo" className="mb-1 block text-xs font-bold text-slate-700">
               Motivo del rechazo
             </label>
             <textarea
               id="motivo-rechazo"
-              className="field min-h-20"
+              className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none transition min-h-20"
               placeholder="Ej: el alias no coincide con el del predio"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
@@ -187,13 +187,13 @@ export function ModalValidacion({
         )}
 
         {error && !pidiendoMotivo && (
-          <p className="mt-3 text-sm text-occupied">{error}</p>
+          <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-lg font-semibold">{error}</p>
         )}
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            className="btn-danger flex-1"
+            className="btn-danger flex-1 py-3 font-bold cursor-pointer"
             onClick={rechazar}
             disabled={ocupado}
           >
@@ -202,7 +202,7 @@ export function ModalValidacion({
           </button>
           <button
             type="button"
-            className="btn-primary flex-1"
+            className="btn-primary flex-1 py-3 font-bold cursor-pointer"
             onClick={aprobar}
             disabled={ocupado || comprobante === null}
           >
@@ -226,10 +226,10 @@ function Fila({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <dt className="shrink-0 text-ink-muted">{etiqueta}</dt>
-      <dd className="text-right font-medium text-ink">
+      <dt className="shrink-0 text-slate-600 font-medium">{etiqueta}</dt>
+      <dd className="text-right font-bold text-slate-900">
         {valor}
-        {secundario && <span className="block text-xs font-normal text-ink-muted">{secundario}</span>}
+        {secundario && <span className="block text-xs font-normal text-slate-500">{secundario}</span>}
       </dd>
     </div>
   )

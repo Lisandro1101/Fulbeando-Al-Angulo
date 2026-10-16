@@ -142,7 +142,7 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
       {usuario && <Composer />}
 
       {/* Pestañas de audiencia: Comunidad / Mi zona / Siguiendo */}
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
+      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 shadow-sm">
         {TABS.map(({ id, etiqueta, icono: Icono }) => {
           const activo = filtro === id
           return (
@@ -150,10 +150,10 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
               key={id}
               onClick={() => setFiltro(id)}
               className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition-all cursor-pointer ${
-                activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-400 hover:text-white'
+                activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-200 hover:text-white font-bold'
               }`}
             >
-              <Icono className="w-3.5 h-3.5" />
+              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-zinc-400'}`} />
               {etiqueta}
             </button>
           )
@@ -169,13 +169,13 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
               key={id}
               type="button"
               onClick={() => setTipoFiltro(id)}
-              className={`flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-full border transition-all shrink-0 cursor-pointer ${
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3.5 rounded-full border transition-all shrink-0 cursor-pointer ${
                 activo
-                  ? 'bg-zinc-800 border-zinc-600 text-zinc-100 shadow-sm'
-                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+                  ? 'bg-emerald-500 border-emerald-400 text-zinc-950 font-black shadow-md shadow-emerald-500/25'
+                  : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/90 text-white hover:text-white font-bold shadow-sm'
               }`}
             >
-              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-emerald-400' : 'text-zinc-500'}`} />
+              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-emerald-400'}`} />
               <span>{etiqueta}</span>
             </button>
           )

@@ -1908,11 +1908,18 @@ export const Screen7MyTeam = () => {
     </div>
   );
 
-  if (cargando) return <CargandoFulbeando />;
+  if (cargando) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-[#0B0F19] text-emerald-500 font-bold gap-3">
+        <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm font-semibold text-zinc-300">Cargando equipo...</span>
+      </div>
+    );
+  }
 
   if (equipos.length === 0 || !equipo) {
     return (
-      <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+      <div className="h-full flex flex-col bg-[#0B0F19] font-sans text-white overflow-hidden relative">
         <Toast mensaje={toastMessage} />
         <div className="flex-1 overflow-y-auto">
           {bannerInvitacion}
@@ -1934,7 +1941,7 @@ export const Screen7MyTeam = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-[#0B0F19] font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto pb-24 md:pb-8">
         {/* Toast Notification */}
         <Toast mensaje={toastMessage} />

@@ -875,14 +875,14 @@ export const enviarDesafioDirectoEquipo = async (
     fechaTentativa: detalles.fechaTentativa,
     fechaUnix: detalles.fechaUnix,
     canchaOpcion: detalles.canchaOpcion,
-    predioNombre: detalles.predioNombre,
-    predioId: detalles.predioId,
+    predioNombre: detalles.predioNombre ?? null,
+    predioId: detalles.predioId ?? null,
     pingsTacticos: pings,
     estado: 'propuesto',
     equipoDesafianteId: equipoDesafiante.id,
     equipoDesafianteNombre: equipoDesafiante.nombre,
     equipoDesafianteEscudoUrl: equipoDesafiante.escudoUrl ?? null,
-    equipoDesafianteDivision: equipoDesafiante.division,
+    equipoDesafianteDivision: equipoDesafiante.division ?? null,
     equipoRivalId: equipoRival.id,
     equipoRivalNombre: equipoRival.nombre,
     equipoRivalEscudoUrl: equipoRival.escudoUrl ?? null,
@@ -917,7 +917,23 @@ export const enviarDesafioDirectoEquipo = async (
     pactoPartido,
   }
 
-  await setDoc(invRef, invData)
+  // Elimina cualquier propiedad con undefined para cumplir estrictamente con Firestore
+  const limpiarUndefinedFirestore = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') return obj
+    if (Array.isArray(obj)) return obj.map(limpiarUndefinedFirestore)
+    const limpio: Record<string, any> = {}
+    for (const key of Object.keys(obj)) {
+      const val = obj[key]
+      if (val !== undefined) {
+        limpio[key] = typeof val === 'object' && val !== null && !('_methodName' in val)
+          ? limpiarUndefinedFirestore(val)
+          : val
+      }
+    }
+    return limpio
+  }
+
+  await setDoc(invRef, limpiarUndefinedFirestore(invData))
   return invRef.id
 }
 
@@ -957,12 +973,12 @@ export const responderDesafioEquipo = async (
   const ahora = Date.now()
   const nuevosPings = [...(pacto.pingsTacticos || [])]
   if (opciones?.pingTexto && opciones.emisorUid && opciones.emisorNombre && opciones.equipoNombre) {
-    if (nuevosPings.length < 5) {
+    if (nuevosPings.length < 60) {
       nuevosPings.push({
         emisorUid: opciones.emisorUid,
         emisorNombre: opciones.emisorNombre,
         equipoNombre: opciones.equipoNombre,
-        texto: opciones.pingTexto.slice(0, 100),
+        texto: opciones.pingTexto.slice(0, 160),
         fecha: ahora,
       })
     }
@@ -1030,11 +1046,17 @@ export const responderDesafioEquipo = async (
 }
 
 /**
- * Agrega un ping táctico breve (máx 5 en todo el acuerdo) al documento del desafío.
+ * Agrega un ping táctico breve al documento del desafío y opcionalmente actualiza términos de pacto.
  */
 export const agregarPingTacticoDesafio = async (
   invitacionId: string,
   ping: PingTactico,
+  cambiosPacto?: {
+    nuevaFechaTentativa?: string
+    nuevoPredioNombre?: string
+    nuevaModalidad?: ModalidadDesafio
+    nuevaCanchaOpcion?: 'con_cancha' | 'busca_cancha' | 'rival_propone'
+  },
 ): Promise<void> => {
   const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
   const snap = await getDoc(invRef)
@@ -1044,19 +1066,242 @@ export const agregarPingTacticoDesafio = async (
   if (!data.pactoPartido) return
 
   const pingsActuales = data.pactoPartido.pingsTacticos || []
-  if (pingsActuales.length >= 5) {
+  if (pingsActuales.length >= 60) {
     throw new Error('Límite de mensajes alcanzado para este desafío.')
   }
 
-  await updateDoc(invRef, {
+  const updates: Record<string, any> = {
     'pactoPartido.pingsTacticos': arrayUnion({
       ...ping,
-      texto: ping.texto.slice(0, 100),
+      texto: ping.texto.slice(0, 160),
       fecha: Date.now(),
     }),
     'pactoPartido.actualizadoEn': Date.now(),
     updatedAt: serverTimestamp(),
-  })
+  }
+
+  if (cambiosPacto?.nuevaFechaTentativa) {
+    updates['pactoPartido.fechaTentativa'] = cambiosPacto.nuevaFechaTentativa
+    updates['pactoPartido.estado'] = 'contraoferta'
+  }
+  if (cambiosPacto?.nuevoPredioNombre) {
+    updates['pactoPartido.predioNombre'] = cambiosPacto.nuevoPredioNombre
+    updates['pactoPartido.estado'] = 'contraoferta'
+  }
+  if (cambiosPacto?.nuevaModalidad) {
+    updates['pactoPartido.modalidad'] = cambiosPacto.nuevaModalidad
+    updates['pactoPartido.estado'] = 'contraoferta'
+  }
+  if (cambiosPacto?.nuevaCanchaOpcion) {
+    updates['pactoPartido.canchaOpcion'] = cambiosPacto.nuevaCanchaOpcion
+    updates['pactoPartido.estado'] = 'contraoferta'
+  }
+
+  await updateDoc(invRef, updates)
+}
+
+/**
+ * Escucha un desafío / pacto específico en tiempo real para el chat entre capitanes.
+ */
+export const escucharDesafioPacto = (
+  invitacionId: string,
+  alActualizar: (invitacion: InvitacionEquipo | null) => void,
+) => {
+  const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
+  return onSnapshot(
+    invRef,
+    (snap) => {
+      if (!snap.exists()) {
+        alActualizar(null)
+        return
+      }
+      alActualizar({ ...snap.data(), id: snap.id } as InvitacionEquipo)
+    },
+    (err) => console.warn('Error escuchando desafío:', err),
+  )
+}
+
+/**
+ * Busca si ya existe un desafío pendiente o activo entre dos equipos.
+ */
+export const buscarDesafioActivoEntreEquipos = async (
+  usuarioUid: string,
+  rivalEquipoId: string,
+  rivalCaptainId?: string,
+  rivalNombre?: string,
+): Promise<InvitacionEquipo | null> => {
+  try {
+    // 1. Desafíos enviados por el usuario donde el rival sea el equipo seleccionado
+    const qEnviados = query(
+      collection(db, COLECCIONES.invitaciones),
+      where('remitenteUid', '==', usuarioUid),
+      where('tipo', '==', 'desafio_equipo'),
+      where('estado', '==', 'pendiente'),
+    )
+    const snapEnviados = await getDocs(qEnviados)
+    const matchEnviado = snapEnviados.docs
+      .map((d) => ({ ...d.data(), id: d.id } as InvitacionEquipo))
+      .find(
+        (inv) =>
+          inv.pactoPartido?.equipoRivalId === rivalEquipoId ||
+          (rivalCaptainId && inv.destinatarioUid === rivalCaptainId) ||
+          (rivalNombre && inv.destinatarioNombre?.toLowerCase() === rivalNombre.toLowerCase()),
+      )
+    if (matchEnviado) return matchEnviado
+
+    // 2. Desafíos recibidos por el usuario donde el desafiante sea el equipo seleccionado
+    const qRecibidos = query(
+      collection(db, COLECCIONES.invitaciones),
+      where('destinatarioUid', '==', usuarioUid),
+      where('tipo', '==', 'desafio_equipo'),
+      where('estado', '==', 'pendiente'),
+    )
+    const snapRecibidos = await getDocs(qRecibidos)
+    const matchRecibido = snapRecibidos.docs
+      .map((d) => ({ ...d.data(), id: d.id } as InvitacionEquipo))
+      .find(
+        (inv) =>
+          inv.equipoId === rivalEquipoId ||
+          inv.pactoPartido?.equipoDesafianteId === rivalEquipoId ||
+          (rivalCaptainId && inv.remitenteUid === rivalCaptainId) ||
+          (rivalNombre && inv.equipoNombre?.toLowerCase() === rivalNombre.toLowerCase()),
+      )
+    if (matchRecibido) return matchRecibido
+
+    return null
+  } catch (err) {
+    console.warn('Error buscando desafío activo entre equipos:', err)
+    return null
+  }
+}
+
+/**
+ * Escucha en tiempo real todas las conversaciones de desafíos de equipos del usuario
+ * (tanto enviadas como recibidas) para la bandeja / sala de chats.
+ */
+export const escucharDesafiosUsuario = (
+  usuarioUid: string,
+  alActualizar: (desafios: InvitacionEquipo[]) => void,
+) => {
+  const mapa = new Map<string, InvitacionEquipo>()
+
+  const emitir = () => {
+    const lista = Array.from(mapa.values())
+    lista.sort((a, b) => {
+      const fechaA = a.pactoPartido?.actualizadoEn || (a.creadaEn?.toMillis?.() ?? 0)
+      const fechaB = b.pactoPartido?.actualizadoEn || (b.creadaEn?.toMillis?.() ?? 0)
+      return fechaB - fechaA
+    })
+    alActualizar(lista)
+  }
+
+  // 1. Desafíos recibidos
+  const qRecibidos = query(
+    collection(db, COLECCIONES.invitaciones),
+    where('destinatarioUid', '==', usuarioUid),
+    where('tipo', '==', 'desafio_equipo'),
+  )
+  const unsubRecibidos = onSnapshot(
+    qRecibidos,
+    (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'removed') {
+          mapa.delete(change.doc.id)
+        } else {
+          mapa.set(change.doc.id, { ...change.doc.data(), id: change.doc.id } as InvitacionEquipo)
+        }
+      })
+      emitir()
+    },
+    (err) => console.warn('Error escuchando desafíos recibidos:', err),
+  )
+
+  // 2. Desafíos enviados
+  const qEnviados = query(
+    collection(db, COLECCIONES.invitaciones),
+    where('remitenteUid', '==', usuarioUid),
+    where('tipo', '==', 'desafio_equipo'),
+  )
+  const unsubEnviados = onSnapshot(
+    qEnviados,
+    (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'removed') {
+          mapa.delete(change.doc.id)
+        } else {
+          mapa.set(change.doc.id, { ...change.doc.data(), id: change.doc.id } as InvitacionEquipo)
+        }
+      })
+      emitir()
+    },
+    (err) => console.warn('Error escuchando desafíos enviados:', err),
+  )
+
+  return () => {
+    unsubRecibidos()
+    unsubEnviados()
+  }
+}
+
+/**
+ * Marca un desafío como leído en Firestore.
+ */
+export const marcarDesafioComoLeido = async (invitacionId: string): Promise<void> => {
+  try {
+    const invRef = doc(db, COLECCIONES.invitaciones, invitacionId)
+    await updateDoc(invRef, {
+      leida: true,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    console.warn('Error marcando desafío como leído:', err)
+  }
+}
+
+/**
+ * Escucha en tiempo real todas las notificaciones e invitaciones dirigidas a un usuario.
+ */
+export const escucharNotificacionesUsuario = (
+  destinatarioUid: string,
+  alRecibir: (notificaciones: InvitacionEquipo[]) => void,
+) => {
+  const q = query(
+    collection(db, COLECCIONES.invitaciones),
+    where('destinatarioUid', '==', destinatarioUid),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list: InvitacionEquipo[] = snap.docs.map((d) => ({
+        ...d.data(),
+        id: d.id,
+      } as InvitacionEquipo))
+      list.sort((a, b) => {
+        const timeA = a.creadaEn?.toMillis?.() ?? (typeof a.creadaEn === 'number' ? a.creadaEn : 0)
+        const timeB = b.creadaEn?.toMillis?.() ?? (typeof b.creadaEn === 'number' ? b.creadaEn : 0)
+        return timeB - timeA
+      })
+      alRecibir(list)
+    },
+    (err) => {
+      console.warn('Error escuchando notificaciones del usuario:', err)
+    },
+  )
+}
+
+/**
+ * Marca una notificación como leída en Firestore.
+ */
+export const marcarNotificacionComoLeida = async (notificacionId: string): Promise<void> => {
+  try {
+    const invRef = doc(db, COLECCIONES.invitaciones, notificacionId)
+    await updateDoc(invRef, {
+      leida: true,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    console.warn('Error marcando notificación como leída:', err)
+  }
 }
 
 /**

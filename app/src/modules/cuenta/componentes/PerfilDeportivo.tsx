@@ -97,17 +97,17 @@ export function PerfilDeportivoCard({
       </div>
 
       <div>
-        <span className="mb-1 block text-xs text-ink-muted">Nivel autopercibido</span>
+        <span className="mb-1.5 block text-xs font-bold text-slate-700">Nivel autopercibido</span>
         <div className="flex gap-1.5">
           {NIEVELE.map((n) => (
             <button
               key={n}
               type="button"
               aria-pressed={perfil.nivel === n}
-              className={`h-10 flex-1 rounded-xl border text-sm font-semibold ${
+              className={`h-10 flex-1 rounded-xl border text-sm font-bold transition shadow-sm cursor-pointer ${
                 perfil.nivel === n
-                  ? 'border-pitch bg-pitch-faint/40 text-pitch'
-                  : 'border-ink-faint/30 text-ink-muted'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:border-slate-400'
               }`}
               onClick={() => void actualizar({ nivel: perfil.nivel === n ? null : n })}
             >
@@ -134,11 +134,11 @@ export function PerfilDeportivoCard({
       />
 
       {guardando && (
-        <p className="flex items-center gap-2 text-xs text-ink-muted">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando...
+        <p className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" /> Guardando...
         </p>
       )}
-      {error && <p className="text-sm text-occupied">{error}</p>}
+      {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl font-bold">{error}</p>}
     </div>
   )
 }
@@ -223,18 +223,18 @@ function Interruptor({
   return (
     <label
       htmlFor={id}
-      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-3"
+      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-3 hover:bg-slate-100/80 transition shadow-sm"
     >
       <span>
-        <span className="block text-sm font-medium text-ink">{titulo}</span>
-        <span className="block text-xs text-ink-muted">{descripcion}</span>
+        <span className="block text-sm font-bold text-slate-900">{titulo}</span>
+        <span className="block text-xs text-slate-500 font-medium">{descripcion}</span>
       </span>
       <input
         id={id}
         type="checkbox"
         checked={activo}
         onChange={(e) => onToggle(e.target.checked)}
-        className="h-5 w-5 shrink-0 accent-pitch"
+        className="h-5 w-5 shrink-0 accent-emerald-600 cursor-pointer"
       />
     </label>
   )
@@ -275,7 +275,7 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
   return (
     <div className="space-y-4">
       <div>
-        <label htmlFor="perfil-apodo" className="mb-1 block text-xs text-ink-muted">Apodo</label>
+        <label htmlFor="perfil-apodo" className="mb-1 block text-xs font-bold text-slate-700">Apodo</label>
         <input 
           id="perfil-apodo"
           type="text" 
@@ -285,50 +285,50 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
         />
       </div>
       <div>
-        <label htmlFor="perfil-username" className="mb-1 block text-xs text-ink-muted">Nombre de Usuario (@)</label>
+        <label htmlFor="perfil-username" className="mb-1 block text-xs font-bold text-slate-700">Nombre de Usuario (@)</label>
         <div className="flex items-center field p-0 overflow-hidden">
-          <span className="pl-3 text-ink-muted font-bold">@</span>
+          <span className="pl-3.5 text-slate-400 font-bold">@</span>
           <input 
             id="perfil-username"
             type="text" 
             value={username} 
             onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} 
-            className="w-full bg-transparent p-2 outline-none" 
+            className="w-full bg-transparent px-2 py-2.5 text-slate-900 font-semibold outline-none" 
           />
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-ink-muted" htmlFor="fecha-nacimiento">Fecha de nacimiento</label>
+        <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="fecha-nacimiento">Fecha de nacimiento</label>
         <input
           id="fecha-nacimiento"
           type="date"
           value={fechaNacimiento}
           max={new Date().toISOString().slice(0, 10)}
           onChange={(e) => setFechaNacimiento(e.target.value)}
-          className="field [color-scheme:dark]"
+          className="field"
         />
-        <p className="mt-1 text-xs text-ink-muted">
+        <p className="mt-1 text-xs text-slate-500 font-medium">
           De acá sale tu edad en la ficha del perfil.
         </p>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-ink-muted">Foto de Perfil</label>
-        <div className="flex items-center gap-4 bg-canvas p-4 rounded-xl border border-border">
+        <label className="mb-1 block text-xs font-bold text-slate-700">Foto de Perfil</label>
+        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div 
-            className="w-16 h-16 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center text-3xl border-2 border-pitch/50 cursor-pointer hover:border-pitch transition-colors relative group"
+            className="w-16 h-16 rounded-full overflow-hidden bg-white flex items-center justify-center text-3xl border-2 border-emerald-500/40 cursor-pointer hover:border-emerald-500 transition-colors relative group shadow-sm"
             onClick={() => document.getElementById('avatar-upload')?.click()}
           >
             {emojiFoto?.startsWith('http') ? (
                <img src={emojiFoto} alt="Foto de perfil" className="w-full h-full object-cover" />
             ) : (
-               <span className="text-sm font-bold text-zinc-500">Foto</span>
+               <span className="text-sm font-bold text-slate-400">Foto</span>
             )}
-            <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white backdrop-blur-sm">
-              <span className="text-xs font-bold uppercase">Subir</span>
+            <div className="absolute inset-0 bg-slate-900/60 hidden group-hover:flex items-center justify-center text-white backdrop-blur-xs">
+              <span className="text-[11px] font-black uppercase tracking-wider">Subir</span>
             </div>
           </div>
           <div className="flex-1">
-            <p className="text-xs text-ink-muted mb-2">Toca el círculo para subir una foto de perfil</p>
+            <p className="text-xs text-slate-600 font-medium mb-1">Toca el círculo para subir una foto de perfil</p>
           </div>
           <input 
             id="avatar-upload"
@@ -358,14 +358,14 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
         </div>
       </div>
       
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl font-bold">{error}</p>}
       
       <div className="pt-2">
         <button 
           type="button"
           onClick={guardar} 
           disabled={guardando} 
-          className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl active:scale-95 transition-transform disabled:opacity-50"
+          className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition cursor-pointer disabled:opacity-50"
         >
           {guardando ? 'Guardando...' : 'Guardar Cambios'}
         </button>
@@ -455,22 +455,22 @@ export function ZonaCard({
   return (
     <div className="space-y-4">
       {zonaActualLegible ? (
-        <div className="flex items-center gap-2 p-3 bg-zinc-900 border border-emerald-500/30 rounded-xl text-xs text-zinc-300">
-          <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
+        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-medium shadow-sm">
+          <MapPin className="h-4 w-4 text-emerald-600 shrink-0" />
           <span>
-            Zona actual declarada: <strong className="text-white">{zonaActualLegible}</strong>
+            Zona actual declarada: <strong className="text-slate-900 font-extrabold">{zonaActualLegible}</strong>
           </span>
         </div>
       ) : (
-        <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300">
-          <MapPin className="h-4 w-4 text-amber-400 shrink-0" />
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium shadow-sm">
+          <MapPin className="h-4 w-4 text-amber-600 shrink-0" />
           <span>Todavía no tenés una zona declarada. Seleccionala abajo:</span>
         </div>
       )}
 
       <div className="space-y-3">
         <div>
-          <label htmlFor="perfil-region" className="text-xs font-bold text-zinc-400 uppercase">
+          <label htmlFor="perfil-region" className="text-xs font-bold text-slate-700 uppercase">
             Región
           </label>
           <select
@@ -485,10 +485,10 @@ export function ZonaCard({
               const primerLoc = DIVISION_GEOGRAFICA[reg]?.[primerMuni]?.[0] || primerMuni
               setLocalidadElegida(primerLoc)
             }}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-slate-900 shadow-sm cursor-pointer"
           >
             {Object.keys(DIVISION_GEOGRAFICA).map((reg) => (
-              <option key={reg} value={reg} className="bg-zinc-900">
+              <option key={reg} value={reg}>
                 {reg}
               </option>
             ))}
@@ -496,7 +496,7 @@ export function ZonaCard({
         </div>
 
         <div>
-          <label htmlFor="perfil-municipio" className="text-xs font-bold text-zinc-400 uppercase">
+          <label htmlFor="perfil-municipio" className="text-xs font-bold text-slate-700 uppercase">
             Municipio / Partido (Mi Zona)
           </label>
           <select
@@ -508,10 +508,10 @@ export function ZonaCard({
               const primerLoc = DIVISION_GEOGRAFICA[regionSeleccionada]?.[muni]?.[0] || muni
               setLocalidadElegida(primerLoc)
             }}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-slate-900 shadow-sm cursor-pointer"
           >
             {municipiosDeRegion.map((muni) => (
-              <option key={muni} value={muni} className="bg-zinc-900">
+              <option key={muni} value={muni}>
                 {muni}
               </option>
             ))}
@@ -519,17 +519,17 @@ export function ZonaCard({
         </div>
 
         <div>
-          <label htmlFor="perfil-localidad" className="text-xs font-bold text-zinc-400 uppercase">
+          <label htmlFor="perfil-localidad" className="text-xs font-bold text-slate-700 uppercase">
             Barrio / Localidad
           </label>
           <select
             id="perfil-localidad"
             value={localidadElegida}
             onChange={(e) => setLocalidadElegida(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-white cursor-pointer"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 mt-1 focus:border-emerald-500 outline-none font-bold text-sm text-slate-900 shadow-sm cursor-pointer"
           >
             {localidadesDisponibles.map((loc) => (
-              <option key={loc} value={loc} className="bg-zinc-900">
+              <option key={loc} value={loc}>
                 {loc}
               </option>
             ))}
@@ -537,14 +537,14 @@ export function ZonaCard({
         </div>
       </div>
 
-      {mensaje && <p className="text-sm text-emerald-400 font-semibold">{mensaje}</p>}
-      {error && <p className="text-sm text-red-500 font-semibold">{error}</p>}
+      {mensaje && <p className="text-sm text-emerald-800 font-bold bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl shadow-sm">{mensaje}</p>}
+      {error && <p className="text-sm text-rose-600 font-bold bg-rose-50 border border-rose-200 p-2.5 rounded-xl shadow-sm">{error}</p>}
 
       <button
         type="button"
         onClick={guardar}
         disabled={guardando}
-        className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-3 rounded-xl transition cursor-pointer active:scale-95 disabled:opacity-50"
+        className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-500/25 transition cursor-pointer active:scale-95 disabled:opacity-50"
       >
         {guardando ? 'Guardando zona...' : 'Guardar mi Zona'}
       </button>

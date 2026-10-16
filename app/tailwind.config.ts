@@ -20,9 +20,9 @@ export default {
           'light-sunken': '#F1F5F9',
         },
         pitch: {
-          900: '#F8FAFC',
-          800: '#F1F5F9',
-          700: '#E2E8F0',
+          900: '#0B0F19', // Fondo app (Ultra oscuro)
+          800: '#141B2D', // Tarjetas y paneles
+          700: '#1F2937', // Bordes y divisores
           // Acentos verdes para fútbol
           DEFAULT: '#16A34A', 
           muted: '#15803D',

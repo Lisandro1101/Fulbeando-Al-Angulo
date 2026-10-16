@@ -37,14 +37,14 @@ export interface PropuestaPactoPartido {
   fechaTentativa: string
   fechaUnix: number
   canchaOpcion: 'con_cancha' | 'busca_cancha' | 'rival_propone'
-  predioNombre?: string
-  predioId?: string
+  predioNombre?: string | null
+  predioId?: string | null
   pingsTacticos: PingTactico[]
   estado: EstadoPacto
   equipoDesafianteId: string
   equipoDesafianteNombre: string
   equipoDesafianteEscudoUrl: string | null
-  equipoDesafianteDivision?: string
+  equipoDesafianteDivision?: string | null
   equipoRivalId: string
   equipoRivalNombre: string
   equipoRivalEscudoUrl: string | null
