@@ -100,63 +100,24 @@ export function CargandoFulbeando({
       aria-live="polite"
       aria-busy={visible}
       aria-hidden={!visible}
-      className={`fixed inset-0 z-[399] flex flex-col items-center justify-center gap-4 bg-[#0B0F19] text-white transition-opacity duration-300 ${
+      className={`fixed inset-0 z-[399] flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-[#25105a] via-[#1c0a48] to-[#140636] text-white transition-opacity duration-300 ${
         visible ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
     >
-      <h1 className="text-4xl font-black italic tracking-tighter text-white">FULBEANDO</h1>
-      <span className="h-10 w-10 animate-radar-pulse rounded-full bg-pitch" />
-      {mensaje && <p className="text-sm text-zinc-400 font-medium">{mensaje}</p>}
+      <h1 className="text-4xl font-black italic tracking-tighter text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.4)]">FULBEANDO</h1>
+      <span className="h-10 w-10 animate-radar-pulse rounded-full bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)]" />
+      {mensaje && <p className="text-sm text-indigo-200/80 font-medium">{mensaje}</p>}
       <span className="sr-only">Cargando…</span>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Transicion de pantalla: loading de marca solo en procesos grandes.  */
+/* Transicion de pantalla: contenedor sin overlay artificial           */
 /* ------------------------------------------------------------------ */
 
-/** Cuanto se mantiene el loading en cada transicion grande (ms). */
-const MS_TRANSICION = 500
-
-/**
- * Rutas de los flujos "grandes" (acceso y setup). El overlay solo aparece al
- * entrar o salir de alguna de estas; navegar entre pestanias de la barra
- * inferior no lo dispara, para no cortar el uso normal de la app.
- */
-const RUTAS_PESADAS = new Set([
-  '/login',
-  '/role-selector',
-  '/onboarding-player',
-  '/plan-pendiente',
-  '/venue-registration',
-  '/venue-subscription',
-  '/superadmin',
-])
-
 export function ProveedorTransicion({ children }: { children: ReactNode }) {
-  const location = useLocation()
-  const anterior = useRef(location.pathname)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const destino = location.pathname
-    if (destino === anterior.current) return
-    const origen = anterior.current
-    anterior.current = destino
-    // Solo transiciones hacia/desde un flujo grande.
-    if (!RUTAS_PESADAS.has(origen) && !RUTAS_PESADAS.has(destino)) return
-    setVisible(true)
-    const temporizador = window.setTimeout(() => setVisible(false), MS_TRANSICION)
-    return () => window.clearTimeout(temporizador)
-  }, [location.pathname])
-
-  return (
-    <>
-      {children}
-      <CargandoFulbeando visible={visible} />
-    </>
-  )
+  return <>{children}</>
 }
 
 /* ------------------------------------------------------------------ */

@@ -18,8 +18,12 @@ import {
   Flame,
 } from 'lucide-react';
 import type { ModalidadDesafio, PingTactico, PropuestaPactoPartido } from '@/domain';
+import { collection, doc } from 'firebase/firestore';
+import { db } from '@/core/firebase';
+import { COLECCIONES } from '@/core/config';
 import {
   obtenerEquiposDeUsuario,
+  obtenerEquipoPorId,
   enviarDesafioDirectoEquipo,
   buscarDesafioActivoEntreEquipos,
   escucharDesafioPacto,
@@ -126,9 +130,10 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
     setError(null);
 
     if (desafioInicial) {
-      setDesafioActivo(desafioInicial);
+      const idRaiz = desafioInicial.desafioId || desafioInicial.id;
+      setDesafioActivo({ ...desafioInicial, id: idRaiz });
       if (desafioInicial.destinatarioUid === usuarioActual.uid && !desafioInicial.leida) {
-        marcarDesafioComoLeido(desafioInicial.id);
+        marcarDesafioComoLeido(idRaiz);
       }
       obtenerEquiposDeUsuario(usuarioActual.uid)
         .then((eqs) => {
@@ -144,10 +149,22 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
     Promise.all([
       obtenerEquiposDeUsuario(usuarioActual.uid),
+      obtenerEquipoPorId(rival.equipoId).catch(() => null),
       buscarDesafioActivoEntreEquipos(usuarioActual.uid, rival.equipoId, rival.captainId, rival.nombre),
     ])
-      .then(([eqs, desafioExistente]) => {
+      .then(([eqs, eqRival, desafioExistente]) => {
         setMisEquipos(eqs);
+        if (eqRival) {
+          if (!rival.captainId && eqRival.captainId) {
+            rival.captainId = eqRival.captainId;
+          }
+          if (!rival.nombre && eqRival.name) {
+            rival.nombre = eqRival.name;
+          }
+          if (!rival.escudoUrl && eqRival.shieldUrl) {
+            rival.escudoUrl = eqRival.shieldUrl;
+          }
+        }
         if (eqs.length > 0) {
           const cap = eqs.find((e) => e.captainId === usuarioActual.uid) || eqs[0];
           setEquipoSeleccionadoId(cap.id);
@@ -156,9 +173,10 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
           }
         }
         if (desafioExistente) {
-          setDesafioActivo(desafioExistente);
+          const idRaiz = desafioExistente.desafioId || desafioExistente.id;
+          setDesafioActivo({ ...desafioExistente, id: idRaiz });
           if (desafioExistente.destinatarioUid === usuarioActual.uid && !desafioExistente.leida) {
-            marcarDesafioComoLeido(desafioExistente.id);
+            marcarDesafioComoLeido(idRaiz);
           }
         } else {
           setDesafioActivo(null);
@@ -177,15 +195,24 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
     const unsub = escucharDesafioPacto(desafioActivo.id, (actualizado) => {
       if (actualizado) {
         setDesafioActivo(actualizado);
+        // Si el chat está abierto y hay un nuevo mensaje de la contraparte, marcarlo como leído
+        const ultimoPing = actualizado.pactoPartido?.pingsTacticos?.slice(-1)[0];
+        if (ultimoPing && ultimoPing.emisorUid !== usuarioActual.uid && !actualizado.leida) {
+          marcarDesafioComoLeido(actualizado.id);
+        }
       }
     });
     return () => unsub();
-  }, [desafioActivo?.id]);
+  }, [desafioActivo?.id, usuarioActual.uid]);
 
   // Auto-scroll hacia el final de la conversación
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      });
     }
   }, [desafioActivo?.pactoPartido?.pingsTacticos]);
 
@@ -197,11 +224,25 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
   // 3. Crear propuesta inicial e ingresar inmediatamente al chat
   const handleCrearDesafioInicial = async () => {
+    if (enviandoMensaje) return;
     if (!equipoEmisor) {
       setError('Tenés que seleccionar un equipo para lanzar el desafío.');
       return;
     }
-    const capIdRival = rival.captainId;
+
+    let capIdRival = rival.captainId;
+    if (!capIdRival && rival.equipoId) {
+      try {
+        const eqRival = await obtenerEquipoPorId(rival.equipoId);
+        if (eqRival?.captainId) {
+          capIdRival = eqRival.captainId;
+          rival.captainId = capIdRival;
+        }
+      } catch (e) {
+        console.warn('Error resolviendo capitán rival:', e);
+      }
+    }
+
     if (!capIdRival) {
       setError('Este equipo no tiene un capitán asignado para recibir el desafío.');
       return;
@@ -215,84 +256,83 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
     const pingFinal = pingLibre.trim() || pingSeleccionado;
 
-    setEnviandoMensaje(true);
+    // Generamos el ID de forma síncrona en cliente para transición instantánea (0 ms)
+    const invId = doc(collection(db, COLECCIONES.invitaciones)).id;
+
+    // Creamos la estructura inicial localmente para mostrar el chat INMEDIATAMENTE
+    const nuevoPacto: PropuestaPactoPartido = {
+      id: invId,
+      modalidad,
+      fechaTentativa: fechaFinal,
+      fechaUnix: Date.now() + 24 * 3600 * 1000,
+      canchaOpcion,
+      predioNombre: canchaOpcion === 'con_cancha' ? (predioNombre.trim() || null) : null,
+      pingsTacticos: [
+        {
+          emisorUid: usuarioActual.uid,
+          emisorNombre: nombreUsuario,
+          equipoNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
+          texto: pingFinal,
+          fecha: Date.now(),
+        },
+      ],
+      estado: 'propuesto',
+      equipoDesafianteId: equipoEmisor.id,
+      equipoDesafianteNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
+      equipoDesafianteEscudoUrl: equipoEmisor.shieldUrl || equipoEmisor.escudoUrl || null,
+      equipoDesafianteDivision: divisionEmisor?.nombre ?? null,
+      equipoRivalId: rival.equipoId,
+      equipoRivalNombre: rival.nombre,
+      equipoRivalEscudoUrl: rival.escudoUrl ?? null,
+      creadoPorUid: usuarioActual.uid,
+      destinatarioUid: capIdRival,
+      creadoEn: Date.now(),
+      actualizadoEn: Date.now(),
+    };
+
+    setDesafioActivo({
+      id: invId,
+      tipo: 'desafio_equipo',
+      equipoId: equipoEmisor.id,
+      equipoNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
+      remitenteUid: usuarioActual.uid,
+      destinatarioUid: capIdRival,
+      estado: 'pendiente',
+      pactoPartido: nuevoPacto,
+    } as InvitacionEquipo);
+
+    onDesafioEnviado?.(`¡Desafío iniciado con ${rival.nombre}! Ya podés acordar los detalles ⚽`);
     setError(null);
 
-    try {
-      const invId = await enviarDesafioDirectoEquipo(
-        usuarioActual.uid,
-        nombreUsuario,
-        {
-          id: equipoEmisor.id,
-          nombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
-          escudoUrl: equipoEmisor.shieldUrl || equipoEmisor.escudoUrl || null,
-          division: divisionEmisor?.nombre,
-        },
-        {
-          id: rival.equipoId,
-          nombre: rival.nombre,
-          escudoUrl: rival.escudoUrl ?? null,
-          captainId: capIdRival,
-        },
-        {
-          modalidad,
-          fechaTentativa: fechaFinal,
-          fechaUnix: Date.now() + 24 * 3600 * 1000,
-          canchaOpcion,
-          predioNombre: canchaOpcion === 'con_cancha' ? predioNombre.trim() : undefined,
-          pingInicial: pingFinal,
-        }
-      );
-
-      // Creamos la estructura inicial localmente para mostrar el chat inmediatamente
-      const nuevoPacto: PropuestaPactoPartido = {
-        id: invId,
+    // Persistimos en Firebase en segundo plano con el ID pre-generado y en lote único
+    enviarDesafioDirectoEquipo(
+      usuarioActual.uid,
+      nombreUsuario,
+      {
+        id: equipoEmisor.id,
+        nombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
+        escudoUrl: equipoEmisor.shieldUrl || equipoEmisor.escudoUrl || null,
+        division: divisionEmisor?.nombre,
+      },
+      {
+        id: rival.equipoId,
+        nombre: rival.nombre,
+        escudoUrl: rival.escudoUrl ?? null,
+        captainId: capIdRival,
+      },
+      {
         modalidad,
         fechaTentativa: fechaFinal,
         fechaUnix: Date.now() + 24 * 3600 * 1000,
         canchaOpcion,
-        predioNombre: canchaOpcion === 'con_cancha' ? (predioNombre.trim() || null) : null,
-        pingsTacticos: [
-          {
-            emisorUid: usuarioActual.uid,
-            emisorNombre: nombreUsuario,
-            equipoNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
-            texto: pingFinal,
-            fecha: Date.now(),
-          },
-        ],
-        estado: 'propuesto',
-        equipoDesafianteId: equipoEmisor.id,
-        equipoDesafianteNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
-        equipoDesafianteEscudoUrl: equipoEmisor.shieldUrl || equipoEmisor.escudoUrl || null,
-        equipoDesafianteDivision: divisionEmisor?.nombre ?? null,
-        equipoRivalId: rival.equipoId,
-        equipoRivalNombre: rival.nombre,
-        equipoRivalEscudoUrl: rival.escudoUrl ?? null,
-        creadoPorUid: usuarioActual.uid,
-        destinatarioUid: capIdRival,
-        creadoEn: Date.now(),
-        actualizadoEn: Date.now(),
-      };
-
-      setDesafioActivo({
-        id: invId,
-        tipo: 'desafio_equipo',
-        equipoId: equipoEmisor.id,
-        equipoNombre: equipoEmisor.name || equipoEmisor.nombre || 'Mi Equipo',
-        remitenteUid: usuarioActual.uid,
-        destinatarioUid: capIdRival,
-        estado: 'pendiente',
-        pactoPartido: nuevoPacto,
-      } as InvitacionEquipo);
-
-      onDesafioEnviado?.(`¡Desafío iniciado con ${rival.nombre}! Ya podés acordar los detalles ⚽`);
-    } catch (err: any) {
-      console.error('Error enviando desafío inicial:', err);
-      setError(err?.message || 'Hubo un error al enviar el desafío.');
-    } finally {
-      setEnviandoMensaje(false);
-    }
+        predioNombre: canchaOpcion === 'con_cancha' ? predioNombre.trim() : undefined,
+        pingInicial: pingFinal,
+        invitacionIdPrevia: invId,
+      }
+    ).catch((err: any) => {
+      console.error('Error enviando desafío inicial en background:', err);
+      setError(err?.message || 'Hubo un error al sincronizar el desafío.');
+    });
   };
 
   // 4. Enviar un ping o chip táctico dentro del chat
@@ -300,42 +340,60 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
     const texto = (textoAEnviar || textoMensajeChat).trim();
     if (!texto || !desafioActivo?.id) return;
 
-    setEnviandoMensaje(true);
-    setError(null);
-    try {
-      const pingNuevo: PingTactico = {
-        emisorUid: usuarioActual.uid,
-        emisorNombre: nombreUsuario,
-        equipoNombre: equipoEmisor?.name || equipoEmisor?.nombre || 'Mi Equipo',
-        texto: texto.slice(0, 160),
-        fecha: Date.now(),
+    if ((desafioActivo.pactoPartido?.pingsTacticos?.length || 0) >= 60) {
+      setError('Límite de mensajes (60) alcanzado para este desafío.');
+      return;
+    }
+
+    const pingNuevo: PingTactico = {
+      emisorUid: usuarioActual.uid,
+      emisorNombre: nombreUsuario,
+      equipoNombre: equipoEmisor?.name || equipoEmisor?.nombre || 'Mi Equipo',
+      texto: texto.slice(0, 160),
+      fecha: Date.now(),
+    };
+
+    // Si el chip seleccionado propone una hora o cancha, detectarlo
+    const cambios: any = {};
+    if (texto.includes('Sábado')) cambios.nuevaFechaTentativa = 'Sábado a convenir';
+    if (texto.includes('30 min más tarde')) cambios.nuevaFechaTentativa = `${desafioActivo.pactoPartido?.fechaTentativa || 'Hoy'} (+30 min)`;
+    if (texto.includes('21:00 hs')) cambios.nuevaFechaTentativa = '21:00 hs';
+    if (texto.includes('Tenemos cancha')) {
+      cambios.nuevaCanchaOpcion = 'con_cancha';
+      cambios.nuevoPredioNombre = 'Cancha propia del rival';
+    } else if (texto.includes('A medias') || texto.includes('a medias')) {
+      cambios.nuevaCanchaOpcion = 'busca_cancha';
+    }
+
+    // Actualización optimista inmediata en UI
+    setDesafioActivo((prev) => {
+      if (!prev || !prev.pactoPartido) return prev;
+      return {
+        ...prev,
+        pactoPartido: {
+          ...prev.pactoPartido,
+          pingsTacticos: [...(prev.pactoPartido.pingsTacticos || []), pingNuevo],
+          ...(cambios.nuevaFechaTentativa ? { fechaTentativa: cambios.nuevaFechaTentativa } : {}),
+          ...(cambios.nuevaCanchaOpcion ? { canchaOpcion: cambios.nuevaCanchaOpcion } : {}),
+          ...(cambios.nuevoPredioNombre ? { predioNombre: cambios.nuevoPredioNombre } : {}),
+        },
       };
+    });
 
-      // Si el chip seleccionado propone una hora o cancha, detectarlo
-      const cambios: any = {};
-      if (texto.includes('Sábado')) cambios.nuevaFechaTentativa = 'Sábado a convenir';
-      if (texto.includes('30 min más tarde')) cambios.nuevaFechaTentativa = `${desafioActivo.pactoPartido?.fechaTentativa || 'Hoy'} (+30 min)`;
-      if (texto.includes('21:00 hs')) cambios.nuevaFechaTentativa = '21:00 hs';
-      if (texto.includes('Tenemos cancha')) {
-        cambios.nuevaCanchaOpcion = 'con_cancha';
-        cambios.nuevoPredioNombre = 'Cancha propia del rival';
-      } else if (texto.includes('A medias') || texto.includes('a medias')) {
-        cambios.nuevaCanchaOpcion = 'busca_cancha';
-      }
+    setTextoMensajeChat('');
+    setError(null);
 
+    try {
       await agregarPingTacticoDesafio(desafioActivo.id, pingNuevo, Object.keys(cambios).length > 0 ? cambios : undefined);
-      setTextoMensajeChat('');
     } catch (err: any) {
       console.error('Error enviando mensaje en el chat:', err);
-      setError(err?.message || 'No se pudo enviar el mensaje.');
-    } finally {
-      setEnviandoMensaje(false);
+      setError(err?.message || 'No se pudo sincronizar el mensaje.');
     }
   };
 
   // 5. Pactar partido (Aceptar acuerdo)
   const handlePactarPartido = async () => {
-    if (!desafioActivo?.id) return;
+    if (procesandoPacto || !desafioActivo?.id) return;
     setProcesandoPacto(true);
     setError(null);
     try {
@@ -356,7 +414,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
   // 6. Rechazar o cancelar propuesta
   const handleRechazarDesafio = async () => {
-    if (!desafioActivo?.id) return;
+    if (procesandoPacto || !desafioActivo?.id) return;
     setProcesandoPacto(true);
     try {
       await responderDesafioEquipo(desafioActivo.id, 'rechazado', {

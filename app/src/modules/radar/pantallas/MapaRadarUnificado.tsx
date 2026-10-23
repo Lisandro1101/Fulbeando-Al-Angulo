@@ -2,12 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, Swords } from 'lucide-react';
+import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, Swords, MessageSquare } from 'lucide-react';
 import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha, type RadarPinDesafio } from '../radarService';
 import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
-import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId } from '@/modules/teams/teamService';
-import { ModalProponerDesafio } from '../componentes/ModalProponerDesafio';
+import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId, abrirChatDesafio } from '@/modules/teams/teamService';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto, calcularMediaJugador, calcularDivisionEquipo, type DivisionEquipoInfo } from '@/domain';
 import { type Punto } from '@/core/geo/geohash';
@@ -17,6 +16,7 @@ import type { ClusterFeature, PointFeature } from 'supercluster';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { Toast } from '@/modules/ui/overlays';
 import { obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
+import { BannerSponsorRadar } from '@/modules/publicidad/componentes/BannerSponsorRadar';
 
 const LOCALIDADES_FALLBACK = [
   { nombre: 'CABA', lat: -34.6037, lng: -58.3816 },
@@ -170,33 +170,13 @@ const COLOR_POR_TIPO: Record<RadarEntityType, string> = {
   jugador: '#3B82F6',
 };
 
-interface InfoCluster {
-  total: number;
-  dominante: RadarEntityType;
-}
-
-/** Desglose de un cluster: cantidad de hojas y tipo dominante. */
-function infoDeCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature): InfoCluster {
-  const total = f.properties.point_count;
-  const hojas = indice.getLeaves(f.properties.cluster_id, total, 0);
-  const conteo = new Map<RadarEntityType, number>();
-  for (const h of hojas) {
-    const t = h.properties.entity.type;
-    conteo.set(t, (conteo.get(t) ?? 0) + 1);
-  }
-  const dominante = [...conteo.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'jugador';
-  return { total, dominante };
-}
-
 /**
- * Icono del cluster estilo "badge": el emoji del tipo dominante con un
- * contador de color pegado arriba a la derecha. Agrupa todo lo que comparte
- * pantalla (canchas, equipos, desafios y jugadores libres).
+ * Icono del cluster específico por tipo de entidad.
+ * Canchas solo se agrupan con canchas, jugadores con jugadores, etc.
  */
-function iconoCluster(indice: Supercluster<RadarProps>, f: RadarClusterFeature): L.DivIcon {
-  const { total, dominante } = infoDeCluster(indice, f);
-  const color = COLOR_POR_TIPO[dominante];
-  const svg = SVG_CLUSTER_POR_TIPO[dominante];
+function iconoCluster(tipo: RadarEntityType, total: number): L.DivIcon {
+  const color = COLOR_POR_TIPO[tipo];
+  const svg = SVG_CLUSTER_POR_TIPO[tipo];
   const html = `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#0F172A;border:2.5px solid ${color};box-shadow:0 0 15px ${color}80;color:#fff;">${svg}<span style="position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9999px;background:${color};color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;border:2px solid #0B0F19">${total}</span></span>`;
   return L.divIcon({
     className: 'cluster-radar',
@@ -437,6 +417,7 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
         modalidad: pin.modalidad,
         cantidadJugadores: pin.cantidadJugadores,
         escudoUrl: pin.escudoUrl,
+        captainId: p.captainId,
         fairPlayScore: p.fairPlayScore,
         stats: p.stats,
         divisionInfo,
@@ -479,14 +460,93 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
 };
 
 /**
- * Pinta los pins del radar con agrupado tipo supercluster.
+ * Separa entidades que comparten exactamente la misma ubicación geográfica o están
+ * a menos de 18 metros de distancia, distribuyéndolas en un radio circular equilibrado
+ * para que NUNCA dos pines se pisen, se tapen o queden ocultos debajo de otro.
+ */
+function separarEntidadesSuperpuestas(entidades: RadarEntity[]): RadarEntity[] {
+  if (entidades.length <= 1) return entidades;
+
+  const UMBRAL_METROS = 18;
+  const METROS_POR_GRADO_LAT = 111000;
+
+  // Agrupar entidades que están a menos de UMBRAL_METROS
+  const grupos: RadarEntity[][] = [];
+  const procesados = new Set<string>();
+
+  for (let i = 0; i < entidades.length; i++) {
+    const e1 = entidades[i]!;
+    if (procesados.has(e1.id)) continue;
+
+    const grupo: RadarEntity[] = [e1];
+    procesados.add(e1.id);
+
+    const cosLat1 = Math.cos((e1.lat * Math.PI) / 180);
+    const metrosPorGradoLng = METROS_POR_GRADO_LAT * Math.max(0.1, cosLat1);
+
+    for (let j = i + 1; j < entidades.length; j++) {
+      const e2 = entidades[j]!;
+      if (procesados.has(e2.id)) continue;
+
+      const dLatMetros = (e2.lat - e1.lat) * METROS_POR_GRADO_LAT;
+      const dLngMetros = (e2.lng - e1.lng) * metrosPorGradoLng;
+      const dist = Math.hypot(dLatMetros, dLngMetros);
+
+      if (dist < UMBRAL_METROS) {
+        grupo.push(e2);
+        procesados.add(e2.id);
+      }
+    }
+
+    grupos.push(grupo);
+  }
+
+  const resultado: RadarEntity[] = [];
+
+  for (const grupo of grupos) {
+    if (grupo.length === 1) {
+      resultado.push(grupo[0]!);
+      continue;
+    }
+
+    // Centroide del grupo superpuesto
+    const latCentro = grupo.reduce((sum, e) => sum + e.lat, 0) / grupo.length;
+    const lngCentro = grupo.reduce((sum, e) => sum + e.lng, 0) / grupo.length;
+    const cosLat = Math.cos((latCentro * Math.PI) / 180);
+    const metrosPorGradoLng = METROS_POR_GRADO_LAT * Math.max(0.1, cosLat);
+
+    const n = grupo.length;
+    // Si son 2 pines: 22m de radio (separación de 44m entre sí).
+    // Si son más: radio escalado entre 26m y 38m.
+    const radioMetros = n === 2 ? 22 : n <= 4 ? 26 : Math.min(38, 26 + n * 2);
+
+    for (let k = 0; k < n; k++) {
+      const e = grupo[k]!;
+      // Distribución angular: si son 2 pines, uno a la izquierda y otro a la derecha
+      const angulo = n === 2
+        ? (k === 0 ? -Math.PI / 4 : (3 * Math.PI) / 4)
+        : (2 * Math.PI * k) / n - Math.PI / 2;
+
+      const offsetLat = (radioMetros * Math.sin(angulo)) / METROS_POR_GRADO_LAT;
+      const offsetLng = (radioMetros * Math.cos(angulo)) / metrosPorGradoLng;
+
+      resultado.push({
+        ...e,
+        lat: latCentro + offsetLat,
+        lng: lngCentro + offsetLng,
+      });
+    }
+  }
+
+  return resultado;
+}
+
+/**
+ * Pinta los pins del radar con agrupado tipo supercluster separado por categoría.
  *
- * TODOS los tipos se agrupan por igual (predios/canchas, equipos, desafios y
- * jugadores libres): lo que comparte pantalla se funde en una burbuja con la
- * cantidad y el tipo dominante. Al tocar, se hace zoom hasta desagrupar.
- *
- * Se recalcula por viewport (bbox + zoom) porque agrupar es una decision visual
- * en el espacio de pantalla.
+ * Cada tipo se agrupa de forma INDEPENDIENTE (canchas con canchas, jugadores con
+ * jugadores, desafíos con desafíos, equipos con equipos). Nunca se mezclan entre sí.
+ * Al tocar una burbuja, se hace zoom hasta desagrupar esa categoría.
  */
 function MarcadoresRadar({
   entidades,
@@ -509,39 +569,76 @@ function MarcadoresRadar({
     };
   }, [map]);
 
-  const indice = useMemo<Supercluster<RadarProps>>(() => {
-    const idx = new Supercluster<RadarProps>({ radius: 64, maxZoom: 17, minPoints: 2 });
-    idx.load(
-      entidades.map((e) => ({
-        type: 'Feature' as const,
-        properties: { entity: e },
-        geometry: { type: 'Point' as const, coordinates: [e.lng, e.lat] as [number, number] },
-      })),
-    );
-    return idx;
-  }, [entidades]);
-
-  const clusters = useMemo(
-    () => indice.getClusters(vista.bbox, Math.round(vista.zoom)) as unknown as RadarFeature[],
-    [indice, vista],
+  // Desplazar pines que compartan posición geográfica exacta o casi idéntica (< 18m)
+  // para que NUNCA dos pines se pisen ni queden ocultos al acercarse.
+  const entidadesDesplazadas = useMemo(
+    () => separarEntidadesSuperpuestas(entidades),
+    [entidades],
   );
+
+  const indicesPorTipo = useMemo<Record<RadarEntityType, Supercluster<RadarProps>>>(() => {
+    const grupos: Record<RadarEntityType, RadarEntity[]> = {
+      cancha: [],
+      jugador: [],
+      desafio: [],
+      equipo: [],
+    };
+
+    for (const e of entidadesDesplazadas) {
+      if (grupos[e.type]) {
+        grupos[e.type].push(e);
+      }
+    }
+
+    const res = {} as Record<RadarEntityType, Supercluster<RadarProps>>;
+    const TIPOS: RadarEntityType[] = ['cancha', 'jugador', 'desafio', 'equipo'];
+    for (const tipo of TIPOS) {
+      const idx = new Supercluster<RadarProps>({ radius: 56, maxZoom: 16, minPoints: 2 });
+      idx.load(
+        grupos[tipo].map((e) => ({
+          type: 'Feature' as const,
+          properties: { entity: e },
+          geometry: { type: 'Point' as const, coordinates: [e.lng, e.lat] as [number, number] },
+        })),
+      );
+      res[tipo] = idx;
+    }
+    return res;
+  }, [entidadesDesplazadas]);
+
+  const marcadoresYClusters = useMemo(() => {
+    const z = Math.round(vista.zoom);
+    const resultado: { tipo: RadarEntityType; f: RadarFeature; idx: Supercluster<RadarProps> }[] = [];
+    const TIPOS: RadarEntityType[] = ['cancha', 'jugador', 'desafio', 'equipo'];
+
+    for (const tipo of TIPOS) {
+      const idx = indicesPorTipo[tipo];
+      if (!idx) continue;
+      const features = idx.getClusters(vista.bbox, z) as unknown as RadarFeature[];
+      for (const f of features) {
+        resultado.push({ tipo, f, idx });
+      }
+    }
+    return resultado;
+  }, [indicesPorTipo, vista]);
 
   return (
     <>
-      {clusters.map((f) => {
+      {marcadoresYClusters.map(({ tipo, f, idx }) => {
         const lng = f.geometry.coordinates[0]!;
         const lat = f.geometry.coordinates[1]!;
         if (esCluster(f)) {
           const clusterId = f.properties.cluster_id;
+          const count = f.properties.point_count;
           return (
             <Marker
-              key={`cluster-${clusterId}`}
+              key={`cluster-${tipo}-${clusterId}`}
               position={[lat, lng]}
-              icon={iconoCluster(indice, f)}
+              icon={iconoCluster(tipo, count)}
               eventHandlers={{
                 click: () => {
-                  const expansion = indice.getClusterExpansionZoom(clusterId);
-                  map.flyTo([lat, lng], Math.min(expansion, 18), { animate: true, duration: 0.6 });
+                  const expansion = idx.getClusterExpansionZoom(clusterId);
+                  map.flyTo([lat, lng], Math.min(expansion, 17), { animate: true, duration: 0.6 });
                 },
               }}
             />
@@ -577,13 +674,11 @@ export const MapaRadarUnificado: React.FC = () => {
   
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
-  const [mostrarModalDesafio, setMostrarModalDesafio] = useState(false);
-  const [equipoDesafioModal, setEquipoDesafioModal] = useState<EquipoEntity | null>(null);
 
   const [toastMessage, setToastMessage] = useState('');
   const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
 
-  // Auto-seleccionar equipo y abrir modal de desafío si vino por navegación o alerta push
+  // Auto-seleccionar equipo si vino por navegación o redirigir al chat de desafío
   useEffect(() => {
     const st = location.state as { equipoId?: string; abrirDesafio?: boolean } | null;
     if (st?.equipoId) {
@@ -604,8 +699,7 @@ export const MapaRadarUnificado: React.FC = () => {
           };
           setSeleccionado(equipoFormateado);
           if (st.abrirDesafio) {
-            setEquipoDesafioModal(equipoFormateado);
-            setMostrarModalDesafio(true);
+            abrirChatDesafio({ rival: equipoFormateado });
           }
         }
       }).catch(console.warn);
@@ -1047,6 +1141,13 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
         </div>
       </div>
 
+      {/* BANNER FLOTANTE DE SPONSORS / PUBLICIDAD NATIVA EN EL RADAR (OPCIÓN A) */}
+      {!seleccionado && (
+        <div className="absolute top-[4.5rem] sm:top-20 w-full flex justify-center z-20 pointer-events-none px-3 sm:px-4">
+          <BannerSponsorRadar />
+        </div>
+      )}
+
       {/* SELECTOR DE LOCALIDAD FALLBACK (Opcional, ya que ahora usa la ciudad del perfil, pero se mantiene como alternativa si quieren moverse) */}
       {geoLoc.isFallback && !usuario?.geo && (
         <div className="absolute top-20 w-full px-4 z-10 pointer-events-none">
@@ -1231,21 +1332,37 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 </div>
 
                 <p className="text-zinc-400 text-xs sm:text-sm mb-5 leading-relaxed px-2">
-                  Equipo que juega en tu zona. Podés sumarte a su plantel o desafiarlos a un partido amistoso.
+                  Equipo que juega en tu zona. Podés sumarte a su plantel o coordinar un partido en el chat de desafíos.
                 </p>
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (!usuario) { navigate('/login'); return; }
-                    if (seleccionado?.type === 'equipo') {
-                      setEquipoDesafioModal(seleccionado);
+                    let capId = seleccionado.captainId;
+                    if (!capId) {
+                      try {
+                        const eqData = await obtenerEquipoPorId(seleccionado.equipoId);
+                        if (eqData?.captainId) capId = eqData.captainId;
+                      } catch (e) {
+                        console.warn('Error obteniendo capitán del equipo:', e);
+                      }
                     }
-                    setMostrarModalDesafio(true);
+                    abrirChatDesafio({
+                      rival: {
+                        equipoId: seleccionado.equipoId,
+                        nombre: seleccionado.nombre,
+                        modalidad: seleccionado.modalidad,
+                        escudoUrl: seleccionado.escudoUrl,
+                        captainId: capId,
+                        divisionInfo: seleccionado.divisionInfo,
+                      },
+                    });
+                    setSeleccionado(null);
                   }}
                   className="w-full h-13 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 rounded-2xl font-black flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm shadow-[0_0_20px_rgba(245,158,11,0.35)] cursor-pointer"
                 >
-                  <Swords className="w-5 h-5" />
-                  Pactar Desafío Directo
+                  <MessageSquare className="w-5 h-5" />
+                  Ir al Chat para Desafiar
                 </button>
               </div>
             );
@@ -1327,10 +1444,18 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                     setToastMessage(
                       seleccionado.tipoDesafio === 'busqueda_jugador'
                         ? '¡Te sumaste a la convocatoria! Se le avisó al capitán 🧤'
-                        : '¡Aceptaste el desafío! Se le avisó al organizador ⚽'
+                        : '¡Aceptaste el desafío! Se abrió el chat para coordinar el partido ⚽'
                     );
                     setTimeout(() => setToastMessage(''), 4000);
                     setSeleccionado(null);
+                    if (seleccionado.tipoDesafio !== 'busqueda_jugador') {
+                      abrirChatDesafio({
+                        rival: {
+                          equipoId: seleccionado.equipoId,
+                          nombre: seleccionado.equipo,
+                        },
+                      });
+                    }
                   } catch (err: any) {
                     console.error('Error enviando aceptación del desafío:', err);
                     setToastMessage('No se pudo enviar el aviso al organizador.');
@@ -1406,39 +1531,6 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           )}
 
         </div>
-      )}
-
-      {/* Modal Pactar Desafío Rápido entre Capitanes */}
-      {mostrarModalDesafio && (equipoDesafioModal || (seleccionado?.type === 'equipo' ? seleccionado : null)) && usuario && (
-        (() => {
-          const eqTarget = (equipoDesafioModal || seleccionado) as EquipoEntity;
-          return (
-            <ModalProponerDesafio
-              abierto={mostrarModalDesafio}
-              onCerrar={() => {
-                setMostrarModalDesafio(false);
-                setEquipoDesafioModal(null);
-              }}
-              rival={{
-                equipoId: eqTarget.equipoId,
-                nombre: eqTarget.nombre,
-                modalidad: eqTarget.modalidad,
-                escudoUrl: eqTarget.escudoUrl,
-                captainId: eqTarget.captainId,
-                divisionInfo: eqTarget.divisionInfo,
-              }}
-              usuarioActual={{
-                uid: usuario.uid,
-                nombre: usuario.nombre,
-                apellido: usuario.apellido,
-              }}
-              onDesafioEnviado={(mensaje) => {
-                setToastMessage(mensaje);
-                setTimeout(() => setToastMessage(''), 4500);
-              }}
-            />
-          );
-        })()
       )}
     </div>
   );

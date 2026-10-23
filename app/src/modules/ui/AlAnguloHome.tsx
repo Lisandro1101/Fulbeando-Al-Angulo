@@ -10,6 +10,7 @@ import { notificarAceptacionDesafio } from '@/modules/teams/teamService';
 import { Feed } from '@/modules/comunidad/componentes/Feed';
 import { Toast } from '@/modules/ui/overlays';
 import { Users, Search, Calendar, Shield, Swords, ArrowRight, MessageSquare, MapPin, PlusCircle, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type TabHome = 'muro' | 'partidos' | 'equipos';
 
@@ -79,7 +80,7 @@ export default function AlAnguloHome() {
 
   if (cargandoSesion || cargandoDatos) {
     return (
-      <div className="flex h-full items-center justify-center bg-canvas text-emerald-500 font-bold gap-3">
+      <div className="flex h-full items-center justify-center bg-transparent text-emerald-600 font-bold gap-3">
         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
         <span>Cargando comunidad...</span>
       </div>
@@ -121,27 +122,32 @@ export default function AlAnguloHome() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-canvas font-sans text-white overflow-hidden relative">
+    <div className="flex flex-col h-full bg-transparent font-sans text-slate-800 overflow-hidden relative">
       <Toast mensaje={toastMensaje} />
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 pb-28">
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 pb-28"
+      >
         
         {/* HEADER BÚSQUEDA Y PESTAÑAS PRINCIPALES */}
-        <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md pt-2 pb-3 border-b border-zinc-800 space-y-3">
+        <div className="sticky top-0 z-20 bg-[#F8FAFC]/90 backdrop-blur-md pt-2 pb-3 border-b border-slate-200/80 space-y-3">
           {/* Input de Búsqueda */}
-          <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 focus-within:border-emerald-500/50 transition">
-            <Search className="w-5 h-5 text-zinc-500 shrink-0" />
+          <div className="flex items-center gap-3 bg-white border border-slate-200/90 rounded-xl px-4 py-2.5 focus-within:border-emerald-500/50 shadow-sm transition">
+            <Search className="w-5 h-5 text-slate-400 shrink-0" />
             <input 
               aria-label="Buscador de comunidad"
               type="text" 
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder={placeholderBusqueda()} 
-              className="bg-transparent border-none outline-none w-full text-zinc-200 placeholder-zinc-500 text-sm"
+              className="bg-transparent border-none outline-none w-full text-slate-800 placeholder-slate-400 text-sm"
             />
             {busqueda && (
               <button 
                 onClick={() => setBusqueda('')}
-                className="text-xs text-zinc-500 hover:text-zinc-300 font-bold cursor-pointer"
+                className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
               >
                 Limpiar
               </button>
@@ -149,52 +155,58 @@ export default function AlAnguloHome() {
           </div>
 
           {/* Pestañas Principales: Muro / Partidos & Desafíos / Equipos */}
-          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1 shadow-sm">
-            <button
+          <div className="flex bg-slate-200/80 border border-slate-300/80 rounded-xl p-1 gap-1 shadow-inner">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('muro')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 tabActiva === 'muro'
-                  ? 'bg-emerald-500 text-zinc-950 shadow-md font-black'
-                  : 'text-zinc-200 hover:text-white font-bold'
+                  ? 'bg-emerald-600 text-white shadow-md font-black'
+                  : 'text-slate-700 hover:text-slate-950 font-bold'
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5" />
               <span>Muro Social</span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('partidos')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 tabActiva === 'partidos'
                   ? 'bg-amber-500 text-zinc-950 shadow-md font-black'
-                  : 'text-zinc-200 hover:text-white font-bold'
+                  : 'text-slate-700 hover:text-slate-950 font-bold'
               }`}
             >
               <Swords className="w-3.5 h-3.5" />
               <span>Partidos</span>
               {partidos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'partidos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-zinc-800 text-amber-300 border border-amber-500/30'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'partidos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-slate-300 text-amber-900 border border-amber-500/30 font-bold'}`}>
                   {partidos.length}
                 </span>
               )}
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('equipos')}
               className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 tabActiva === 'equipos'
-                  ? 'bg-emerald-500 text-zinc-950 shadow-md font-black'
-                  : 'text-zinc-200 hover:text-white font-bold'
+                  ? 'bg-emerald-600 text-white shadow-md font-black'
+                  : 'text-slate-700 hover:text-slate-950 font-bold'
               }`}
             >
               <Shield className="w-3.5 h-3.5" />
               <span>Equipos</span>
               {equipos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'equipos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-zinc-800 text-emerald-300 border border-emerald-500/30'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'equipos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-slate-300 text-emerald-900 border border-emerald-500/30 font-bold'}`}>
                   {equipos.length}
                 </span>
               )}
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -210,20 +222,22 @@ export default function AlAnguloHome() {
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
               <div>
-                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <Swords className="w-5 h-5 text-amber-500" />
                   Partidos y Desafíos
                 </h2>
-                <p className="text-xs text-zinc-400">Equipos buscando rival o completando el plantel</p>
+                <p className="text-xs text-slate-600 font-semibold">Equipos buscando rival o completando el plantel</p>
               </div>
 
-              <button 
+              <motion.button 
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => navigate('/partidos')}
-                className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black py-2 px-3.5 rounded-xl transition cursor-pointer self-start sm:self-auto"
+                className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black py-2 px-3.5 rounded-xl transition cursor-pointer self-start sm:self-auto shadow-md"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 Lanzar Desafío
-              </button>
+              </motion.button>
             </div>
 
             {/* Chips de filtro por modalidad */}
@@ -237,17 +251,19 @@ export default function AlAnguloHome() {
               ].map(({ id, label }) => {
                 const activo = filtroModalidad === id;
                 return (
-                  <button
+                  <motion.button
                     key={id}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setFiltroModalidad(id)}
                     className={`text-xs font-bold py-1.5 px-3 rounded-full border transition-all shrink-0 cursor-pointer ${
                       activo
                         ? 'bg-amber-500 border-amber-400 text-zinc-950 font-black shadow-sm'
-                        : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/90 text-white font-bold'
+                        : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800 font-bold shadow-sm'
                     }`}
                   >
                     {label}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -269,7 +285,15 @@ export default function AlAnguloHome() {
             ) : (
               <div className="space-y-3">
                 {partidosFiltrados.map(p => (
-                  <div key={p.id} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition">
+                  <motion.div 
+                    key={p.id} 
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                    whileHover={{ y: -2, scale: 1.005 }}
+                    whileTap={{ scale: 0.995 }}
+                    className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition shadow-sm"
+                  >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-zinc-100">{p.equipoNombre}</span>
@@ -300,7 +324,9 @@ export default function AlAnguloHome() {
                           Busca {p.posicionBuscada}
                         </span>
                       )}
-                      <button 
+                      <motion.button 
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={async () => {
                           if (!usuario) {
                             navigate('/login');
@@ -331,12 +357,12 @@ export default function AlAnguloHome() {
                             setTimeout(() => setToastMensaje(null), 3000);
                           }
                         }}
-                        className="text-xs bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2 px-3.5 rounded-lg transition active:scale-95 cursor-pointer"
+                        className="text-xs bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2 px-3.5 rounded-lg transition cursor-pointer shadow-md"
                       >
                         Anotarme
-                      </button>
+                      </motion.button>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -348,11 +374,11 @@ export default function AlAnguloHome() {
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
               <div>
-                <h2 className="text-lg font-black text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-emerald-500" />
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-600" />
                   Equipos en la comunidad
                 </h2>
-                <p className="text-xs text-zinc-400">Clubes y combinados buscando jugadores o rivales</p>
+                <p className="text-xs text-slate-600 font-semibold">Clubes y combinados buscando jugadores o rivales</p>
               </div>
               <button 
                 onClick={() => navigate('/equipo')}
@@ -380,7 +406,15 @@ export default function AlAnguloHome() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {equiposFiltrados.map(e => (
-                  <div key={e.id} className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 flex justify-between items-center transition">
+                  <motion.div 
+                    key={e.id} 
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                    whileHover={{ y: -2, scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 flex justify-between items-center transition shadow-sm"
+                  >
                     <div className="flex items-center gap-3 min-w-0">
                       {e.shieldUrl ? (
                         <img src={e.shieldUrl} alt={e.name} className="w-11 h-11 rounded-full object-cover bg-zinc-800 border border-zinc-700 shrink-0" />
@@ -396,20 +430,22 @@ export default function AlAnguloHome() {
                         </p>
                       </div>
                     </div>
-                    <button 
+                    <motion.button 
+                      whileHover={{ scale: 1.06 }}
+                      whileTap={{ scale: 0.94 }}
                       onClick={() => navigate('/equipo')}
-                      className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold py-2 px-3.5 rounded-lg transition shrink-0 cursor-pointer"
+                      className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold py-2 px-3.5 rounded-lg transition shrink-0 cursor-pointer shadow-sm"
                     >
                       Ver
-                    </button>
-                  </div>
+                    </motion.button>
+                  </motion.div>
                 ))}
               </div>
             )}
           </section>
         )}
 
-      </div>
+      </motion.div>
     </div>
   );
 }

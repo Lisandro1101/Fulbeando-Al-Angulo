@@ -28,7 +28,10 @@ service cloud.firestore {
     function isSuperadmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && getUserData().get('rol', 'jugador') == 'superadmin';
+        && (
+          request.auth.token.email in ['lisandrodileva@gmail.com', 'superadmin@fulbeando.com']
+          || getUserData().get('rol', 'jugador') == 'superadmin'
+        );
     }
 
     /** Dueno del predio indicado (o superadmin). */
@@ -514,7 +517,8 @@ match /comprobantes/{turnoId} {
                             )
                        );
 
-      allow delete: if false;
+      allow delete: if isSignedIn()
+                    && (resource.data.captainId == request.auth.uid || isSuperadmin());
     }
 
     match /challenges/{challengeId} {
@@ -597,6 +601,13 @@ match /comprobantes/{turnoId} {
 
     // Grafo social. El id es determinista (`follower_followed`): seguir dos veces
     // es idempotente y dejar de seguir es un `delete` directo.
+    // Publicidades y Patrocinios (Sponsors en Muro, Tercer Tiempo y Radar)
+    match /publicidades/{anuncioId} {
+      allow read: if true;
+      allow create, delete: if isSignedIn();
+      allow update: if isSignedIn();
+    }
+
     match /follows/{followId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()

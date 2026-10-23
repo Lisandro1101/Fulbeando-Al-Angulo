@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
@@ -8,9 +7,7 @@ const raiz = document.getElementById('root')
 if (!raiz) throw new Error('Falta el nodo #root en index.html')
 
 createRoot(raiz).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <App />
 )
 
 import { appEnv } from '@/core/config'
@@ -33,10 +30,16 @@ if ('serviceWorker' in navigator) {
       window.location.reload()
     })
 
-    registerSW({
+    const updateSW = registerSW({
       immediate: true,
+      onNeedRefresh() {
+        void updateSW(true)
+      },
       onRegisteredSW(_swUrl, registration) {
         if (!registration) return
+
+        // 0. Consultar de inmediato si hay una nueva versión disponible
+        registration.update().catch(console.error)
 
         // 1. Consultar si hay nueva versión cada 30 minutos
         setInterval(() => {

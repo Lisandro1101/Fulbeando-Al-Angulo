@@ -46,12 +46,26 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
 
   if (!abierto) return null;
 
-  const notificacionesFiltradas = notificaciones.filter((n) => {
-    if (filtro === 'pendientes') return n.estado === 'pendiente';
-    if (filtro === 'equipos') return n.tipo === 'invitacion_equipo';
-    if (filtro === 'partidos') return n.tipo === 'desafio_equipo' || n.tipo === 'desafio_aceptado' || n.tipo === 'postulacion_partido';
-    return true;
-  });
+  const notificacionesFiltradas = React.useMemo(() => {
+    const vistos = new Set<string>();
+    return notificaciones.filter((n) => {
+      const clave = n.desafioId || n.pactoPartido?.id || n.id;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+
+      if (filtro === 'pendientes') return n.estado === 'pendiente';
+      if (filtro === 'equipos') return n.tipo === 'invitacion_equipo';
+      if (filtro === 'partidos') {
+        return (
+          n.tipo === 'desafio_equipo' ||
+          n.tipo === 'desafio_aviso_miembro' ||
+          n.tipo === 'desafio_aceptado' ||
+          n.tipo === 'postulacion_partido'
+        );
+      }
+      return true;
+    });
+  }, [notificaciones, filtro]);
 
   const noLeidas = notificaciones.filter((n) => !n.leida);
 
@@ -282,6 +296,8 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                         <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 truncate">
                           {tipo === 'desafio_equipo'
                             ? '⚽ Desafío de Partido'
+                            : tipo === 'desafio_aviso_miembro'
+                            ? '⚽ Desafío para tu Equipo'
                             : tipo === 'desafio_aceptado'
                             ? '🏆 Desafío Aceptado'
                             : tipo === 'postulacion_partido'
@@ -303,7 +319,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
 
                       <p className="text-xs text-white font-bold leading-snug mb-1">
                         {notif.mensaje || (
-                          tipo === 'desafio_equipo'
+                          tipo === 'desafio_equipo' || tipo === 'desafio_aviso_miembro'
                             ? `${notif.equipoNombre} desafió a tu equipo a un partido.`
                             : `${emisor} te invitó a unirte a ${notif.equipoNombre}.`
                         )}
@@ -342,7 +358,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                             </>
                           )}
 
-                          {tipo === 'desafio_equipo' && (
+                          {(tipo === 'desafio_equipo' || tipo === 'desafio_aviso_miembro') && (
                             <>
                               {onAbrirChatDesafio && (
                                 <button
@@ -354,26 +370,30 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                                   className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-white font-bold text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer border border-zinc-700"
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" />
-                                  Abrir Chat & Chips
+                                  {tipo === 'desafio_aviso_miembro' ? 'Ver Chat & Desafío' : 'Abrir Chat & Chips'}
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                disabled={procesandoId === notif.id}
-                                onClick={() => handleAceptarDesafio(notif)}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
-                              >
-                                {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                Pactar
-                              </button>
-                              <button
-                                type="button"
-                                disabled={procesandoId === notif.id}
-                                onClick={() => handleRechazarDesafio(notif)}
-                                className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition cursor-pointer"
-                              >
-                                Rechazar
-                              </button>
+                              {tipo === 'desafio_equipo' && !notif.esAvisoMiembro && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={procesandoId === notif.id}
+                                    onClick={() => handleAceptarDesafio(notif)}
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
+                                  >
+                                    {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                    Pactar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={procesandoId === notif.id}
+                                    onClick={() => handleRechazarDesafio(notif)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition cursor-pointer"
+                                  >
+                                    Rechazar
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
 

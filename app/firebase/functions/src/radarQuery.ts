@@ -143,6 +143,7 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         modalidad: str(raw.modalidadBase),
         cantidadJugadores: members.length,
         escudoUrl: strOrNull(raw.shieldUrl),
+        captainId: str(raw.captainId) || undefined,
         fairPlayScore,
         stats,
       }

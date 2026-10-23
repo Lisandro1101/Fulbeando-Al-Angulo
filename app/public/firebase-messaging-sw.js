@@ -1,6 +1,12 @@
-importScripts('/__/firebase/9.1.3/firebase-app-compat.js');
-importScripts('/__/firebase/9.1.3/firebase-messaging-compat.js');
-importScripts('/__/firebase/init.js');
+// Service Worker Build Version: 2026-10-23T22-06-49-427Z
+const SW_VERSION = '2026-10-23T22-06-49-427Z';
+
+try {
+  importScripts('https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/9.1.3/firebase-messaging-compat.js');
+} catch (e) {
+  console.warn('[firebase-messaging-sw.js] No se pudieron cargar los scripts de Firebase:', e);
+}
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -34,12 +34,19 @@ export const BandejaChatsDesafio: React.FC<BandejaChatsDesafioProps> = ({
 
   if (!abierto) return null;
 
-  const desafiosFiltrados = desafios.filter((d) => {
-    const estado = d.pactoPartido?.estado;
-    if (filtro === 'pactados') return estado === 'pactado';
-    if (filtro === 'pendientes') return estado === 'propuesto' || estado === 'contraoferta';
-    return true;
-  });
+  const desafiosFiltrados = React.useMemo(() => {
+    const vistos = new Set<string>();
+    return desafios.filter((d) => {
+      const clave = d.desafioId || d.pactoPartido?.id || d.id;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+
+      const estado = d.pactoPartido?.estado;
+      if (filtro === 'pactados') return estado === 'pactado';
+      if (filtro === 'pendientes') return estado === 'propuesto' || estado === 'contraoferta';
+      return true;
+    });
+  }, [desafios, filtro]);
 
   return (
     <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
@@ -144,8 +151,9 @@ export const BandejaChatsDesafio: React.FC<BandejaChatsDesafioProps> = ({
 
               const pings = pacto?.pingsTacticos || [];
               const ultimoPing = pings[pings.length - 1];
-              const esNoLeido = !desafio.leida && desafio.destinatarioUid === usuarioUid;
               const yaPactado = pacto?.estado === 'pactado';
+              const ultimoEmisor = ultimoPing?.emisorUid || desafio.ultimoEmisorUid || desafio.remitenteUid;
+              const esNoLeido = !desafio.leida && ultimoEmisor !== usuarioUid && !yaPactado;
 
               const textoSnippet = ultimoPing
                 ? `${ultimoPing.emisorUid === usuarioUid ? 'Vos: ' : ''}${ultimoPing.texto}`

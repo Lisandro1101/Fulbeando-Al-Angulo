@@ -19,3 +19,4 @@ export * from './calculoMedia'
 // grafo de seguimiento entre jugadores.
 export * from './publicacion'
 export * from './follow'
+export * from './publicidad'

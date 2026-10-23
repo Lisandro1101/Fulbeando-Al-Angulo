@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, createElement, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
-import type { Actor, Usuario } from '@/domain'
+import { esEmailSuperadmin, type Actor, type Usuario } from '@/domain'
 import { asegurarUsuario, obtenerUsuario } from '@/modules/usuarios/repositorio'
 import { idsDePredios } from '@/modules/predios/repositorio'
 import { getRedirectResult } from 'firebase/auth'
-import { auth } from '@/core/firebase'
+import { doc, updateDoc } from 'firebase/firestore'
+import { auth, db } from '@/core/firebase'
 import { consumirFechaNacimientoDeAlta, observarSesion } from './servicio'
 
 export interface EstadoSesion {
@@ -47,11 +48,13 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     try {
       const u = await obtenerUsuario(currentUser.uid)
       if (u) {
-        const prediosIds = u.rol === 'dueno_predio' ? await idsDePredios(u.uid) : []
+        const esSuper = esEmailSuperadmin(currentUser.email)
+        const rolEfectivo = esSuper ? 'superadmin' : u.rol
+        const prediosIds = rolEfectivo === 'dueno_predio' ? await idsDePredios(u.uid) : []
         setEstado((prev) => ({
           ...prev,
-          usuario: u,
-          actor: { uid: u.uid, rol: u.rol, prediosIds },
+          usuario: { ...u, rol: rolEfectivo },
+          actor: { uid: u.uid, rol: rolEfectivo, prediosIds },
         }))
       }
     } catch (e) {
@@ -72,7 +75,15 @@ export function SesionProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      // Marcar cargando: true inmediatamente mientras obtenemos/aseguramos el perfil en Firestore
+      setEstado((prev) => ({
+        ...prev,
+        cargando: true,
+        user,
+      }))
+
       try {
+        const esSuper = esEmailSuperadmin(user.email)
         // Una sola lectura: `asegurarUsuario` devuelve el doc si ya existia, y
         // si hay que crearlo lo escribe con la fecha de nacimiento del registro
         // en ese mismo batch (cero escrituras extra).
@@ -83,19 +94,28 @@ export function SesionProvider({ children }: { children: ReactNode }) {
             apellido: user.displayName?.split(' ').slice(1).join(' ') ?? '',
             email: user.email ?? '',
           },
-          'invitado',
+          esSuper ? 'superadmin' : 'invitado',
           consumirFechaNacimientoDeAlta(),
         )
 
-        // Solo `dueno_predio`: el rol 'dueno' del modelo legacy ya no existe en `Rol`.
-        const prediosIds = usuario?.rol === 'dueno_predio' ? await idsDePredios(user.uid) : []
+        // Si el usuario pertenece a la lista de superadmins y su doc aún no lo refleja,
+        // sincronizamos inmediatamente el rol en Firestore y en memoria.
+        if (usuario && esSuper && usuario.rol !== 'superadmin') {
+          usuario.rol = 'superadmin'
+          updateDoc(doc(db, 'usuarios', user.uid), { rol: 'superadmin' }).catch((e) =>
+            console.warn('Auto-asignación de superadmin en Firestore:', e),
+          )
+        }
+
+        const rolEfectivo = (usuario && esSuper) ? 'superadmin' : usuario?.rol
+        const prediosIds = rolEfectivo === 'dueno_predio' ? await idsDePredios(user.uid) : []
 
         if (montado) {
           setEstado({
             cargando: false,
             user,
-            usuario,
-            actor: usuario ? { uid: usuario.uid, rol: usuario.rol, prediosIds } : null,
+            usuario: usuario ? { ...usuario, rol: rolEfectivo ?? 'invitado' } : null,
+            actor: usuario ? { uid: usuario.uid, rol: rolEfectivo ?? 'invitado', prediosIds } : null,
             error: null,
             refrescar: recargar,
           })

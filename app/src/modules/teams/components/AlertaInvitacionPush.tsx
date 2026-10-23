@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Shield, Check, X, Loader2, Trophy, UserPlus, Swords, Clock, MapPin, MessageSquareQuote, ArrowRightLeft } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
@@ -8,6 +8,8 @@ import {
   responderDesafioEquipo,
   unirseAEquipo,
   incorporarRefuerzoAEquipo,
+  abrirChatDesafio,
+  marcarDesafioComoLeido,
   type InvitacionEquipo,
 } from '@/modules/teams/teamService';
 import { confirmarSuplente, rechazarSuplente } from '@/modules/alertas/repositorio';
@@ -29,6 +31,11 @@ export const AlertaInvitacionPush: React.FC = () => {
   const [toastExito, setToastExito] = useState<string | null>(null);
   const [modoContraoferta, setModoContraoferta] = useState(false);
   const [contraofertaSeleccionada, setContraofertaSeleccionada] = useState(CHIPS_CONTRAOFERTA[0]);
+  const [cerradasIds, setCerradasIds] = useState<Set<string>>(new Set());
+
+  // Registro de notificaciones ya disparadas para evitar loops y spam al recargar o al chatear
+  const notificadosRef = useRef<Set<string>>(new Set());
+  const primeraCargaRef = useRef<boolean>(true);
 
   useEffect(() => {
     if (!sesion.user) {
@@ -36,42 +43,117 @@ export const AlertaInvitacionPush: React.FC = () => {
       return;
     }
 
-    const unsub = escucharInvitacionesPendientes(sesion.user.uid, (lista) => {
-      const masReciente = lista[0];
-      if (masReciente) {
-        const nombreEmisor = masReciente.remitenteNombre || masReciente.capitanNombre || 'Un jugador';
+    const unsub = escucharInvitacionesPendientes(sesion.user.uid, (listaRaw) => {
+      // Deduplicar invitaciones recibidas por id de desafío para evitar modales apilados idénticos
+      const mapa = new Map<string, InvitacionEquipo>();
+      for (const inv of listaRaw) {
+        const clave = inv.desafioId || inv.pactoPartido?.id || inv.id;
+        if (!mapa.has(clave)) {
+          mapa.set(clave, inv);
+        }
+      }
+      const lista = Array.from(mapa.values());
+
+      if (primeraCargaRef.current) {
+        // En la primera carga, registrar los IDs existentes para no disparar spam push al entrar o recargar
+        lista.forEach((inv) => {
+          const ultimoPingTime = inv.pactoPartido?.pingsTacticos?.slice(-1)[0]?.fecha || 0;
+          notificadosRef.current.add(`${inv.id}_${ultimoPingTime}`);
+        });
+        primeraCargaRef.current = false;
+        setInvitaciones(lista);
+        return;
+      }
+
+      // En actualizaciones posteriores, verificar si hay una nueva notificación entrante dirigida al usuario
+      for (const inv of lista) {
+        // No notificar al propio usuario por sus propias acciones
+        if (inv.remitenteUid === sesion.user.uid) continue;
+
+        const ultimoPing = inv.pactoPartido?.pingsTacticos?.slice(-1)[0];
+        const ultimoPingTime = ultimoPing?.fecha || 0;
+        const claveNotif = `${inv.id}_${ultimoPingTime}`;
+
+        // Si ya notificamos esta versión o el último mensaje fue del propio usuario, omitir
+        if (notificadosRef.current.has(claveNotif)) continue;
+        if (ultimoPing && ultimoPing.emisorUid === sesion.user.uid) {
+          notificadosRef.current.add(claveNotif);
+          continue;
+        }
+
+        notificadosRef.current.add(claveNotif);
+
+        // Si llegó un nuevo ping o actualización del rival, permitir que vuelva a mostrarse
+        setCerradasIds((prev) => {
+          if (!prev.has(inv.id)) return prev;
+          const next = new Set(prev);
+          next.delete(inv.id);
+          if (inv.desafioId) next.delete(inv.desafioId);
+          return next;
+        });
+
+        const nombreEmisor = inv.remitenteNombre || inv.capitanNombre || 'Un jugador';
         let tituloNotif = '¡Alerta de Partido en Fulbeando!';
         let cuerpoNotif = `${nombreEmisor} te envió una notificación.`;
 
-        if (masReciente.tipo === 'desafio_equipo') {
-          tituloNotif = '¡Desafío de Partido! ⚽';
-          cuerpoNotif = masReciente.mensaje || `${masReciente.equipoNombre} desafió a tu equipo a un partido.`;
-        } else if (masReciente.tipo === 'desafio_aceptado') {
+        if (inv.tipo === 'desafio_equipo' || inv.tipo === 'desafio_aviso_miembro') {
+          tituloNotif = ultimoPing ? `💬 Nuevo ping de ${ultimoPing.emisorNombre || 'Rival'}` : '¡Desafío de Partido! ⚽';
+          cuerpoNotif = ultimoPing ? ultimoPing.texto : (inv.mensaje || `${inv.equipoNombre} desafió a tu equipo a un partido.`);
+        } else if (inv.tipo === 'desafio_aceptado') {
           tituloNotif = '¡Aceptaron tu desafío de partido! ⚽';
-          cuerpoNotif = masReciente.mensaje || `${nombreEmisor} aceptó el desafío para jugar con ${masReciente.equipoNombre}.`;
-        } else if (masReciente.tipo === 'postulacion_partido') {
+          cuerpoNotif = inv.mensaje || `${nombreEmisor} aceptó el desafío para jugar con ${inv.equipoNombre}.`;
+        } else if (inv.tipo === 'postulacion_partido') {
           tituloNotif = '¡Nuevo jugador para tu partido! 🏃';
-          cuerpoNotif = masReciente.mensaje || `${nombreEmisor} quiere sumarse como suplente ese día.`;
+          cuerpoNotif = inv.mensaje || `${nombreEmisor} quiere sumarse como suplente ese día.`;
         } else {
           tituloNotif = '¡Te invitaron a un equipo en Fulbeando!';
-          cuerpoNotif = `${nombreEmisor} te invitó a unirte a ${masReciente.equipoNombre}. ¡Entrá a responder!`;
+          cuerpoNotif = `${nombreEmisor} te invitó a unirte a ${inv.equipoNombre}. ¡Entrá a responder!`;
         }
 
         dispararNotificacionPushLocal(tituloNotif, {
           body: cuerpoNotif,
-          icon: masReciente.equipoEscudoUrl || '/pwa-192x192.png',
+          icon: inv.equipoEscudoUrl || '/pwa-192x192.png',
         });
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
           navigator.vibrate?.([120, 80, 120]);
         }
+        break; // Notificar 1 por snapshot
       }
+
       setInvitaciones(lista);
     });
 
     return () => unsub();
   }, [sesion.user]);
 
-  const invitacionActual = invitaciones[0];
+  const invitacionesVisibles = invitaciones.filter(
+    (inv) => !cerradasIds.has(inv.id) && !cerradasIds.has(inv.desafioId || '')
+  );
+  const invitacionActual = invitacionesVisibles[0];
+
+  const handleCerrar = () => {
+    const target = invitacionActual;
+    if (!target) return;
+    const idRaiz = target.desafioId || target.pactoPartido?.id || target.id;
+    setCerradasIds((prev) => {
+      const next = new Set(prev);
+      next.add(target.id);
+      next.add(idRaiz);
+      return next;
+    });
+    setModoContraoferta(false);
+    marcarDesafioComoLeido(target.id).catch(() => {});
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && invitacionActual) {
+        handleCerrar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [invitacionActual]);
 
   if (!sesion.user || !invitacionActual) {
     return <Toast mensaje={toastExito} />;
@@ -89,6 +171,9 @@ export const AlertaInvitacionPush: React.FC = () => {
         await responderDesafioEquipo(invitacionActual.id, 'pactado');
         setToastExito(`¡Partido pactado contra ${invitacionActual.equipoNombre}! ⚽ Agendado en Mi Equipo`);
         setTimeout(() => setToastExito(null), 4000);
+        navigate('/equipo');
+      } else if (tipo === 'desafio_aviso_miembro') {
+        await responderInvitacion(invitacionActual.id, 'aceptada').catch(() => {});
         navigate('/equipo');
       } else if (tipo === 'invitacion_equipo') {
         await unirseAEquipo(invitacionActual.equipoId, sesion.user.uid);
@@ -173,8 +258,22 @@ export const AlertaInvitacionPush: React.FC = () => {
       <Toast mensaje={toastExito} />
 
       {/* Alerta Push Modal Interactivo */}
-      <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+      <div
+        className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) handleCerrar();
+        }}
+      >
         <div role="dialog" aria-modal="true" aria-label="Alerta de partido" className="relative w-full max-w-sm bg-zinc-900 border-2 border-amber-500/80 rounded-3xl p-5 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-slide-up text-center">
+          {/* Botón Cerrar (X) superior */}
+          <button
+            type="button"
+            onClick={handleCerrar}
+            aria-label="Cerrar alerta"
+            className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white bg-zinc-800/60 hover:bg-zinc-800 rounded-full transition-colors cursor-pointer z-10"
+          >
+            <X className="w-4 h-4" />
+          </button>
           
           {/* Header Push Alert Badge */}
           <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider mb-4 animate-pulse">
@@ -330,6 +429,8 @@ export const AlertaInvitacionPush: React.FC = () => {
                     <Check className="w-5 h-5" />
                     {tipo === 'desafio_equipo'
                       ? 'Aceptar Desafío (Cerrar Partido)'
+                      : tipo === 'desafio_aviso_miembro'
+                      ? 'Ver en Mi Equipo'
                       : tipo === 'invitacion_equipo'
                       ? 'Aceptar y Unirme'
                       : 'Confirmar Jugador'}
@@ -337,17 +438,12 @@ export const AlertaInvitacionPush: React.FC = () => {
                 )}
               </button>
 
-              {tipo === 'desafio_equipo' && (
+              {(tipo === 'desafio_equipo' || tipo === 'desafio_aviso_miembro') && (
                 <>
                   <button
                     type="button"
                     onClick={() => {
-                      navigate('/radar', {
-                        state: {
-                          equipoId: invitacionActual.equipoId,
-                          abrirDesafio: true,
-                        },
-                      });
+                      abrirChatDesafio({ desafio: invitacionActual });
                     }}
                     className="w-full flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
                   >
@@ -355,26 +451,37 @@ export const AlertaInvitacionPush: React.FC = () => {
                     Abrir Chat & Chips del Desafío
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setModoContraoferta(true)}
-                    disabled={Boolean(procesandoId)}
-                    className="w-full flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-800 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700/60 transition-all active:scale-95 text-xs cursor-pointer"
-                  >
-                    <ArrowRightLeft className="w-3.5 h-3.5" />
-                    Contraoferta Rápida
-                  </button>
+                  {tipo === 'desafio_equipo' && (
+                    <button
+                      type="button"
+                      onClick={() => setModoContraoferta(true)}
+                      disabled={Boolean(procesandoId)}
+                      className="w-full flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-800 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700/60 transition-all active:scale-95 text-xs cursor-pointer"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      Contraoferta Rápida
+                    </button>
+                  )}
                 </>
               )}
 
-              <button
-                onClick={handleRechazar}
-                disabled={Boolean(procesandoId)}
-                className="w-full flex items-center justify-center gap-1.5 bg-transparent hover:bg-zinc-800/50 text-zinc-400 hover:text-white font-bold py-2 rounded-xl transition-all active:scale-95 text-xs disabled:opacity-60 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-                {tipo === 'desafio_equipo' ? 'Rechazar Desafío' : 'Descartar'}
-              </button>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCerrar}
+                  className="flex-1 py-2 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRechazar}
+                  disabled={Boolean(procesandoId)}
+                  className="flex-1 py-2 bg-transparent hover:bg-rose-500/10 text-zinc-400 hover:text-rose-400 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-60 cursor-pointer"
+                >
+                  {tipo === 'desafio_equipo' ? 'Rechazar' : 'Descartar'}
+                </button>
+              </div>
             </div>
           )}
 

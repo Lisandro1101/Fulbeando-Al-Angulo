@@ -57,6 +57,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cacheId: `fulbeando-${Date.now()}`,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallbackDenylist: [/^\/__/],
         importScripts: ['/firebase-messaging-sw.js'],

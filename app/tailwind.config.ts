@@ -10,9 +10,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Paleta base dark para la app con variantes
+        // Paleta base para la app con variantes
         canvas: {
-          DEFAULT: '#0B0F19', // Fondo base dark de la app
+          DEFAULT: '#F8FAFC', // Fondo base light/degradé de la app
           raised: '#111827',  // Card y panel oscuro
           sunken: '#070B12',  // Fondo profundo
           light: '#FFFFFF',

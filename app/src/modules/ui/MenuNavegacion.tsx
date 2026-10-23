@@ -1,9 +1,21 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Map as MapIcon, Home, Calendar, User, Building, Shield, Settings } from 'lucide-react';
+import { Map as MapIcon, Home, Calendar, User, Building, Shield, Settings, Bell, MessageSquare } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 
-export const MenuNavegacion: React.FC = () => {
+export interface MenuNavegacionProps {
+  onAbrirNotificaciones?: () => void;
+  onAbrirChats?: () => void;
+  notificacionesNoLeidas?: number;
+  chatsNoLeidos?: number;
+}
+
+export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
+  onAbrirNotificaciones,
+  onAbrirChats,
+  notificacionesNoLeidas = 0,
+  chatsNoLeidos = 0,
+}) => {
   const location = useLocation();
   const { usuario } = useSesion();
 
@@ -85,6 +97,57 @@ export const MenuNavegacion: React.FC = () => {
               <span className="text-[11px] md:text-sm font-bold">Perfil</span>
             </NavLink>
           </>
+        )}
+
+        {/* Accesos a Notificaciones y Mensajes en Desktop (PC) */}
+        {(onAbrirNotificaciones || onAbrirChats) && (
+          <div className="hidden md:flex flex-col w-full gap-1 pt-3 mt-2 border-t border-[#4c24b2]/40">
+            {onAbrirNotificaciones && (
+              <button
+                type="button"
+                onClick={onAbrirNotificaciones}
+                className="flex items-center gap-3 transition-all w-full px-4 py-2.5 rounded-2xl cursor-pointer text-indigo-200/80 hover:text-white hover:bg-white/10 font-medium text-left group"
+              >
+                <div className="relative">
+                  <Bell className="w-5 h-5 shrink-0 text-amber-400 group-hover:scale-110 transition-transform" />
+                  {notificacionesNoLeidas > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[18px] h-4 px-1 bg-amber-500 text-zinc-950 text-[10px] font-black rounded-full flex items-center justify-center shadow">
+                      {notificacionesNoLeidas > 9 ? '9+' : notificacionesNoLeidas}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm font-bold flex-1">Notificaciones</span>
+                {notificacionesNoLeidas > 0 && (
+                  <span className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[11px] px-2 py-0.5 rounded-full font-bold">
+                    {notificacionesNoLeidas}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {onAbrirChats && (
+              <button
+                type="button"
+                onClick={onAbrirChats}
+                className="flex items-center gap-3 transition-all w-full px-4 py-2.5 rounded-2xl cursor-pointer text-indigo-200/80 hover:text-white hover:bg-white/10 font-medium text-left group"
+              >
+                <div className="relative">
+                  <MessageSquare className="w-5 h-5 shrink-0 text-emerald-400 group-hover:scale-110 transition-transform" />
+                  {chatsNoLeidos > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[18px] h-4 px-1 bg-emerald-500 text-zinc-950 text-[10px] font-black rounded-full flex items-center justify-center shadow">
+                      {chatsNoLeidos > 9 ? '9+' : chatsNoLeidos}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm font-bold flex-1">Mensajes</span>
+                {chatsNoLeidos > 0 && (
+                  <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/40 text-[11px] px-2 py-0.5 rounded-full font-bold">
+                    {chatsNoLeidos}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
         )}
       </nav>
     </div>

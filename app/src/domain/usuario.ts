@@ -143,3 +143,27 @@ export const planDuenoActivo = (u: Usuario | null): boolean =>
 /** El dueno quedo trabado en el cartel de contacto: no puede operar nada. */
 export const planDuenoPendiente = (u: Usuario | null): boolean =>
   u !== null && u.rol === 'dueno_predio' && u.planDueno !== 'activo'
+
+/**
+ * Calcula la ruta inicial o destino según el rol y estado de la cuenta del usuario.
+ * Evita saltos y redirecciones intermedias innecesarias al autenticar.
+ */
+/**
+ * Correos con privilegios de Superadmin garantizados.
+ */
+export const EMAILS_SUPERADMIN = new Set([
+  'lisandrodileva@gmail.com',
+  'superadmin@fulbeando.com',
+])
+
+export const esEmailSuperadmin = (email: string | null | undefined): boolean =>
+  !!email && EMAILS_SUPERADMIN.has(email.toLowerCase().trim())
+
+export const calcularRutaDestino = (u: Usuario | null | undefined): string => {
+  if (!u) return '/login'
+  if (u.rol === 'superadmin' || esEmailSuperadmin(u.email)) return '/superadmin'
+  if (planDuenoPendiente(u)) return '/plan-pendiente'
+  if (u.rol === 'dueno_predio') return '/venue-dashboard'
+  if (u.rol === 'invitado') return '/role-selector'
+  return '/radar'
+}

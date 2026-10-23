@@ -26,8 +26,6 @@ function AppContenido() {
         <p className="mt-2 text-sm text-ink-muted">{mensaje}</p>
       </div>
     </div>
-  ) : sesion.cargando ? (
-    <CargandoFulbeando />
   ) : (
     <RouterProvider router={router} />
   )

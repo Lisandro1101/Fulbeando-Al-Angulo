@@ -40,8 +40,10 @@ export const subirImagenComprobante = async (
   if (!params.organizadorUid || params.organizadorUid === 'undefined') {
     throw new ComprobanteInvalidoError('Iniciá sesión para poder subir el comprobante de reserva.')
   }
-  if (!params.archivo.type.startsWith('image/')) {
-    throw new ComprobanteInvalidoError('El comprobante debe ser una imagen.')
+  const esImagen = params.archivo.type.startsWith('image/')
+  const esPdf = params.archivo.type === 'application/pdf' || params.archivo.name.toLowerCase().endsWith('.pdf')
+  if (!esImagen && !esPdf) {
+    throw new ComprobanteInvalidoError('El comprobante debe ser una imagen (JPG, PNG, WEBP) o documento PDF (ej: Mercado Pago).')
   }
   if (params.archivo.size === 0 || params.archivo.size > MAX_BYTES_COMPROBANTE) {
     throw new ComprobanteInvalidoError('El comprobante supera los 5 MB.')
@@ -51,14 +53,16 @@ export const subirImagenComprobante = async (
   const path = storagePathComprobante(params.turnoId, params.organizadorUid, nombre)
   const referencia = storageRef(storage, path)
 
+  const contentType = params.archivo.type || (esPdf ? 'application/pdf' : 'image/jpeg')
+
   await uploadBytes(referencia, params.archivo, {
-    contentType: params.archivo.type,
+    contentType,
     customMetadata: { turnoId: params.turnoId, organizadorUid: params.organizadorUid },
   })
 
   return {
     storagePath: path,
-    mimeType: params.archivo.type,
+    mimeType: contentType,
     sizeBytes: params.archivo.size,
     downloadUrl: await getDownloadURL(referencia),
   }

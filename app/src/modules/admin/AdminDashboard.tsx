@@ -12,7 +12,7 @@ import {
   type Query,
 } from 'firebase/firestore'
 import { Loader2, LogOut } from 'lucide-react'
-import type { Predio, Reporte, SolicitudDueno } from '@/domain'
+import { esEmailSuperadmin, type Predio, type Reporte, type SolicitudDueno } from '@/domain'
 import { cerrarSesion } from '@/modules/auth/servicio'
 import { useSesion } from '@/modules/auth/useSesion'
 import { COLECCIONES } from '@/core/config'
@@ -26,6 +26,7 @@ import {
 import { listarPrediosParaVerificar, verificarPredio } from '@/modules/predios/repositorio'
 import { listarReportesAbiertos } from '@/modules/reportes/repositorio'
 import { ImportadorDatos } from '@/modules/admin/pantallas/ImportadorDatos'
+import { GestionSponsors } from './GestionSponsors'
 
 /**
  * Conteo sin bajar los documentos. Devuelve `null` (y no rompe la pantalla)
@@ -87,7 +88,7 @@ export const AdminDashboard = () => {
     prediosOk: number | null
   } | null>(null)
 
-  const esSuperadmin = sesion.actor?.rol === 'superadmin'
+  const esSuperadmin = sesion.actor?.rol === 'superadmin' || esEmailSuperadmin(sesion.user?.email)
 
   const salir = async () => {
     await cerrarSesion()
@@ -188,6 +189,9 @@ export const AdminDashboard = () => {
           <a href="#vision-general" className="flex items-center text-emerald-300 font-bold bg-white/10 px-4 py-3 rounded-xl border-l-4 border-emerald-400 shadow-sm shadow-emerald-400/20">
             📊 Visión General
           </a>
+          <a href="#sponsors" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
+            ⭐ Publicidad & Sponsors
+          </a>
           <a href="#arbitraje" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
             ⚖️ Sala de Arbitraje ({reportes.length})
           </a>
@@ -270,6 +274,9 @@ export const AdminDashboard = () => {
             <p className="text-xs text-purple-400 mt-2">{predios.length} sin verificar</p>
           </div>
         </div>
+
+        {/* Gestión de Publicidad Nativa & Sponsors */}
+        <GestionSponsors />
 
         {/* Importador de datos de prueba: sube el Excel y lo carga via la
             Cloud Function callable (Admin SDK), sin pelear con las rules. */}

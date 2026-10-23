@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Globe, MapPin, UserCheck, Sparkles, Image, MessageSquare, Filter } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useSesion } from '@/modules/auth/useSesion'
 import type { Publicacion } from '@/domain'
+import type { AnuncioSponsor } from '@/domain/publicidad'
 import { inferirMunicipio } from '@/core/geo/zonas'
 import { alternarSeguir, escucharSiguiendo } from '../follows'
 import { escucharFeed, type FiltroFeed } from '../repositorio'
 import { Composer } from './Composer'
 import { PostCard } from './PostCard'
 import { Esqueleto } from '@/modules/ui/overlays'
+import { escucharAnunciosActivos } from '@/modules/publicidad/repositorio'
+import { TarjetaSponsorMuro } from '@/modules/publicidad/componentes/TarjetaSponsorMuro'
 
 interface Tab {
   id: FiltroFeed
@@ -47,6 +51,39 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
   const [posts, setPosts] = useState<Publicacion[]>([])
   const [siguiendo, setSiguiendo] = useState<string[]>([])
   const [cargando, setCargando] = useState(true)
+  const [sponsorsMuro, setSponsorsMuro] = useState<AnuncioSponsor[]>([])
+
+  useEffect(() => {
+    return escucharAnunciosActivos('muro', setSponsorsMuro)
+  }, [])
+
+  // Priorizar sponsors del muro según la zona del usuario
+  const sponsorsFiltrados = useMemo(() => {
+    if (sponsorsMuro.length === 0) return []
+    const zonaUser = (usuario?.zona || '').trim().toLowerCase()
+    const muniUser = (usuario?.municipio || inferirMunicipio(usuario?.zona) || '').trim().toLowerCase()
+    if (!zonaUser && !muniUser) return sponsorsMuro
+
+    const exactos: AnuncioSponsor[] = []
+    const globales: AnuncioSponsor[] = []
+    const otros: AnuncioSponsor[] = []
+
+    for (const s of sponsorsMuro) {
+      const z = (s.zona || '').trim().toLowerCase()
+      if (!z || z === 'todas' || z === 'global') {
+        globales.push(s)
+      } else if (
+        (zonaUser && (z === zonaUser || z.includes(zonaUser) || zonaUser.includes(z))) ||
+        (muniUser && (z === muniUser || inferirMunicipio(s.zona)?.toLowerCase() === muniUser))
+      ) {
+        exactos.push(s)
+      } else {
+        otros.push(s)
+      }
+    }
+    const res = [...exactos, ...globales]
+    return res.length > 0 ? res : otros
+  }, [sponsorsMuro, usuario?.zona, usuario?.municipio])
 
   const miUid = usuario?.uid ?? null
   const miMunicipio = usuario?.municipio || inferirMunicipio(usuario?.zona) || usuario?.zona || null
@@ -146,16 +183,19 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
         {TABS.map(({ id, etiqueta, icono: Icono }) => {
           const activo = filtro === id
           return (
-            <button
+            <motion.button
               key={id}
               onClick={() => setFiltro(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition-all cursor-pointer ${
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer ${
                 activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-200 hover:text-white font-bold'
               }`}
             >
               <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-zinc-400'}`} />
               {etiqueta}
-            </button>
+            </motion.button>
           )
         })}
       </div>
@@ -165,11 +205,14 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
         {CATEGORIAS_FILTRO.map(({ id, etiqueta, icono: Icono }) => {
           const activo = tipoFiltro === id
           return (
-            <button
+            <motion.button
               key={id}
               type="button"
               onClick={() => setTipoFiltro(id)}
-              className={`flex items-center gap-1.5 text-xs py-1.5 px-3.5 rounded-full border transition-all shrink-0 cursor-pointer ${
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className={`flex items-center gap-1.5 text-xs py-1.5 px-3.5 rounded-full border transition-colors shrink-0 cursor-pointer ${
                 activo
                   ? 'bg-emerald-500 border-emerald-400 text-zinc-950 font-black shadow-md shadow-emerald-500/25'
                   : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/90 text-white hover:text-white font-bold shadow-sm'
@@ -177,7 +220,7 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
             >
               <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-emerald-400'}`} />
               <span>{etiqueta}</span>
-            </button>
+            </motion.button>
           )
         })}
       </div>
@@ -192,13 +235,15 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
               {usuario?.zona && usuario.zona !== miMunicipio ? ` (${usuario.zona})` : ''}
             </span>
           </div>
-          <button
+          <motion.button
             type="button"
             onClick={() => navigate('/ajustes')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             className="text-emerald-400 hover:text-emerald-300 font-bold text-[11px] underline cursor-pointer ml-2 whitespace-nowrap"
           >
             Cambiar zona
-          </button>
+          </motion.button>
         </div>
       )}
 
@@ -230,14 +275,17 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
                 Cargalo en tu perfil para ver publicaciones de canchas, jugadores y equipos de tu zona.
               </p>
             </div>
-            <button
+            <motion.button
               type="button"
               onClick={() => navigate('/ajustes')}
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-4 py-2.5 rounded-xl text-xs font-black shadow-md transition cursor-pointer active:scale-95"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-4 py-2.5 rounded-xl text-xs font-black shadow-md transition cursor-pointer"
             >
               <MapPin className="w-4 h-4" />
               <span>Configurar mi zona en el perfil</span>
-            </button>
+            </motion.button>
           </div>
         ) : (
           <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 text-center space-y-2">
@@ -257,14 +305,25 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
         )
       ) : (
         <div className="space-y-4">
-          {postsFiltrados.map((pub) => (
-            <PostCard
-              key={pub.id}
-              publicacion={pub}
-              siguiendo={siguiendo.includes(pub.autorUid)}
-              onAlternarSeguir={miUid ? () => alternar(pub.autorUid) : undefined}
-            />
-          ))}
+          {postsFiltrados.map((pub, idx) => {
+            const debeMostrarSponsor = sponsorsFiltrados.length > 0 && (idx + 1) % 4 === 0
+            const sponsorIdx = Math.floor(idx / 4) % sponsorsFiltrados.length
+            const sponsor = debeMostrarSponsor ? sponsorsFiltrados[sponsorIdx] : null
+
+            return (
+              <React.Fragment key={pub.id}>
+                <PostCard
+                  publicacion={pub}
+                  siguiendo={siguiendo.includes(pub.autorUid)}
+                  onAlternarSeguir={miUid ? () => alternar(pub.autorUid) : undefined}
+                />
+                {sponsor && <TarjetaSponsorMuro anuncio={sponsor} />}
+              </React.Fragment>
+            )
+          })}
+          {postsFiltrados.length > 0 && postsFiltrados.length < 4 && sponsorsFiltrados.length > 0 && (
+            <TarjetaSponsorMuro anuncio={sponsorsFiltrados[0]} />
+          )}
         </div>
       )}
     </section>

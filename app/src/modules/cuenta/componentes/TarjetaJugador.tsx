@@ -160,7 +160,7 @@ export const TarjetaJugador = forwardRef<HTMLDivElement, { datos: DatosTarjeta; 
           <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" style={{ clipPath: 'polygon(0 100%, 0 0, 100% 100%)' }}></div>
 
           {/* Top Left Stats & Position */}
-          <div className="absolute top-6 left-5 flex flex-col items-center z-10">
+          <div className="absolute top-5 left-3.5 flex flex-col items-center z-10">
             <div className="text-5xl font-black tracking-tighter leading-none" title="Media / OVR calculada de la temporada">{datos.media}</div>
             <div className="text-xl font-bold uppercase tracking-widest mt-1">{datos.pos}</div>
             <div className={`w-8 h-[2px] ${tema.colorLineaFuerte} mt-1 mb-1`}></div>
@@ -175,7 +175,7 @@ export const TarjetaJugador = forwardRef<HTMLDivElement, { datos: DatosTarjeta; 
           </div>
 
           {/* Player Image / Emoji */}
-          <div className="mt-2 w-full h-40 flex items-end justify-center z-0">
+          <div className="mt-2 w-full h-40 flex items-end justify-center pl-7 z-0">
             <div className={`w-32 h-32 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center border-4 ${tema.bordeFoto} drop-shadow-lg`}>
               {esFoto ? (
                 <img src={datos.fotoUrl} alt={`Foto de ${datos.nombre}`} className="w-full h-full object-cover" />
@@ -186,14 +186,14 @@ export const TarjetaJugador = forwardRef<HTMLDivElement, { datos: DatosTarjeta; 
           </div>
 
           {/* Name */}
-          <div className="mt-1 w-full text-center z-10 flex flex-col items-center">
+          <div className="mt-6 w-full text-center z-10 flex flex-col items-center">
             <div className={`w-48 h-[1px] ${tema.colorLineaMedia} mb-1`}></div>
             <h2 className={`text-2xl font-black uppercase tracking-widest ${tema.colorNombre} truncate w-full px-2`}>{datos.nombre}</h2>
             <div className={`w-48 h-[1px] ${tema.colorLineaMedia} mt-1`}></div>
           </div>
 
           {/* Stats Grid */}
-          <div className={`w-full mt-2 grid grid-cols-[1fr_auto_1fr] gap-x-2 ${tema.colorTexto} font-bold text-sm px-4 z-10`}>
+          <div className={`w-full mt-2.5 grid grid-cols-[1fr_auto_1fr] gap-x-2 ${tema.colorTexto} font-bold text-sm px-4 z-10`}>
             {/* Left Column */}
             <div className="flex flex-col gap-1 items-start pl-2">
               <div className="flex gap-2 justify-start items-center">
@@ -231,7 +231,7 @@ export const TarjetaJugador = forwardRef<HTMLDivElement, { datos: DatosTarjeta; 
           </div>
 
           {/* Footer: el equipo del jugador o marca */}
-          <div className={`mt-auto mb-16 pt-2 w-full flex flex-col items-center justify-center ${tema.colorFooter} opacity-80 z-10`}>
+          <div className={`mt-auto mb-11 pt-1.5 w-full flex flex-col items-center justify-center ${tema.colorFooter} z-10`}>
             <div className="text-[11px] font-black tracking-[0.2em] uppercase truncate w-full text-center">
               {datos.equipoNombre || 'Fulbeando'}
             </div>

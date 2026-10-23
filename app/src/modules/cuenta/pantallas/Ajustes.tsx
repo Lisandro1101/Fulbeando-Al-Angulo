@@ -80,7 +80,7 @@ export default function Ajustes() {
 
   if (sesion.user === null) {
     return (
-      <div className="h-full bg-canvas">
+      <div className="h-full bg-transparent">
         <Pantalla titulo="Ajustes" subtitulo="Datos personales y disponibilidad para jugar.">
           <div className="space-y-4">
             <Tarjeta titulo="Iniciá sesión" descripcion="Necesitás una cuenta para editar tu perfil.">
@@ -94,7 +94,7 @@ export default function Ajustes() {
 
   if (usuario === null) {
     return (
-      <div className="h-full bg-canvas">
+      <div className="h-full bg-transparent">
         <Pantalla titulo="Ajustes">
           <p className="surface text-sm text-ink-muted">Cargando tu perfil...</p>
         </Pantalla>
@@ -103,7 +103,7 @@ export default function Ajustes() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-canvas">
+    <div className="flex h-full flex-col overflow-hidden bg-transparent">
       <Pantalla titulo="Ajustes" subtitulo="Configura tu cuenta deportiva y de predio.">
         <div className="mb-4 flex gap-2">
           {esDueno ? (
@@ -113,7 +113,7 @@ export default function Ajustes() {
                 className={`rounded-full px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer ${
                   tab === 'cuenta'
                     ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/25'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:text-slate-900'
+                    : 'bg-slate-100 border border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950 font-bold'
                 }`}
                 onClick={() => setTabActivo('cuenta')}
               >
@@ -124,7 +124,7 @@ export default function Ajustes() {
                 className={`rounded-full px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer ${
                   tab === 'predio'
                     ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-emerald-500/25'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:text-slate-900'
+                    : 'bg-slate-100 border border-slate-300 text-slate-800 hover:bg-slate-200 hover:text-slate-950 font-bold'
                 }`}
                 onClick={() => setTabActivo('predio')}
               >

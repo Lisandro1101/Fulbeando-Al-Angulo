@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2, Clock, Trophy } from 'lucide-react';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
@@ -8,10 +9,10 @@ import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { MONTO_SENA_DEFAULT, COLECCIONES } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp } from '@/modules/teams/teamService';
-import { doc, updateDoc, serverTimestamp, collection, setDoc } from 'firebase/firestore';
+import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, eliminarEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp } from '@/modules/teams/teamService';
+import { doc, updateDoc, serverTimestamp, collection, setDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/core/firebase';
-import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador, calcularDivisionEquipo } from '@/domain';
+import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador, calcularDivisionEquipo, calcularRutaDestino } from '@/domain';
 import { DIVISION_GEOGRAFICA, calcularGeoZona } from '@/core/geo/zonas';
 import { aGeoIndex } from '@/core/geo';
 import { listarTurnosDelOrganizador } from '@/modules/turnos/repositorio';
@@ -22,8 +23,8 @@ import { uploadImageToR2 } from '@/uploader';
 import { useDatosCarta } from '@/modules/cuenta/useDatosCarta';
 import { TarjetaJugador, obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
 import { generarImagenCarta, descargarBlob } from '@/modules/comunidad/tarjetaImagen';
-import { crearPublicacion } from '@/modules/comunidad/repositorio';
 import { Toast, useConfirmar, CargandoFulbeando } from '@/modules/ui/overlays';
+import { BannerSponsorTercerTiempo } from '@/modules/publicidad/componentes/BannerSponsorTercerTiempo';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -39,12 +40,14 @@ export const Screen1Login = () => {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
 
+  // Redirigir limpiamente cuando la sesión y el perfil del usuario estén listos
   React.useEffect(() => {
     if (sesion.usuario && !sesion.cargando) {
-      // Intentar pedir permiso automáticamente si el usuario ya está logueado
-      requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked', e));
-      // El superadmin no entra a la app: su unico destino es el panel.
-      navigate(sesion.usuario.rol === 'superadmin' ? '/superadmin' : '/radar');
+      requestNotificationPermission(sesion.usuario.uid).catch((e) =>
+        console.log('Auto-prompt blocked', e),
+      );
+      const destino = calcularRutaDestino(sesion.usuario);
+      navigate(destino, { replace: true });
     }
   }, [sesion.usuario, sesion.cargando, navigate]);
 
@@ -53,11 +56,13 @@ export const Screen1Login = () => {
       setCargando(true);
       setError(null);
       await ingresoConGoogle();
-      // Con signInWithRedirect, la app navegará a la página de Google y volverá.
-      // No hacemos navigate() manual acá.
-    } catch (err) {
+      // No llamamos a navigate() acá: el useEffect anterior redirigirá directamente
+      // al destino correspondiente sin pantallas intermedias ni parpadeos.
+    } catch (err: any) {
       console.error('Error al iniciar con Google:', err);
-      setError('Hubo un error al iniciar sesión. Intentá de nuevo.');
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        setError('Hubo un error al iniciar sesión con Google. Intentá de nuevo.');
+      }
       setCargando(false);
     }
   };
@@ -82,8 +87,11 @@ export const Screen1Login = () => {
       } else {
         await ingresoConEmail(email, password);
       }
-      // Si la sesion todavia no cargo, el effect de arriba corrige el destino.
-      navigate(sesion.usuario?.rol === 'superadmin' ? '/superadmin' : '/radar');
+      // NOTA: NO llamamos a navigate() acá manualmente con un estado anterior o nulo.
+      // useSesion actualizará la sesión y el useEffect redirigirá directamente
+      // al destino correcto (jugador, dueño de predio, superadmin, etc.),
+      // evitando rebotar por /radar y volver a /login.
+      // Dejamos cargando=true para mantener la pantalla de carga limpia hasta que se concrete la navegación.
     } catch (err: any) {
       console.error('Error en autenticación por email:', err);
       let msj = 'Hubo un error al autenticar.';
@@ -91,57 +99,112 @@ export const Screen1Login = () => {
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') msj = 'Correo o contraseña incorrectos.';
       if (err.code === 'auth/weak-password') msj = 'La contraseña es muy débil (mínimo 6 caracteres).';
       setError(msj);
-    } finally {
       setCargando(false);
     }
   };
 
+  // Si la sesión inicial está cargando o el usuario ya está autenticado esperando la navegación,
+  // mostramos directamente el loader de marca para evitar cualquier parpadeo del formulario.
+  if (sesion.cargando || (sesion.usuario && !sesion.cargando)) {
+    return (
+      <div className="min-h-full min-h-[100dvh] w-full bg-gradient-to-b from-[#361982] via-[#281165] to-[#1c0a48] flex flex-col justify-center items-center p-6 text-white font-sans">
+        <CargandoFulbeando visible={true} mensaje="Iniciando sesión…" />
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full bg-canvas flex flex-col justify-center items-center p-6 text-white font-sans">
-      <CargandoFulbeando visible={cargando} />
-      <div className="w-full max-w-sm space-y-8">
+    <div className="min-h-full min-h-[100dvh] w-full bg-gradient-to-b from-[#361982] via-[#281165] to-[#1c0a48] flex flex-col justify-center items-center p-6 text-white font-sans overflow-y-auto">
+      <CargandoFulbeando visible={cargando} mensaje="Ingresando…" />
+      <div className="w-full max-w-sm space-y-6 bg-white/5 backdrop-blur-xl border border-[#4c24b2]/40 p-6 sm:p-8 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
         <div className="text-center">
-          <img src="/logo-anterior.svg" alt="Al Ángulo" className="w-full h-40 object-cover object-center mx-auto" />
-          <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mt-2">La red futbolera</p>
+          <img src="/logo-anterior.svg" alt="Al Ángulo" className="w-full h-32 object-contain object-center mx-auto drop-shadow-[0_4px_16px_rgba(0,0,0,0.45)]" />
+          <p className="text-emerald-400 font-black uppercase tracking-widest text-xs mt-2">La red futbolera</p>
         </div>
         
-        {error && <div className="text-red-500 text-sm text-center font-bold bg-red-500/10 py-2 rounded-lg">{error}</div>}
+        {error && (
+          <div className="text-rose-300 text-sm text-center font-bold bg-rose-500/20 border border-rose-500/40 py-2.5 px-3 rounded-xl">
+            {error}
+          </div>
+        )}
 
         <form className="space-y-4" onSubmit={handleEmailAuth}>
           {isRegister && (
             <div className="flex gap-2">
-              <input type="text" aria-label="Nombre" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
-              <input type="text" aria-label="Apellido" placeholder="Apellido" value={apellido} onChange={e => setApellido(e.target.value)} className="w-1/2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+              <input 
+                type="text" 
+                aria-label="Nombre" 
+                placeholder="Nombre" 
+                value={nombre} 
+                onChange={e => setNombre(e.target.value)} 
+                className="w-1/2 bg-[#1c0a48]/70 border border-[#4c24b2]/60 rounded-xl px-4 py-3 text-white placeholder-indigo-200/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition" 
+              />
+              <input 
+                type="text" 
+                aria-label="Apellido" 
+                placeholder="Apellido" 
+                value={apellido} 
+                onChange={e => setApellido(e.target.value)} 
+                className="w-1/2 bg-[#1c0a48]/70 border border-[#4c24b2]/60 rounded-xl px-4 py-3 text-white placeholder-indigo-200/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition" 
+              />
             </div>
           )}
-          <input type="email" aria-label="Email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
-          <input type="password" placeholder="Contraseña" aria-label="Contraseña" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition" />
+          <input 
+            type="email" 
+            aria-label="Email" 
+            placeholder="Email" 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            className="w-full bg-[#1c0a48]/70 border border-[#4c24b2]/60 rounded-xl px-4 py-3 text-white placeholder-indigo-200/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition" 
+          />
+          <input 
+            type="password" 
+            placeholder="Contraseña" 
+            aria-label="Contraseña" 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            className="w-full bg-[#1c0a48]/70 border border-[#4c24b2]/60 rounded-xl px-4 py-3 text-white placeholder-indigo-200/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition" 
+          />
           
-          <button type="submit" disabled={cargando} className="w-full bg-emerald-500 text-zinc-950 font-black py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition disabled:opacity-50">
+          <motion.button 
+            type="submit" 
+            disabled={cargando} 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-3.5 rounded-xl shadow-[0_4px_20px_rgba(16,185,129,0.35)] transition-colors disabled:opacity-50 cursor-pointer"
+          >
             {cargando ? 'PROCESANDO...' : (isRegister ? 'REGISTRARME' : 'INGRESAR')}
-          </button>
+          </motion.button>
         </form>
         
         <div className="text-center">
-          <button type="button" onClick={() => { setIsRegister(!isRegister); setError(null); }} className="text-sm text-zinc-400 font-semibold hover:text-white transition">
+          <button 
+            type="button" 
+            onClick={() => { setIsRegister(!isRegister); setError(null); }} 
+            className="text-sm text-indigo-200 hover:text-white font-semibold transition cursor-pointer"
+          >
             {isRegister ? '¿Ya tenés cuenta? Ingresá acá' : '¿No tenés cuenta? Registrate gratis'}
           </button>
         </div>
         
-        <div className="relative flex items-center py-2">
-          <div className="flex-grow border-t border-zinc-800"></div>
-          <span className="flex-shrink-0 mx-4 text-zinc-500 text-xs font-semibold">O</span>
-          <div className="flex-grow border-t border-zinc-800"></div>
+        <div className="relative flex items-center py-1">
+          <div className="flex-grow border-t border-[#4c24b2]/40"></div>
+          <span className="flex-shrink-0 mx-4 text-indigo-200/70 text-xs font-semibold">O</span>
+          <div className="flex-grow border-t border-[#4c24b2]/40"></div>
         </div>
 
-        <button 
+        <motion.button 
           onClick={handleGoogleLogin} 
           disabled={cargando}
-          className="w-full bg-white text-zinc-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition disabled:opacity-50"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+          className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2.5 shadow-lg transition-colors disabled:opacity-50 cursor-pointer"
         >
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
           {cargando ? 'Conectando...' : 'Continuar con Google'}
-        </button>
+        </motion.button>
       </div>
     </div>
   );
@@ -188,49 +251,51 @@ export const Screen2RoleSelector = () => {
   };
 
   return (
-    <div className="mx-auto h-full w-full max-w-md bg-canvas p-6 flex flex-col justify-center font-sans">
+    <div className="min-h-full min-h-[100dvh] w-full bg-gradient-to-b from-[#361982] via-[#281165] to-[#1c0a48] p-6 flex flex-col justify-center items-center font-sans">
       <CargandoFulbeando visible={cargando} />
-      <h2 className="text-2xl font-black text-white text-center mb-8">¿Cómo vas a jugar hoy?</h2>
+      <div className="w-full max-w-md">
+        <h2 className="text-2xl font-black text-white text-center mb-8 drop-shadow-md">¿Cómo vas a jugar hoy?</h2>
 
-      {error && (
-        <div className="mb-6 rounded-lg bg-red-500/10 px-3 py-2 text-center text-sm font-bold text-red-500">
-          {error}
+        {error && (
+          <div className="mb-6 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-center text-sm font-bold text-red-400">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Card Jugador */}
+          <button 
+            onClick={() => elegirRol('jugador', '/onboarding-player')} 
+            disabled={cargando}
+            className="w-full bg-white/5 backdrop-blur-md border border-[#4c24b2]/40 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-400 hover:bg-white/10 transition group text-left disabled:opacity-50 shadow-lg cursor-pointer"
+          >
+            <div className="bg-[#1c0a48] border border-[#4c24b2]/60 p-3 rounded-full text-indigo-200 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition">
+              <User className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Soy Jugador</h3>
+              <p className="text-sm text-indigo-200/80 mt-1">Armá tu carta, fichá en equipos y desafiá rivales en tu barrio.</p>
+            </div>
+          </button>
+
+          {/* Card Dueño */}
+          <button 
+            onClick={() => elegirRol('dueno_predio', '/venue-registration')} 
+            disabled={cargando}
+            className="w-full bg-white/5 backdrop-blur-md border border-[#4c24b2]/40 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-400 hover:bg-white/10 transition group text-left disabled:opacity-50 shadow-lg cursor-pointer"
+          >
+            <div className="bg-[#1c0a48] border border-[#4c24b2]/60 p-3 rounded-full text-emerald-400 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition">
+              <Building className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Tengo un Complejo</h3>
+              <p className="text-sm text-indigo-200/80 mt-1">Promocioná tus canchas en el radar y recibí partidos.</p>
+              <p className="mt-2 text-xs font-semibold text-emerald-400">
+                Te pasamos el contacto para activar el plan
+              </p>
+            </div>
+          </button>
         </div>
-      )}
-
-      <div className="space-y-4">
-        {/* Card Jugador */}
-        <button 
-          onClick={() => elegirRol('jugador', '/onboarding-player')} 
-          disabled={cargando}
-          className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left disabled:opacity-50"
-        >
-          <div className="bg-zinc-800 p-3 rounded-full text-blue-500 group-hover:bg-blue-500 group-hover:text-zinc-950 transition">
-            <User className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white">Soy Jugador</h3>
-            <p className="text-sm text-zinc-400 mt-1">Armá tu carta, fichá en equipos y desafiá rivales en tu barrio.</p>
-          </div>
-        </button>
-
-        {/* Card Dueño */}
-        <button 
-          onClick={() => elegirRol('dueno_predio', '/venue-registration')} 
-          disabled={cargando}
-          className="w-full bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-500 transition group text-left disabled:opacity-50"
-        >
-          <div className="bg-zinc-800 p-3 rounded-full text-emerald-500 group-hover:bg-emerald-500 group-hover:text-zinc-950 transition">
-            <Building className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white">Tengo un Complejo</h3>
-            <p className="text-sm text-zinc-400 mt-1">Promocioná tus canchas en el radar y recibí partidos.</p>
-            <p className="mt-2 text-xs font-semibold text-emerald-500">
-              Te pasamos el contacto para activar el plan
-            </p>
-          </div>
-        </button>
       </div>
     </div>
   );
@@ -353,10 +418,10 @@ export const Screen3PlayerOnboarding = () => {
   const nombreMostrar = sesion.usuario ? nombreCompleto(sesion.usuario) : (sesion.user?.displayName || '');
 
   return (
-    <div className="mx-auto h-full w-full max-w-md bg-canvas p-6 flex flex-col font-sans text-white pb-nav overflow-y-auto">
+    <div className="mx-auto h-full w-full max-w-md bg-transparent p-6 flex flex-col font-sans text-slate-800 pb-nav overflow-y-auto">
       <CargandoFulbeando visible={cargando} />
-      <h2 className="text-2xl font-black mt-8">Creá tu Carta de Jugador</h2>
-      <p className="text-zinc-400 text-sm mt-2 mb-6">
+      <h2 className="text-2xl font-black mt-8 text-slate-900">Creá tu Carta de Jugador</h2>
+      <p className="text-slate-500 text-sm mt-2 mb-6">
         {nombreMostrar ? `¡Hola ${nombreMostrar}! ` : ''}
         Completá tu ficha deportiva para jugar en el radar. Arrancás con Media 50%.
       </p>
@@ -478,7 +543,7 @@ export const Screen3PlayerOnboarding = () => {
                   placeholder={`Buscar barrio en ${municipioSeleccionado}...`} 
                   value={localidadQuery}
                   onChange={(e) => setLocalidadQuery(e.target.value)}
-                  className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-500 mb-3"
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-500 mb-3"
                 />
                 <div className="max-h-52 overflow-y-auto space-y-1">
                   {localidadesFiltradas.length > 0 ? (
@@ -617,61 +682,85 @@ export const Screen4WelcomeCard = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-transparent font-sans text-slate-800 overflow-hidden relative">
       <Toast mensaje={aviso} />
       <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
         
         <div className="absolute top-6 right-6 flex gap-2 z-10">
+          {/* Botón de instalar app en celular (desactivado momentáneamente)
           {isInstallable && (
-            <button onClick={() => {
-              promptInstall();
-              if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked on install', e));
-            }} className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs active:scale-95 transition-transform">
+            <motion.button 
+              onClick={() => {
+                promptInstall();
+                if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked on install', e));
+              }} 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs cursor-pointer shadow-sm"
+            >
               <Download className="w-4 h-4" /> Instalar
-            </button>
-          )}
-          <button onClick={() => navigate('/ajustes')} className="text-zinc-400 hover:text-white active:scale-95 transition-transform bg-zinc-900 p-2 rounded-full">
+            </motion.button>
+          )} */}
+          <motion.button 
+            onClick={() => navigate('/ajustes')} 
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="text-slate-600 hover:text-slate-900 bg-white/80 border border-slate-200 p-2 rounded-full shadow-sm cursor-pointer"
+          >
             <Settings className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min mt-8">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.92, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+          className="flex-1 flex flex-col items-center justify-center w-full min-h-min mt-8"
+        >
           <TarjetaJugador ref={cartaRef} datos={datos} />
           {(() => {
             const tema = obtenerTemaSegunMedia(datos.media);
             return (
-              <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-zinc-400">
+              <div className="mt-3 flex items-center gap-2 text-xs font-black text-slate-800 bg-white/90 border border-slate-300 px-3.5 py-1.5 rounded-full shadow-sm">
                 <span 
-                  className="w-2 h-2 rounded-full animate-pulse" 
+                  className="w-2.5 h-2.5 rounded-full animate-pulse border border-slate-400/40" 
                   style={{ 
                     backgroundColor: 
-                      tema.tier === 'bronce' ? '#c8986c' : 
-                      tema.tier === 'plata' ? '#cbd5e1' : 
-                      tema.tier === 'oro' ? '#facc15' : 
-                      tema.tier === 'especial' ? '#eab308' : '#38bdf8' 
+                      tema.tier === 'bronce' ? '#b45309' : 
+                      tema.tier === 'plata' ? '#64748b' : 
+                      tema.tier === 'oro' ? '#eab308' : 
+                      tema.tier === 'especial' ? '#a855f7' : '#0284c7' 
                   }}
                 ></span>
                 <span>Ficha {tema.nombreTier} · Media {datos.media}</span>
               </div>
             );
           })()}
-        </div>
+        </motion.div>
 
         <div className="w-full max-w-sm mt-8 space-y-3 shrink-0">
-          <button
+          <motion.button
             onClick={compartirCarta}
-            className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl active:scale-95 transition-transform"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-zinc-300 font-semibold py-3 rounded-xl cursor-pointer shadow-sm hover:border-zinc-700 hover:text-white"
           >
             <Share2 className="w-4 h-4" /> Compartir mi carta
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             onClick={publicarEnComunidad}
             disabled={publicando}
-            className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-zinc-950 font-bold py-3 rounded-xl active:scale-95 transition-transform disabled:opacity-60"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-500 text-zinc-950 font-bold py-3 rounded-xl disabled:opacity-60 cursor-pointer shadow-md shadow-emerald-500/20"
           >
             {publicando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
             {publicando ? 'Publicando...' : 'Publicar en la comunidad'}
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>
@@ -831,7 +920,7 @@ export const Screen5Reservas = () => {
   const equipoSeleccionadoObj = equiposCapitan.find((e) => e.id === equipoSelId);
 
   return (
-    <div className="h-full bg-canvas flex flex-col font-sans text-white overflow-hidden relative">
+    <div className="h-full bg-transparent flex flex-col font-sans text-slate-800 overflow-hidden relative">
       {/* Toast notificador */}
       <Toast mensaje={toastCompartir} />
 
@@ -839,15 +928,18 @@ export const Screen5Reservas = () => {
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-black text-white">Tus Reservas</h2>
-              <p className="text-zinc-400 text-xs mt-1">Partidos y turnos programados en complejos.</p>
+              <h2 className="text-2xl font-black text-slate-900">Tus Reservas</h2>
+              <p className="text-slate-500 text-xs mt-1">Partidos y turnos programados en complejos.</p>
             </div>
-            <button
+            <motion.button
               onClick={cargarReservas}
-              className="text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg transition"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="text-xs bg-white border border-slate-300 hover:border-slate-400 text-slate-700 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
             >
               Actualizar
-            </button>
+            </motion.button>
           </div>
 
           {cargando ? (
@@ -862,12 +954,15 @@ export const Screen5Reservas = () => {
               <p className="text-zinc-400 text-sm max-w-sm mb-6">
                 Cuando reserves un turno y cargues la seña en un predio, vas a poder seguir el estado de confirmación acá.
               </p>
-              <button
+              <motion.button
                 onClick={() => navigate('/radar')}
-                className="bg-emerald-500 text-zinc-950 font-black px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                className="bg-emerald-500 text-zinc-950 font-black px-6 py-3 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 transition cursor-pointer"
               >
                 Buscar Cancha en el Radar
-              </button>
+              </motion.button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -876,9 +971,13 @@ export const Screen5Reservas = () => {
                 const esPendiente = t.estado === 'bloqueado_temporal';
 
                 return (
-                  <div
+                  <motion.div
                     key={t.id}
-                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition space-y-3"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                    whileHover={{ y: -2 }}
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition shadow-sm hover:shadow-md space-y-3"
                   >
                     <div className="flex justify-between items-start gap-3">
                       <div>
@@ -924,16 +1023,19 @@ export const Screen5Reservas = () => {
                     {/* Botón Compartir con el equipo para reservas confirmadas */}
                     {esConfirmado && (
                       <div className="pt-2 border-t border-zinc-800">
-                        <button
+                        <motion.button
                           onClick={() => handleAbrirCompartir(t)}
-                          className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.96 }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                          className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider transition shadow-[0_0_15px_rgba(245,158,11,0.2)] cursor-pointer"
                         >
                           <Share2 className="w-4 h-4" />
                           Compartir con el equipo
-                        </button>
+                        </motion.button>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -963,7 +1065,7 @@ export const Screen5Reservas = () => {
             </p>
 
             {/* Tarjeta resumen de la reserva */}
-            <div className="bg-canvas border border-zinc-800/80 rounded-2xl p-4 mb-5 space-y-2">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-zinc-400">Predio</span>
                 <span className="text-sm font-bold text-white">
@@ -982,7 +1084,7 @@ export const Screen5Reservas = () => {
                   {turnoCompartir.horaInicio} - {turnoCompartir.horaFin} hs
                 </span>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-zinc-900">
+              <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
                 <span className="text-xs text-zinc-400">Resta pagar en cancha</span>
                 <span className="text-sm font-black text-zinc-200">
                   ${(turnoCompartir.precioTotal - turnoCompartir.montoSena).toLocaleString()}
@@ -992,7 +1094,7 @@ export const Screen5Reservas = () => {
 
             {/* Opción 1: Abrir Convocatoria en la app */}
             {equiposCapitan.length > 0 && (
-              <div className="mb-4 p-4 bg-canvas/60 border border-zinc-800 rounded-2xl">
+              <div className="mb-4 p-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl">
                 <label className="text-[11px] font-black uppercase text-amber-500 block mb-2">
                   Publicar en la pantalla de equipo
                 </label>
@@ -1066,155 +1168,423 @@ export const Screen5Reservas = () => {
 // ==========================================
 export const Screen6LaunchChallenge = () => {
   const navigate = useNavigate();
+  const sesion = useSesion();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [modalidad, setModalidad] = useState('F5');
-  const [diaHora, setDiaHora] = useState('');
-  const [cancha, setCancha] = useState('Sí, ya la alquilamos');
   
-  interface PartidoItem {
-    id: number | string;
-    modalidad: string;
-    diaHora: string;
-    cancha: string;
-    estado: string;
-    rival: string | null;
-  }
-
-  const [partidos, setPartidos] = useState<PartidoItem[]>([]);
-
+  // Ninguna información pre-establecida: el usuario debe seleccionar cada campo explícitamente
+  const [modalidad, setModalidad] = useState<string>('');
+  const [diaHora, setDiaHora] = useState('');
+  const [estadoCancha, setEstadoCancha] = useState<'CON_CANCHA' | 'BUSCA_CANCHA' | ''>('');
+  
+  const [misEquipos, setMisEquipos] = useState<any[]>([]);
+  const [equipoSeleccionadoId, setEquipoSeleccionadoId] = useState<string>('');
+  const [partidos, setPartidos] = useState<any[]>([]);
+  const [cargandoEquipos, setCargandoEquipos] = useState(false);
+  const [publicando, setPublicando] = useState(false);
+  const [cancelandoId, setCancelandoId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState('');
 
-  const handlePublicar = () => {
-    if (!diaHora) return;
-    
-    let fechaFormateada = diaHora;
-    const dateObj = new Date(diaHora);
-    if (!isNaN(dateObj.getTime())) {
-      fechaFormateada = dateObj.toLocaleString('es-AR', { weekday: 'long', hour: '2-digit', minute:'2-digit' });
+  const limpiarFormulario = () => {
+    setModalidad('');
+    setDiaHora('');
+    setEstadoCancha('');
+  };
+
+  // 1. Cargar equipos del usuario
+  useEffect(() => {
+    if (!sesion.user?.uid) return;
+    setCargandoEquipos(true);
+    obtenerEquiposDeUsuario(sesion.user.uid)
+      .then((eqs) => {
+        setMisEquipos(eqs);
+        if (eqs.length > 0) {
+          const cap = eqs.find((e: any) => e.captainId === sesion.user?.uid) || eqs[0];
+          setEquipoSeleccionadoId(cap.id);
+        }
+      })
+      .catch((err) => console.warn('Error cargando equipos en Screen6LaunchChallenge:', err))
+      .finally(() => setCargandoEquipos(false));
+  }, [sesion.user?.uid]);
+
+  // 2. Escuchar en tiempo real los desafíos creados por el usuario en Firestore
+  useEffect(() => {
+    if (!sesion.user?.uid) {
+      setPartidos([]);
+      return;
+    }
+    const q = query(
+      collection(db, COLECCIONES.desafios),
+      where('creatorId', '==', sesion.user.uid)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs
+          .map((d) => ({ ...(d.data() as any), id: d.id }))
+          .filter((d) => d.estado !== 'CANCELADO')
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setPartidos(items);
+      },
+      (err) => {
+        console.warn('Error escuchando desafíos del usuario:', err);
+      }
+    );
+    return () => unsub();
+  }, [sesion.user?.uid]);
+
+  // 3. Publicar desafío en Firestore (/challenges) para que figure inmediatamente en el Radar
+  const handlePublicar = async () => {
+    if (!modalidad) {
+      setToastMessage('Por favor seleccioná la modalidad (F5, F7, F8 o F11)');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
     }
 
-    const nuevoPartido: PartidoItem = {
-      id: Date.now(),
-      modalidad,
-      diaHora: fechaFormateada,
-      cancha,
-      estado: 'En Radar',
-      rival: null
-    };
-    setPartidos([nuevoPartido, ...partidos]);
-    setMostrarFormulario(false);
-    setToastMessage('Partido publicado en el Radar');
-    setTimeout(() => setToastMessage(''), 3000);
+    if (!diaHora) {
+      setToastMessage('Por favor seleccioná día y hora tentativa para el partido');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    if (!estadoCancha) {
+      setToastMessage('Por favor indicá si ya tienen cancha o buscan a medias');
+      setTimeout(() => setToastMessage(''), 3000);
+      return;
+    }
+
+    if (!sesion.user?.uid) return;
+
+    if (misEquipos.length === 0) {
+      setToastMessage('Necesitás tener un equipo para lanzar un desafío al radar.');
+      setTimeout(() => setToastMessage(''), 3500);
+      return;
+    }
+
+    const eq = misEquipos.find((e) => e.id === equipoSeleccionadoId) || misEquipos[0];
+    setPublicando(true);
+
+    try {
+      const dateObj = new Date(diaHora);
+      const fechaUnix = !isNaN(dateObj.getTime()) ? dateObj.getTime() : Date.now() + 24 * 3600 * 1000;
+
+      // Calcular ubicación geográfica para el geohash del Radar:
+      let geoPunto = sesion.usuario?.geo ? { lat: sesion.usuario.geo.lat, lng: sesion.usuario.geo.lng } : null;
+      if (!geoPunto && eq?.geo?.lat && eq?.geo?.lng) {
+        geoPunto = { lat: eq.geo.lat, lng: eq.geo.lng };
+      }
+      if (!geoPunto) {
+        const guardada = typeof window !== 'undefined' ? localStorage.getItem('al_angulo_ultima_ubicacion') : null;
+        if (guardada) {
+          try {
+            const p = JSON.parse(guardada);
+            if (p.lat && p.lng) geoPunto = p;
+          } catch (e) {}
+        }
+      }
+      if (!geoPunto) {
+        geoPunto = { lat: -34.6037, lng: -58.3816 };
+      }
+
+      const geoIndex = aGeoIndex(geoPunto);
+      const desafioRef = doc(collection(db, COLECCIONES.desafios));
+
+      const nuevoDesafio = {
+        id: desafioRef.id,
+        creatorId: sesion.user.uid,
+        equipoId: eq.id,
+        equipoNombre: eq.name || eq.nombre || 'Mi Equipo',
+        equipoEscudoUrl: eq.shieldUrl || eq.escudoUrl || null,
+        modalidad: modalidad as any,
+        estadoCancha,
+        estado: 'ABIERTO',
+        tipoDesafio: 'partido_equipo',
+        turnoId: null,
+        predioId: null,
+        posicionBuscada: null,
+        fechaUnix,
+        descripcion: `Desafío abierto ${modalidad}: ${estadoCancha === 'CON_CANCHA' ? 'Cancha reservada' : 'Buscamos cancha a medias'}`,
+        geo: geoIndex,
+        equiposAceptantes: [],
+        createdAt: Date.now(),
+      };
+
+      await setDoc(desafioRef, nuevoDesafio);
+
+      setMostrarFormulario(false);
+      limpiarFormulario();
+      setToastMessage('¡Desafío publicado en el Radar con éxito! ⚽');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err: any) {
+      console.error('Error publicando desafío en Firestore:', err);
+      setToastMessage(err?.message || 'Error al publicar desafío');
+      setTimeout(() => setToastMessage(''), 3500);
+    } finally {
+      setPublicando(false);
+    }
+  };
+
+  // 4. Cancelar desafío y darlo de baja del Radar
+  const handleCancelarDesafio = async (id: string) => {
+    setCancelandoId(id);
+    try {
+      await updateDoc(doc(db, COLECCIONES.desafios, id), {
+        estado: 'CANCELADO',
+        updatedAt: Date.now(),
+      });
+      setToastMessage('Desafío cancelado y quitado del Radar');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err: any) {
+      console.error('Error cancelando desafío:', err);
+      setToastMessage('No se pudo cancelar el desafío');
+      setTimeout(() => setToastMessage(''), 3000);
+    } finally {
+      setCancelandoId(null);
+    }
+  };
+
+  const formatearFechaHora = (item: any) => {
+    if (item.fechaUnix) {
+      const d = new Date(item.fechaUnix);
+      return d.toLocaleString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+    return item.diaHora || 'A convenir';
   };
 
   return (
-    <div className="h-full flex flex-col bg-canvas font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-transparent font-sans text-slate-800 overflow-hidden relative">
       <div className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
         <Toast mensaje={toastMessage} />
 
       {!mostrarFormulario ? (
         <>
-          {/* Header con pr-14 para no pisarse jamas con el boton Cerrar (X) de la modal */}
+          {/* Header con pr-14 para no pisarse con el boton Cerrar (X) de la modal */}
           <div className="flex justify-between items-center mb-6 mt-1 pr-14">
-            <h2 className="text-2xl font-black text-amber-500">Mis Partidos</h2>
-            <button 
+            <div>
+              <h2 className="text-2xl font-black text-amber-500">Mis Desafíos Abiertos</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Partidos publicados en el mapa para cualquier rival</p>
+            </div>
+            <motion.button 
               onClick={() => setMostrarFormulario(true)}
-              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 px-3.5 py-2 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 px-3.5 py-2 rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer whitespace-nowrap"
             >
               + Lanzar Desafío
-            </button>
+            </motion.button>
           </div>
 
           <div className="space-y-4">
             {partidos.length === 0 && (
               <div className="text-center py-12 px-6 text-zinc-400 border border-zinc-800/80 rounded-2xl border-dashed bg-zinc-900/40">
                 <div className="text-3xl mb-3">🛡️</div>
-                <p className="font-bold text-white text-base mb-1">Aún no tenés partidos ni desafíos activos</p>
-                <p className="text-xs text-zinc-500 max-w-xs mx-auto">
-                  Tocá en "+ Lanzar Desafío" para buscar un rival en tu zona y publicarlo en el Radar.
+                <p className="font-bold text-white text-base mb-1">Aún no tenés desafíos activos en el Radar</p>
+                <p className="text-xs text-zinc-500 max-w-xs mx-auto mb-4">
+                  Tocá en "+ Lanzar Desafío" para publicar un partido en el mapa y que otros equipos te desafíen.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormulario(true)}
+                  className="bg-amber-500 text-zinc-950 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-md hover:bg-amber-400 transition"
+                >
+                  Lanzar Primer Desafío
+                </button>
               </div>
             )}
-            {partidos.map(p => (
-              <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            {partidos.map((p) => (
+              <motion.div 
+                key={p.id} 
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                whileHover={{ y: -2 }}
+                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition text-white"
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
                     <span className="bg-zinc-800 text-zinc-300 px-2 py-1 rounded text-xs font-black">{p.modalidad}</span>
-                    <h3 className="font-bold">{p.rival ? `vs ${p.rival}` : 'Buscando rival...'}</h3>
+                    <h3 className="font-bold text-sm">{p.equipoNombre || 'Mi Equipo'}</h3>
                   </div>
-                  <span className={`text-[11px] font-black uppercase px-2 py-1 rounded-full ${p.estado === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500 animate-pulse'}`}>
-                    {p.estado}
+                  <span className={`text-[11px] font-black uppercase px-2 py-1 rounded-full ${
+                    p.estado === 'ABIERTO' || p.estado === 'En Radar'
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse'
+                      : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  }`}>
+                    {p.estado === 'ABIERTO' ? 'Visible en Radar 📡' : p.estado}
                   </span>
                 </div>
-                <p className="text-sm text-zinc-400 font-bold mt-2">{p.diaHora}</p>
-                <div className="flex justify-between items-center mt-3">
-                  <p className="text-xs text-zinc-500">{p.cancha}</p>
-                  {p.cancha.includes('buscamos') && (
-                    <button 
-                      onClick={() => navigate('/radar', { state: { matchId: p.id, teamName: p.rival || 'Mi Equipo', fromAlAngulo: true } })}
-                      className="bg-amber-500 text-zinc-950 px-3 py-1.5 rounded-lg text-xs font-black shadow-md hover:scale-105 transition-transform"
+                <p className="text-xs sm:text-sm text-zinc-300 font-bold mt-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{formatearFechaHora(p)}</span>
+                </p>
+                <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-zinc-800/80">
+                  <p className="text-xs text-zinc-400">
+                    {p.estadoCancha === 'CON_CANCHA' ? '✅ Con cancha alquilada' : '⚽ Buscan cancha a medias'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCancelarDesafio(p.id)}
+                      disabled={cancelandoId === p.id}
+                      className="text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1"
                     >
-                      Reservar Cancha
+                      {cancelandoId === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                      <span>Quitar del Radar</span>
                     </button>
-                  )}
+                    <button 
+                      type="button"
+                      onClick={() => navigate('/radar')}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      Ver en Radar →
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </>
       ) : (
         <>
-          <button onClick={() => setMostrarFormulario(false)} className="text-zinc-500 text-sm font-bold mb-6">← Volver</button>
-          <h2 className="text-2xl font-black text-amber-500 mb-6">Lanzar Desafío al Radar</h2>
+          <button onClick={() => setMostrarFormulario(false)} className="text-zinc-500 text-sm font-bold mb-6 cursor-pointer hover:text-white transition">← Volver</button>
+          <h2 className="text-2xl font-black text-amber-500 mb-1">Lanzar Desafío al Radar</h2>
+          <p className="text-xs text-zinc-400 mb-6">Tu partido aparecerá en el mapa para que cualquier equipo de la zona pueda desafiarte.</p>
 
-          <div className="space-y-6">
+          <div className="space-y-5">
+            {/* Selector de equipo */}
+            {misEquipos.length > 1 && (
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase block mb-1.5">Equipo que lanza el desafío</label>
+                <select
+                  value={equipoSeleccionadoId}
+                  onChange={(e) => setEquipoSeleccionadoId(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500 text-xs font-bold"
+                >
+                  {misEquipos.map((eq) => (
+                    <option key={eq.id} value={eq.id}>
+                      {eq.name || eq.nombre} {eq.captainId === sesion.user?.uid ? '👑' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {misEquipos.length === 0 && !cargandoEquipos && (
+              <div className="p-3.5 bg-red-500/15 border border-red-500/30 rounded-xl text-red-300 text-xs font-bold">
+                ⚠️ No integrás ningún equipo todavía. Creá un equipo primero en "Mi Equipo" para poder lanzar un desafío al radar.
+              </div>
+            )}
+
             <div>
-              <label className="text-xs font-bold text-zinc-500 uppercase">Modalidad</label>
+              <label className="text-xs font-bold text-zinc-400 uppercase flex items-center justify-between">
+                <span>Modalidad</span>
+                {!modalidad && <span className="text-[10px] text-amber-400 font-normal">Obligatorio</span>}
+              </label>
               <div className="flex gap-2 mt-2">
-                {['F5', 'F7', 'F11'].map((m) => (
-                  <button 
+                {['F5', 'F7', 'F8', 'F11'].map((m) => (
+                  <motion.button 
                     key={m} 
+                    type="button"
                     onClick={() => setModalidad(m)}
-                    className={`flex-1 py-3 rounded-xl font-black transition-colors ${m === modalidad ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400'}`}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                    className={`flex-1 py-3 rounded-xl font-black transition-colors cursor-pointer text-xs ${
+                      m === modalidad 
+                        ? 'bg-amber-500 text-zinc-950 shadow-md ring-2 ring-amber-400' 
+                        : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white'
+                    }`}
                   >
                     {m}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
             
             <div>
-              <label htmlFor="desafio-diahora" className="text-xs font-bold text-zinc-500 uppercase">Día y Hora</label>
+              <label htmlFor="desafio-diahora" className="text-xs font-bold text-zinc-400 uppercase flex items-center justify-between">
+                <span>Día y Hora aproximada</span>
+                {!diaHora && <span className="text-[10px] text-amber-400 font-normal">Obligatorio</span>}
+              </label>
               <input 
                 id="desafio-diahora"
                 type="datetime-local" 
                 value={diaHora}
                 onChange={(e) => setDiaHora(e.target.value)}
-                className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none" 
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 mt-2 text-white outline-none focus:border-amber-500/50 text-xs font-bold" 
               />
             </div>
 
             <div>
-              <label htmlFor="desafio-cancha" className="text-xs font-bold text-zinc-500 uppercase">¿Tienen Cancha?</label>
-              <select 
-                id="desafio-cancha"
-                value={cancha}
-                onChange={(e) => setCancha(e.target.value)}
-                className="w-full bg-zinc-900 border-none rounded-xl px-4 py-3 mt-2 text-white outline-none"
-              >
-                <option>Sí, ya la alquilamos</option>
-                <option>No, buscamos cancha a medias</option>
-              </select>
+              <label className="text-xs font-bold text-zinc-400 uppercase flex items-center justify-between mb-2">
+                <span>¿Tienen Cancha?</span>
+                {!estadoCancha && <span className="text-[10px] text-amber-400 font-normal">Obligatorio</span>}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEstadoCancha('BUSCA_CANCHA')}
+                  className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                    estadoCancha === 'BUSCA_CANCHA'
+                      ? 'bg-amber-500/15 border-amber-500 text-amber-300 ring-2 ring-amber-500/40 shadow-sm'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  <span className="font-black text-xs text-white flex items-center gap-1.5">
+                    ⚽ No, buscamos a medias
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    Coordinamos y alquilamos entre ambos equipos
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEstadoCancha('CON_CANCHA')}
+                  className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col gap-1 ${
+                    estadoCancha === 'CON_CANCHA'
+                      ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/40 shadow-sm'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  <span className="font-black text-xs text-white flex items-center gap-1.5">
+                    ✅ Sí, ya la alquilamos
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    Tenemos predio y horario confirmado
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <button 
+          <motion.button 
             onClick={handlePublicar}
-            disabled={!diaHora}
-            className={`w-full font-black py-4 rounded-xl mt-8 transition-all ${diaHora ? 'bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)] active:scale-95' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+            disabled={!modalidad || !diaHora || !estadoCancha || publicando || misEquipos.length === 0}
+            whileHover={modalidad && diaHora && estadoCancha && !publicando ? { scale: 1.02 } : {}}
+            whileTap={modalidad && diaHora && estadoCancha && !publicando ? { scale: 0.96 } : {}}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className={`w-full font-black py-4 rounded-xl mt-8 transition-all flex items-center justify-center gap-2 ${
+              modalidad && diaHora && estadoCancha && !publicando && misEquipos.length > 0
+                ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer' 
+                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+            }`}
           >
-            PUBLICAR EN RADAR
-          </button>
+            {publicando ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>PUBLICANDO EN EL RADAR...</span>
+              </>
+            ) : !modalidad ? (
+              <span>1. SELECCIONÁ MODALIDAD</span>
+            ) : !diaHora ? (
+              <span>2. ELEGÍ DÍA Y HORA</span>
+            ) : !estadoCancha ? (
+              <span>3. INDICÁ SI TIENEN CANCHA</span>
+            ) : (
+              <span>PUBLICAR EN RADAR</span>
+            )}
+          </motion.button>
         </>
       )}
       </div>
@@ -1229,6 +1599,7 @@ export const Screen7MyTeam = () => {
   const navigate = useNavigate();
   const [equipoActivo, setEquipoActivo] = useState(0);
   const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [eliminandoEquipo, setEliminandoEquipo] = useState(false);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const [mostrarModalConvocatoria, setMostrarModalConvocatoria] = useState(false);
   const [mostrarModalEstadisticas, setMostrarModalEstadisticas] = useState(false);
@@ -1241,6 +1612,7 @@ export const Screen7MyTeam = () => {
   const [inviteUsername, setInviteUsername] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [subPestanaPlantel, setSubPestanaPlantel] = useState<'confirmados' | 'todos'>('confirmados');
+  const [etapaPartido, setEtapaPartido] = useState<'convocatoria' | 'post_partido'>('convocatoria');
 
   // Busqueda de jugadores REAL (Firestore). Antes había un `mockUsuarios`
   // inventado: "Enviar Notificación" no escribía nada en ninguna parte.
@@ -1513,12 +1885,47 @@ export const Screen7MyTeam = () => {
     }
   };
 
+  /** Disolver o eliminar equipo por parte del capitán */
+  const handleEliminarEquipo = async () => {
+    if (!equipo || !sesion.user) return;
+    if (!equipo.isCapitan) {
+      aviso('Solo el capitán puede eliminar este equipo');
+      return;
+    }
+    const confirmado = await confirmar(
+      `¿Estás seguro de que querés eliminar y disolver "${equipo.nombre}"? Se liberará a todos los integrantes del plantel y esta acción no se puede deshacer.`,
+      {
+        titulo: 'Eliminar equipo',
+        textoConfirmar: 'Eliminar definitivamente',
+        peligro: true,
+      },
+    );
+    if (!confirmado) return;
+
+    setEliminandoEquipo(true);
+    try {
+      await eliminarEquipo(equipo.id, sesion.user.uid);
+      setMostrarConfig(false);
+      const total = await recargarEquipos();
+      setEquipoActivo(Math.max(0, Math.min(equipoActivo, total - 1)));
+      aviso(`El equipo "${equipo.nombre}" fue eliminado`);
+    } catch (err) {
+      aviso(err instanceof Error ? err.message : 'No se pudo eliminar el equipo');
+    } finally {
+      setEliminandoEquipo(false);
+    }
+  };
+
   /**
    * Baja real: `salirDelEquipo` (por cuenta propia) o `liberarMiembro` (desde
    * la capitanía). Ambos escriben `teams.members` y el `teamIds` del jugador.
    */
   const handleRemovePlayer = async (teamId: string, playerId: string, isSelf: boolean) => {
     if (!sesion.user) return;
+    if (isSelf && equipo?.isCapitan) {
+      aviso('Como capitán, podés delegar la capitanía o disolver el equipo desde la Configuración ⚙️');
+      return;
+    }
     const pregunta = isSelf
       ? '¿Estás seguro que querés salir del equipo?'
       : '¿Estás seguro que querés liberar a este jugador?';
@@ -1703,6 +2110,30 @@ export const Screen7MyTeam = () => {
     }
   };
 
+  const handleAbrirEstadisticas = (eqActual: any) => {
+    setAusentesIds([]);
+    setEstrellasPredio(0);
+    setFairPlayRival(null);
+
+    // Pre-seleccionar automáticamente al más votado por la cancha si hubo votos
+    const conteo: Record<string, number> = {};
+    Object.values(eqActual?.convocatoria?.votosMvp || {}).forEach((candId: any) => {
+      conteo[candId] = (conteo[candId] || 0) + 1;
+    });
+    let liderUid: string | null = null;
+    let maxV = 0;
+    Object.entries(conteo).forEach(([uid, cant]) => {
+      if (cant > maxV) {
+        maxV = cant;
+        liderUid = uid;
+      }
+    });
+    setMvpId(liderUid);
+
+    setStatsPartido({});
+    setMostrarModalEstadisticas(true);
+  };
+
   /**
    * Publica la alerta al Radar cuando no se completa el equipo.
    */
@@ -1869,7 +2300,7 @@ export const Screen7MyTeam = () => {
           onChange={(e) => setNuevoNombre(e.target.value)}
           maxLength={60}
           placeholder="Los Pibes de Lomas"
-          className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+          className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
         />
 
         <label className="text-xs font-bold text-zinc-500 uppercase">Formato de juego</label>
@@ -1910,29 +2341,32 @@ export const Screen7MyTeam = () => {
 
   if (cargando) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-[#0B0F19] text-emerald-500 font-bold gap-3">
+      <div className="h-full flex flex-col items-center justify-center bg-transparent text-emerald-600 font-bold gap-3">
         <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-sm font-semibold text-zinc-300">Cargando equipo...</span>
+        <span className="text-sm font-semibold text-slate-600">Cargando equipo...</span>
       </div>
     );
   }
 
   if (equipos.length === 0 || !equipo) {
     return (
-      <div className="h-full flex flex-col bg-[#0B0F19] font-sans text-white overflow-hidden relative">
+      <div className="h-full flex flex-col bg-transparent font-sans text-slate-100 overflow-hidden relative">
         <Toast mensaje={toastMessage} />
         <div className="flex-1 overflow-y-auto">
           {bannerInvitacion}
           <div className="flex flex-col justify-center items-center p-6 text-center min-h-[60vh]">
-            <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center text-3xl mb-4 border border-zinc-800">🛡️</div>
+            <div className="w-20 h-20 bg-white shadow-md rounded-full flex items-center justify-center text-3xl mb-4 border border-slate-200">🛡️</div>
             <h2 className="text-2xl font-black text-amber-500 mb-2">No tenés equipo</h2>
-            <p className="text-zinc-400 mb-8">Creá un equipo para empezar a sumar estadísticas, armar convocatorias y lanzar desafíos al Radar.</p>
-            <button
+            <p className="text-slate-400 mb-8">Creá un equipo para empezar a sumar estadísticas, armar convocatorias y lanzar desafíos al Radar.</p>
+            <motion.button
               onClick={() => setMostrarCrear(true)}
-              className="bg-amber-500 text-zinc-950 font-black px-8 py-4 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.3)] hover:scale-105 active:scale-95 transition-transform"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+              className="bg-amber-500 text-zinc-950 font-black px-8 py-4 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.3)] transition cursor-pointer"
             >
               CREAR EQUIPO
-            </button>
+            </motion.button>
           </div>
         </div>
         {modalCrearEquipo}
@@ -1941,7 +2375,7 @@ export const Screen7MyTeam = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#0B0F19] font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-transparent font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto pb-24 md:pb-8">
         {/* Toast Notification */}
         <Toast mensaje={toastMessage} />
@@ -1951,22 +2385,27 @@ export const Screen7MyTeam = () => {
       {/* Selector de equipos (Tabs) */}
       <div className="flex bg-zinc-900 border-b border-zinc-800 pt-8">
         {equipos.map((eq, i) => (
-          <button 
+          <motion.button 
             key={eq.id} 
             onClick={() => setEquipoActivo(i)}
-            className={`flex-1 py-4 text-sm font-bold uppercase transition ${equipoActivo === i ? 'text-amber-500 border-b-2 border-amber-500' : 'text-zinc-500'}`}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className={`flex-1 py-4 text-sm font-bold uppercase transition cursor-pointer ${equipoActivo === i ? 'text-amber-400 border-b-2 border-amber-400 font-black' : 'text-zinc-400 hover:text-zinc-200'}`}
           >
             {eq.nombre}
-          </button>
+          </motion.button>
         ))}
         {equipos.length < MAX_EQUIPOS_POR_JUGADOR && (
-          <button
+          <motion.button
             onClick={() => setMostrarCrear(true)}
-            className="px-4 py-4 text-sm font-bold text-zinc-500 hover:text-amber-500 transition"
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            className="px-4 py-4 text-sm font-bold text-zinc-400 hover:text-amber-400 transition cursor-pointer"
             title="Crear otro equipo"
           >
             +
-          </button>
+          </motion.button>
         )}
       </div>
 
@@ -2004,7 +2443,7 @@ export const Screen7MyTeam = () => {
           accept="image/*" 
           onChange={handleImageUpload} 
         />
-        <h2 className="text-2xl font-black uppercase">{equipo.nombre}</h2>
+        <h2 className="text-2xl font-black uppercase text-white tracking-wide">{equipo.nombre}</h2>
         {equipo.esRefuerzoTemporal && (
           <div className="inline-flex items-center gap-1.5 mt-2 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider animate-pulse">
             ⚡ Refuerzo para el partido de hoy
@@ -2051,266 +2490,361 @@ export const Screen7MyTeam = () => {
         </div>
       </div>
 
-      {/* Convocatoria Section */}
+      {/* Convocatoria y Post-Partido Section */}
       <div className="px-6 pt-6">
         {equipo.convocatoria ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-black text-lg text-amber-500">Próximo Partido</h3>
-                <p className="text-sm text-zinc-400 font-bold">{equipo.convocatoria.fecha}</p>
-              </div>
-              {equipo.isCapitan && (
-                <button
-                  onClick={() => {
-                    const formatoNum = parseInt((equipo.formato || 'F5').replace(/\D/g, '')) || 5;
-                    const yaConfirmados = (equipo.convocatoria.confirmados || []).length;
-                    const faltan = Math.max(1, formatoNum - yaConfirmados);
-                    setJugadoresFaltantes(faltan);
-                    setMostrarModalRadar(true);
-                  }}
-                  className={`text-xs font-black px-3.5 py-1.5 rounded-xl active:scale-95 transition-all flex items-center gap-1.5 shadow-md ${
-                    equipo.convocatoria.alertaRadarEnviada
-                      ? 'bg-blue-600/30 text-blue-300 border border-blue-500/50 hover:bg-blue-600/50'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
-                  }`}
-                >
-                  <Radio className={`w-3.5 h-3.5 ${equipo.convocatoria.alertaRadarEnviada ? 'animate-pulse text-blue-400' : ''}`} />
-                  {equipo.convocatoria.alertaRadarEnviada ? 'Radar Activo' : 'Al Radar'}
-                </button>
-              )}
+          <div>
+            {/* Selector de Etapa: Convocatoria vs Post-Partido */}
+            <div className="flex bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 shadow-md mb-4 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEtapaPartido('convocatoria')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  etapaPartido === 'convocatoria'
+                    ? 'bg-amber-500 text-zinc-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>1. Convocatoria</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  etapaPartido === 'convocatoria' ? 'bg-zinc-950/25 text-zinc-950' : 'bg-zinc-800 text-amber-400'
+                }`}>
+                  {equipo.convocatoria.confirmados?.length || 0}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEtapaPartido('post_partido')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  etapaPartido === 'post_partido'
+                    ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                <Trophy className="w-4 h-4" />
+                <span>2. Carga & Post-Partido</span>
+              </button>
             </div>
 
-            {/* Badge de Convocatoria Cerrada */}
-            {equipo.convocatoria.cerrada && (
-              <div className="flex items-center justify-between bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-2.5 mb-3 text-xs">
-                <div className="flex items-center gap-2 text-emerald-300 font-bold truncate">
-                  <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Convocatoria Cerrada • Plantel Confirmado</span>
+            {/* Panel 1: Convocatoria (Pre-Partido) */}
+            {etapaPartido === 'convocatoria' ? (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-lg">
+                <div className="flex justify-between items-start mb-4 pb-3 border-b border-zinc-800/70">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                      <span className="text-[11px] uppercase font-black tracking-wider text-amber-400">
+                        Próximo Partido • Convocatoria
+                      </span>
+                    </div>
+                    <h3 className="font-black text-xl text-white">{equipo.convocatoria.fecha}</h3>
+                    {equipo.convocatoria.predioNombre && (
+                      <p className="text-xs font-bold text-zinc-400 flex items-center gap-1.5 mt-1">
+                        <span>📍</span> {equipo.convocatoria.predioNombre}
+                      </p>
+                    )}
+                  </div>
+                  {equipo.isCapitan && (
+                    <motion.button
+                      onClick={() => {
+                        const formatoNum = parseInt((equipo.formato || 'F5').replace(/\D/g, '')) || 5;
+                        const yaConfirmados = (equipo.convocatoria.confirmados || []).length;
+                        const faltan = Math.max(1, formatoNum - yaConfirmados);
+                        setJugadoresFaltantes(faltan);
+                        setMostrarModalRadar(true);
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className={`text-xs font-black px-3.5 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-md cursor-pointer ${
+                        equipo.convocatoria.alertaRadarEnviada
+                          ? 'bg-blue-600/30 text-blue-300 border border-blue-500/50 hover:bg-blue-600/50'
+                          : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]'
+                      }`}
+                    >
+                      <Radio className={`w-3.5 h-3.5 ${equipo.convocatoria.alertaRadarEnviada ? 'animate-pulse text-blue-400' : ''}`} />
+                      {equipo.convocatoria.alertaRadarEnviada ? 'Radar Activo' : 'Al Radar'}
+                    </motion.button>
+                  )}
                 </div>
+
+                {/* Badge de Convocatoria Cerrada */}
+                {equipo.convocatoria.cerrada && (
+                  <div className="flex items-center justify-between bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-2.5 mb-3 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-300 font-bold truncate">
+                      <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Convocatoria Cerrada • Plantel Confirmado</span>
+                    </div>
+                    {equipo.isCapitan && (
+                      <button
+                        onClick={() => handleAlternarCierreConvocatoria(equipo.id, false)}
+                        className="text-amber-400 hover:text-white font-black uppercase text-[11px] underline ml-2 shrink-0 cursor-pointer"
+                      >
+                        Reabrir
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Badge de alerta activa en Radar */}
+                {equipo.convocatoria.alertaRadarEnviada && !equipo.convocatoria.cerrada && (
+                  <div className="flex items-center justify-between bg-blue-950/40 border border-blue-500/30 rounded-xl p-2.5 mb-3 text-xs">
+                    <div className="flex items-center gap-2 text-blue-200 font-bold truncate">
+                      <Radio className="w-4 h-4 text-blue-400 animate-pulse shrink-0" />
+                      <span className="truncate">
+                        En Radar: faltan {equipo.convocatoria.jugadoresFaltantes || 1} jugador(es)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => navigate('/radar')}
+                      className="text-blue-400 hover:text-white font-black uppercase text-[11px] underline ml-2 shrink-0 cursor-pointer"
+                    >
+                      Ver en mapa
+                    </button>
+                  </div>
+                )}
+
+                {/* Contadores de Confirmados y Bajas */}
+                <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-3.5">
+                  <div className="text-center flex-1">
+                    <div className="text-2xl font-black text-emerald-400">{equipo.convocatoria.confirmados?.length || 0}</div>
+                    <div className="text-[11px] uppercase font-bold text-zinc-400">Confirmados</div>
+                  </div>
+                  <div className="w-px h-8 bg-zinc-800"></div>
+                  <div className="text-center flex-1">
+                    <div className="text-2xl font-black text-rose-400">{equipo.convocatoria.bajas?.length || 0}</div>
+                    <div className="text-[11px] uppercase font-bold text-zinc-400">Bajas</div>
+                  </div>
+                </div>
+
+                {/* Botones de Asistencia del Jugador */}
+                <div className="flex gap-2.5 mb-3.5">
+                  {equipo.convocatoria.cerrada ? (
+                    <div className="w-full text-center py-2.5 px-3 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-zinc-400 text-xs font-bold flex items-center justify-center gap-2">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Convocatoria cerrada por el capitán</span>
+                    </div>
+                  ) : (
+                    (() => {
+                      const myId = equipo.plantel.find((p: any) => p.id === currentUid)?.id;
+                      const confirmó = myId && equipo.convocatoria.confirmados?.includes(myId);
+                      const seBajó = myId && equipo.convocatoria.bajas?.includes(myId);
+                      return (
+                        <>
+                          <motion.button 
+                            onClick={() => handleResponderConvocatoria(equipo.id, 'voy')}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                            className={`flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              confirmó 
+                                ? 'bg-emerald-500 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.35)]' 
+                                : 'bg-zinc-800/90 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                            }`}
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Voy</span>
+                          </motion.button>
+                          <motion.button 
+                            onClick={() => handleResponderConvocatoria(equipo.id, 'bajo')}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.96 }}
+                            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                            className={`flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              seBajó 
+                                ? 'bg-rose-500 text-zinc-950 shadow-[0_0_15px_rgba(244,63,94,0.35)]' 
+                                : 'bg-zinc-800/90 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                            }`}
+                          >
+                            <X className="w-4 h-4" />
+                            <span>Me bajo</span>
+                          </motion.button>
+                        </>
+                      );
+                    })()
+                  )}
+                </div>
+
+                {/* Botones de Gestión del Capitán (Cerrar / Reabrir / Cancelar) */}
                 {equipo.isCapitan && (
-                  <button
-                    onClick={() => handleAlternarCierreConvocatoria(equipo.id, false)}
-                    className="text-amber-400 hover:text-white font-black uppercase text-[11px] underline ml-2 shrink-0 cursor-pointer"
-                  >
-                    Reabrir
-                  </button>
+                  <div className="pt-3 border-t border-zinc-800/80 flex items-center gap-2">
+                    <motion.button
+                      onClick={() => handleAlternarCierreConvocatoria(equipo.id, !equipo.convocatoria.cerrada)}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className={`flex-1 text-xs font-black py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
+                        equipo.convocatoria.cerrada
+                          ? 'bg-zinc-800 hover:bg-zinc-700 text-amber-400 border-zinc-700'
+                          : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                      }`}
+                    >
+                      {equipo.convocatoria.cerrada ? (
+                        <>
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>Reabrir Convocatoria</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Cerrar Convocatoria</span>
+                        </>
+                      )}
+                    </motion.button>
+
+                    <motion.button
+                      onClick={() => handleCancelarConvocatoria(equipo.id)}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className="text-xs font-bold py-2.5 px-3 rounded-xl bg-zinc-800/80 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-700/80 hover:border-rose-500/40 transition flex items-center gap-1.5 cursor-pointer"
+                      title="Cancelar partido y eliminar convocatoria"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Cancelar</span>
+                    </motion.button>
+                  </div>
                 )}
               </div>
-            )}
-
-            {/* Badge de alerta activa en Radar */}
-            {equipo.convocatoria.alertaRadarEnviada && !equipo.convocatoria.cerrada && (
-              <div className="flex items-center justify-between bg-blue-950/40 border border-blue-500/30 rounded-xl p-2.5 mb-3 text-xs">
-                <div className="flex items-center gap-2 text-blue-200 font-bold truncate">
-                  <Radio className="w-4 h-4 text-blue-400 animate-pulse shrink-0" />
-                  <span className="truncate">
-                    En Radar: faltan {equipo.convocatoria.jugadoresFaltantes || 1} jugador(es)
-                  </span>
-                </div>
-                <button
-                  onClick={() => navigate('/radar')}
-                  className="text-blue-400 hover:text-white font-black uppercase text-[11px] underline ml-2 shrink-0"
-                >
-                  Ver en mapa
-                </button>
-              </div>
-            )}
-
-            {/* Botones de Gestión del Capitán (Cerrar / Reabrir / Cancelar) */}
-            {equipo.isCapitan && (
-              <div className="flex items-center gap-2 mb-3">
-                <button
-                  onClick={() => handleAlternarCierreConvocatoria(equipo.id, !equipo.convocatoria.cerrada)}
-                  className={`flex-1 text-xs font-black py-2 px-3 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
-                    equipo.convocatoria.cerrada
-                      ? 'bg-zinc-800 hover:bg-zinc-700 text-amber-400 border-zinc-700'
-                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
-                  }`}
-                >
-                  {equipo.convocatoria.cerrada ? (
-                    <>
-                      <Unlock className="w-3.5 h-3.5" />
-                      <span>Reabrir Convocatoria</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Cerrar Convocatoria</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => handleCancelarConvocatoria(equipo.id)}
-                  className="text-xs font-bold py-2 px-3 rounded-xl bg-zinc-800 hover:bg-red-950/50 text-zinc-400 hover:text-red-400 border border-zinc-700/80 hover:border-red-500/40 transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                  title="Cancelar partido y eliminar convocatoria"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Cancelar Partido</span>
-                </button>
-              </div>
-            )}
-            
-            {equipo.isCapitan && equipo.convocatoria.confirmados.length > 0 && (
-              <button 
-                onClick={() => {
-                  setAusentesIds([]);
-                  setEstrellasPredio(0);
-                  setFairPlayRival(null);
-
-                  // Pre-seleccionar automáticamente al más votado por la cancha si hubo votos
-                  const conteo: Record<string, number> = {};
-                  Object.values(equipo.convocatoria?.votosMvp || {}).forEach((candId: any) => {
-                    conteo[candId] = (conteo[candId] || 0) + 1;
-                  });
-                  let liderUid: string | null = null;
-                  let maxV = 0;
-                  Object.entries(conteo).forEach(([uid, cant]) => {
-                    if (cant > maxV) {
-                      maxV = cant;
-                      liderUid = uid;
-                    }
-                  });
-                  setMvpId(liderUid);
-
-                  setStatsPartido({});
-                  setMostrarModalEstadisticas(true);
-                }}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-3 rounded-xl active:scale-95 transition-all mb-4 cursor-pointer shadow-md"
-              >
-                Cargar Estadísticas del Partido
-              </button>
-            )}
-
-            <div className="flex justify-between items-center bg-canvas p-3 rounded-xl border border-zinc-800 mb-3">
-              <div className="text-center flex-1">
-                <div className="text-xl font-black text-emerald-500">{equipo.convocatoria.confirmados.length}</div>
-                <div className="text-[11px] uppercase font-bold text-zinc-500">Confirmados</div>
-              </div>
-              <div className="w-px h-8 bg-zinc-800"></div>
-              <div className="text-center flex-1">
-                <div className="text-xl font-black text-red-500">{equipo.convocatoria.bajas.length}</div>
-                <div className="text-[11px] uppercase font-bold text-zinc-500">Bajas</div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 mb-3">
-              {equipo.convocatoria.cerrada ? (
-                <div className="w-full text-center py-2.5 px-3 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-zinc-400 text-xs font-bold flex items-center justify-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Convocatoria cerrada por el capitán</span>
-                </div>
-              ) : (
-                (() => {
-                  const myId = equipo.plantel.find((p: any) => p.id === currentUid)?.id;
-                  const confirmó = myId && equipo.convocatoria.confirmados.includes(myId);
-                  const seBajó = myId && equipo.convocatoria.bajas.includes(myId);
-                  return (
-                    <>
-                      <button 
-                        onClick={() => handleResponderConvocatoria(equipo.id, 'voy')}
-                        className={`flex-1 py-2 rounded-xl font-black text-sm transition-colors ${confirmó ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                      >
-                        ✓ Voy
-                      </button>
-                      <button 
-                        onClick={() => handleResponderConvocatoria(equipo.id, 'bajo')}
-                        className={`flex-1 py-2 rounded-xl font-black text-sm transition-colors ${seBajó ? 'bg-red-500 text-zinc-950' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}
-                      >
-                        ✕ Me bajo
-                      </button>
-                    </>
-                  );
-                })()
-              )}
-            </div>
-
-            {/* Votación democrática de la Figura (MVP) por compañeros y rivales */}
-            {equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0 && (
-              <div className="bg-canvas p-3 rounded-xl border border-zinc-800/80">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">⭐</span>
-                    <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
-                      Votación de la Figura
+            ) : (
+              /* Panel 2: Carga de Datos y Post-Partido */
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+                <div className="pb-3 border-b border-zinc-800/70">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span className="text-[11px] uppercase font-black tracking-wider text-emerald-400">
+                      Post-Partido & Tercer Tiempo
                     </span>
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-bold">
-                    {(() => {
-                      const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
-                      return totalVotos === 1 ? '1 voto registrado' : `${totalVotos} votos registrados`;
-                    })()}
-                  </span>
+                  <h3 className="font-black text-lg text-white">Carga de Datos del Encuentro</h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
+                    Una vez jugado el partido, cargá el resultado oficial, goleadores y elegí la figura de la cancha.
+                  </p>
                 </div>
-                <p className="text-[11px] text-zinc-400 mb-2.5 font-medium leading-tight">
-                  Elegí quién la rompió hoy. Compañeros y rivales pueden votar con 1 tap.
-                </p>
 
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {equipo.confirmadosDelPartido.map((p: any) => {
-                    const esMiPropioUsuario = p.id === currentUid;
-                    const votosCandidato = Object.values(equipo.convocatoria?.votosMvp || {}).filter(
-                      (candId) => candId === p.id
-                    ).length;
-                    const yoLoVote = currentUid && equipo.convocatoria?.votosMvp?.[currentUid] === p.id;
+                {/* Banner de Sponsor Oficial / Promo de Tercer Tiempo */}
+                <BannerSponsorTercerTiempo />
 
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        disabled={esMiPropioUsuario || !currentUid}
-                        onClick={async () => {
-                          if (esMiPropioUsuario || !currentUid) return;
-                          try {
-                            await emitirVotoMvp(
-                              equipo.id,
-                              currentUid,
-                              p.id,
-                              equipo.convocatoria?.equipoRivalId
-                            );
-                            setToastMessage(`¡Votaste a ${p.apodo} como figura del partido! ⭐`);
-                            setTimeout(() => setToastMessage(''), 2500);
-                          } catch (err: any) {
-                            setToastMessage(err.message || 'Error al registrar tu voto');
-                            setTimeout(() => setToastMessage(''), 2500);
-                          }
-                        }}
-                        className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left ${
-                          yoLoVote
-                            ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                            : esMiPropioUsuario
-                            ? 'bg-zinc-950/40 border-zinc-800/40 opacity-50 cursor-not-allowed'
-                            : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/80 cursor-pointer'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm shrink-0">{p.emoji || '🏃'}</span>
-                          <span className="text-xs font-bold text-white truncate">
-                            {p.apodo}
-                          </span>
-                        </div>
-                        <div className="shrink-0 flex items-center gap-1">
-                          {votosCandidato > 0 && (
-                            <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/40">
-                              ⭐ {votosCandidato}
-                            </span>
-                          )}
-                          {yoLoVote && (
-                            <span className="text-[10px] font-black text-amber-400">
-                              ✓
-                            </span>
-                          )}
-                          {esMiPropioUsuario && (
-                            <span className="text-[9px] font-bold text-zinc-500">
-                              (Vos)
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Planilla Oficial del Capitán */}
+                {equipo.isCapitan ? (
+                  <div className="bg-gradient-to-br from-emerald-950/40 to-zinc-950 border border-emerald-500/30 rounded-2xl p-4 text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <Trophy className="w-3.5 h-3.5" />
+                        Planilla Oficial
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-bold">Solo Capitán</span>
+                    </div>
+                    <p className="text-xs text-zinc-300 mb-3.5 leading-snug">
+                      Registrá el resultado final, ausentes, autores de goles, asistencias y calificación del predio y rival.
+                    </p>
+                    <motion.button
+                      onClick={() => handleAbrirEstadisticas(equipo)}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.35)] cursor-pointer text-xs sm:text-sm uppercase tracking-wider"
+                    >
+                      <Trophy className="w-4 h-4" />
+                      <span>Cargar Estadísticas del Partido</span>
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>El capitán {equipo.capitanNombre} es el encargado de cargar la planilla oficial tras el partido.</span>
+                  </div>
+                )}
+
+                {/* Votación democrática de la Figura (MVP) por compañeros y rivales */}
+                {equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0 && (
+                  <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">⭐</span>
+                        <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                          Votación de la Figura
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-bold">
+                        {(() => {
+                          const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
+                          return totalVotos === 1 ? '1 voto registrado' : `${totalVotos} votos registrados`;
+                        })()}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-3 font-medium leading-tight">
+                      Elegí quién la rompió hoy. Compañeros y rivales pueden votar con 1 tap.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                      {equipo.confirmadosDelPartido.map((p: any) => {
+                        const esMiPropioUsuario = p.id === currentUid;
+                        const votosCandidato = Object.values(equipo.convocatoria?.votosMvp || {}).filter(
+                          (candId: any) => candId === p.id
+                        ).length;
+                        const yoLoVote = currentUid && equipo.convocatoria?.votosMvp?.[currentUid] === p.id;
+
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            disabled={esMiPropioUsuario || !currentUid}
+                            onClick={async () => {
+                              if (esMiPropioUsuario || !currentUid) return;
+                              try {
+                                await emitirVotoMvp(
+                                  equipo.id,
+                                  currentUid,
+                                  p.id,
+                                  equipo.convocatoria?.equipoRivalId
+                                );
+                                setToastMessage(`¡Votaste a ${p.apodo} como figura del partido! ⭐`);
+                                setTimeout(() => setToastMessage(''), 2500);
+                              } catch (err: any) {
+                                setToastMessage(err.message || 'Error al registrar tu voto');
+                                setTimeout(() => setToastMessage(''), 2500);
+                              }
+                            }}
+                            className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left ${
+                              yoLoVote
+                                ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                                : esMiPropioUsuario
+                                ? 'bg-zinc-950/40 border-zinc-800/40 opacity-50 cursor-not-allowed'
+                                : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/80 cursor-pointer'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-sm shrink-0">{p.emoji || '🏃'}</span>
+                              <span className="text-xs font-bold text-white truncate">
+                                {p.apodo}
+                              </span>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-1">
+                              {votosCandidato > 0 && (
+                                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/40">
+                                  ⭐ {votosCandidato}
+                                </span>
+                              )}
+                              {yoLoVote && (
+                                <span className="text-[10px] font-black text-amber-400">
+                                  ✓
+                                </span>
+                              )}
+                              {esMiPropioUsuario && (
+                                <span className="text-[9px] font-bold text-zinc-500">
+                                  (Vos)
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2351,7 +2885,7 @@ export const Screen7MyTeam = () => {
 
                 {/* Resumen de Goles y Asistencias cargadas */}
                 {equipo.ultimoPartido.stats && Object.keys(equipo.ultimoPartido.stats).length > 0 && (
-                  <div className="bg-canvas p-3 rounded-xl border border-zinc-800/80">
+                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800/80">
                     <span className="text-[11px] uppercase font-black text-zinc-500 tracking-wider block mb-2">
                       Goles y Asistencias Registrados
                     </span>
@@ -2375,14 +2909,17 @@ export const Screen7MyTeam = () => {
             )}
 
             {equipo.isCapitan ? (
-              <button 
+              <motion.button 
                 onClick={() => setMostrarModalConvocatoria(true)}
-                className="w-full bg-zinc-900 border border-dashed border-zinc-700 hover:border-amber-500/50 hover:text-white text-zinc-400 font-bold py-4 rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                className="w-full bg-zinc-900 border border-dashed border-zinc-700 hover:border-amber-500/50 hover:text-white text-zinc-400 font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 + Armar Nueva Convocatoria
-              </button>
+              </motion.button>
             ) : (
-              <div className="text-center py-4 text-zinc-600 font-bold text-sm bg-zinc-900 rounded-2xl border border-zinc-800">
+              <div className="text-center py-4 text-zinc-300 font-bold text-sm bg-zinc-900 rounded-2xl border border-zinc-800">
                 No hay próximo partido programado
               </div>
             )}
@@ -2402,7 +2939,13 @@ export const Screen7MyTeam = () => {
             const esRefuerzo = Boolean(jugador.esTemporal);
 
             return (
-              <div key={jugador.id} className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800">
+              <motion.div 
+                key={jugador.id} 
+                whileHover={{ y: -1, scale: 1.008 }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800 shadow-sm hover:border-zinc-700/80 transition-shadow"
+              >
                 <div className="w-10 h-10 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center font-bold text-amber-500">
                   {jugador.emoji?.startsWith('http') ? (
                     <img src={jugador.emoji} alt={jugador.apodo} className="w-full h-full object-cover" />
@@ -2412,14 +2955,14 @@ export const Screen7MyTeam = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm truncate">{jugador.apodo}</h4>
+                    <h4 className="font-bold text-sm truncate text-white">{jugador.apodo}</h4>
                     {esRefuerzo && (
                       <span className="text-[11px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-black shrink-0">
                         ⚡ Refuerzo
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-zinc-500 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : esRefuerzo ? 'REFUERZO DEL PARTIDO' : 'JUGADOR'}</p>
+                  <p className="text-xs text-zinc-400 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : esRefuerzo ? 'REFUERZO DEL PARTIDO' : 'JUGADOR'}</p>
                 </div>
 
                 {/* Estadísticas de Jugador y Media / OVR */}
@@ -2454,7 +2997,7 @@ export const Screen7MyTeam = () => {
                       });
                       setMostrarInvitar(true);
                     }}
-                    className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors shrink-0"
+                    className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors shrink-0 cursor-pointer"
                     title="Invitar a ser miembro permanente del plantel"
                   >
                     + Sumar al Plantel
@@ -2464,13 +3007,13 @@ export const Screen7MyTeam = () => {
                   <div className="flex flex-col gap-1">
                     <button 
                       onClick={() => handleDelegateCaptain(equipo.id, jugador.id)}
-                      className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors"
+                      className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors cursor-pointer"
                     >
                       Hacer Capitán
                     </button>
                     <button 
                       onClick={() => handleRemovePlayer(equipo.id, jugador.id, false)}
-                      className="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors"
+                      className="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
                     >
                       Liberar
                     </button>
@@ -2479,12 +3022,12 @@ export const Screen7MyTeam = () => {
                 {canLeave && (
                   <button 
                     onClick={() => handleRemovePlayer(equipo.id, jugador.id, true)}
-                    className="bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors"
+                    className="bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
                   >
                     Salir
                   </button>
                 )}
-              </div>
+              </motion.div>
             );
           };
 
@@ -2493,42 +3036,51 @@ export const Screen7MyTeam = () => {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex gap-2">
-                    <button
+                    <motion.button
                       onClick={() => setSubPestanaPlantel('confirmados')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all cursor-pointer ${
                         subPestanaPlantel === 'confirmados'
-                          ? 'bg-emerald-500 text-zinc-950 shadow-lg'
-                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                          ? 'bg-emerald-500 text-zinc-950 shadow-md'
+                          : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold'
                       }`}
                     >
                       ✓ Confirmados ({jugadoresConfirmados.length})
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
                       onClick={() => setSubPestanaPlantel('todos')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all cursor-pointer ${
                         subPestanaPlantel === 'todos'
-                          ? 'bg-amber-500 text-zinc-950 shadow-lg'
-                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                          ? 'bg-amber-500 text-zinc-950 shadow-md'
+                          : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold'
                       }`}
                     >
                       Plantel ({equipo.plantel.length})
-                    </button>
+                    </motion.button>
                   </div>
                   {subPestanaPlantel === 'todos' && (
-                    <button
+                    <motion.button
                       onClick={() => setMostrarInvitar(true)}
-                      className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform"
+                      whileHover={{ scale: 1.06 }}
+                      whileTap={{ scale: 0.94 }}
+                      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                      className="bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black px-3.5 py-1.5 rounded-full shadow-md cursor-pointer flex items-center gap-1 active:scale-95 transition-all"
                     >
                       + Invitar
-                    </button>
+                    </motion.button>
                   )}
                 </div>
 
                 {subPestanaPlantel === 'confirmados' ? (
                   jugadoresConfirmados.length === 0 ? (
                     <div className="text-center py-8 bg-zinc-900/60 rounded-2xl border border-dashed border-zinc-800 p-6 space-y-2">
-                      <p className="text-sm font-bold text-zinc-400">Aún no hay jugadores confirmados</p>
-                      <p className="text-xs text-zinc-600">A medida que los integrantes pongan '✓ Voy' o se sumen refuerzos del Radar, irán apareciendo acá.</p>
+                      <p className="text-sm font-bold text-zinc-300">Aún no hay jugadores confirmados</p>
+                      <p className="text-xs text-zinc-400">A medida que los integrantes pongan '✓ Voy' o se sumen refuerzos del Radar, irán apareciendo acá.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -2547,12 +3099,12 @@ export const Screen7MyTeam = () => {
           return (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-bold text-zinc-500 uppercase">
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
                   Plantel del Equipo ({equipo.plantel.length}/{MAX_MEMBROS_EQUIPO})
                 </h3>
                 <button
                   onClick={() => setMostrarInvitar(true)}
-                  className="text-amber-500 text-xs font-bold bg-amber-500/10 px-3 py-1 rounded-full active:scale-95 transition-transform"
+                  className="bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-black px-3.5 py-1.5 rounded-full shadow-md active:scale-95 transition-all cursor-pointer flex items-center gap-1"
                 >
                   + Invitar
                 </button>
@@ -2567,9 +3119,18 @@ export const Screen7MyTeam = () => {
 
       {/* Modal Configuración */}
       {mostrarConfig && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" aria-label="Configurar equipo" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl">
-             <h3 className="text-xl font-black mb-2">Configurar Equipo</h3>
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in">
+          <div role="dialog" aria-modal="true" aria-label="Configurar equipo" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl max-h-[90vh] overflow-y-auto">
+             <button
+               type="button"
+               onClick={() => setMostrarConfig(false)}
+               aria-label="Cerrar"
+               className="absolute top-6 right-6 text-zinc-500 hover:text-white transition p-1 cursor-pointer"
+             >
+               <X className="w-5 h-5" />
+             </button>
+
+             <h3 className="text-xl font-black mb-2 text-white">Configurar Equipo</h3>
              <p className="text-sm text-zinc-400 mb-6">Ajustá cómo querés que {equipo.nombre} aparezca en el radar.</p>
              
              <label className="text-xs font-bold text-zinc-500 uppercase">Formato de Juego</label>
@@ -2588,13 +3149,40 @@ export const Screen7MyTeam = () => {
 
              <label className="text-xs font-bold text-zinc-500 uppercase">Escudo</label>
              <p className="text-[11px] text-zinc-600 mb-2">Tocá la foto del equipo en el encabezado para subir una imagen.</p>
-             <div className="flex justify-between mt-2 mb-8 bg-canvas p-2 rounded-xl border border-zinc-800">
+             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
                {['🛡️', '⚔️', '🦅', '🦁', '⭐'].map(emoji => (
                  <button key={emoji} onClick={() => setEscudoSel(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${escudoSel === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
                ))}
              </div>
 
-             <button onClick={handleGuardarConfig} className="w-full bg-emerald-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform">Guardar Cambios</button>
+             <button onClick={handleGuardarConfig} className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition cursor-pointer shadow-md">
+               Guardar Cambios
+             </button>
+
+             {/* Zona de peligro: solo visible para el capitán */}
+             {equipo.isCapitan && (
+               <div className="mt-8 pt-6 border-t border-zinc-800">
+                 <label className="text-xs font-black text-rose-500 uppercase tracking-wider block mb-1">
+                   Zona de peligro
+                 </label>
+                 <p className="text-[11px] text-zinc-400 mb-3">
+                   Eliminar este equipo liberará a todos los jugadores del plantel y borrará su historial de partidos.
+                 </p>
+                 <button
+                   type="button"
+                   onClick={handleEliminarEquipo}
+                   disabled={eliminandoEquipo}
+                   className="w-full flex items-center justify-center gap-2 bg-rose-500/10 hover:bg-rose-600 border border-rose-500/30 hover:border-rose-600 text-rose-400 hover:text-white font-bold py-3 px-4 rounded-xl text-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                 >
+                   {eliminandoEquipo ? (
+                     <Loader2 className="w-4 h-4 animate-spin" />
+                   ) : (
+                     <Trash2 className="w-4 h-4" />
+                   )}
+                   Eliminar este equipo
+                 </button>
+               </div>
+             )}
           </div>
         </div>
       )}
@@ -2618,7 +3206,7 @@ export const Screen7MyTeam = () => {
                <div className="flex-grow border-t border-zinc-800"></div>
              </div>
 
-             <div className={`flex items-center w-full bg-canvas border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
+             <div className={`flex items-center w-full bg-zinc-950 border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
                <Search className="w-4 h-4 ml-4 text-zinc-500 shrink-0" />
                 <input 
                   aria-label="Buscar jugador por usuario"
@@ -2639,7 +3227,7 @@ export const Screen7MyTeam = () => {
 
              {/* Resultados de Búsqueda */}
              {!usuarioSeleccionado && usuariosBuscados.length > 0 && (
-               <div className="bg-canvas border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
+               <div className="bg-zinc-950 border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
                   {usuariosBuscados.map(u => (
                     <div 
                       key={u.uid}
@@ -2706,7 +3294,7 @@ export const Screen7MyTeam = () => {
                 type="text" 
                 value={convFecha}
                 onChange={(e) => setConvFecha(e.target.value)}
-                className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+                className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
              />
 
              <button 
@@ -2723,7 +3311,7 @@ export const Screen7MyTeam = () => {
       {modalCrearEquipo}
       {/* Modal Cargar Estadísticas */}
       {mostrarModalEstadisticas && equipo && (
-        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-canvas/90 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
+        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-zinc-950/95 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-black italic text-emerald-500">3er TIEMPO</h2>
             <button onClick={() => setMostrarModalEstadisticas(false)} aria-label="Cerrar" className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
@@ -2995,7 +3583,7 @@ export const Screen7MyTeam = () => {
             </p>
 
             {/* Datos del partido */}
-            <div className="bg-canvas border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2 text-xs">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500">Predio / Cancha</span>
                 <span className="font-bold text-white truncate max-w-[200px]">
@@ -3022,7 +3610,7 @@ export const Screen7MyTeam = () => {
                 ¿Cuántos jugadores se necesitan para completar?
               </label>
               
-              <div className="flex items-center justify-center gap-5 bg-canvas p-4 rounded-2xl border border-zinc-800 mb-3">
+              <div className="flex items-center justify-center gap-5 bg-zinc-950 p-4 rounded-2xl border border-zinc-800 mb-3">
                 <button
                   type="button"
                   onClick={() => setJugadoresFaltantes((prev) => Math.max(1, prev - 1))}
@@ -3088,7 +3676,7 @@ export const Screen7MyTeam = () => {
             </div>
 
             {/* Vista previa del mensaje */}
-            <div className="bg-canvas/80 border border-blue-500/30 rounded-2xl p-3.5 mb-5">
+            <div className="bg-zinc-950/80 border border-blue-500/30 rounded-2xl p-3.5 mb-5">
               <div className="text-[11px] font-black uppercase text-blue-400 mb-1">Mensaje en el Radar</div>
               <p className="text-xs text-zinc-300 italic font-medium leading-relaxed">
                 "📢 ¡No completamos! Necesitamos a los {jugadoresFaltantes} jugadores necesarios para jugar en{' '}
@@ -3188,32 +3776,32 @@ export const Screen8VenueRegistration = () => {
   };
 
   return (
-    <div className="h-full bg-canvas p-6 flex flex-col font-sans text-white pb-28 md:pb-8 overflow-y-auto">
+    <div className="h-full bg-transparent p-6 flex flex-col font-sans text-zinc-100 pb-28 md:pb-8 overflow-y-auto">
       <CargandoFulbeando visible={cargando} />
-      <h2 className="text-2xl font-black mt-8">Da de alta tu Complejo</h2>
-      <p className="text-zinc-400 text-sm mt-2 mb-8">Completá los datos para aparecer en el radar de los jugadores.</p>
+      <h2 className="text-2xl font-black mt-2 text-white">Da de alta tu Complejo</h2>
+      <p className="text-zinc-400 text-sm mt-1 mb-6">Completá los datos para aparecer en el radar de los jugadores.</p>
 
-      <div className="space-y-6 flex-1">
+      <div className="space-y-5 flex-1">
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Nombre del Predio</label>
-          <input aria-label="Nombre del complejo" name="nombre" value={formData.nombre} onChange={handleChange} type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Nombre del Predio</label>
+          <input aria-label="Nombre del complejo" name="nombre" value={formData.nombre} onChange={handleChange} type="text" placeholder="Ej: El Templo del Fútbol" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white placeholder:text-zinc-500 text-sm font-medium" />
         </div>
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Dirección</label>
-          <input aria-label="Dirección" name="direccion" value={formData.direccion} onChange={handleChange} type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Dirección</label>
+          <input aria-label="Dirección" name="direccion" value={formData.direccion} onChange={handleChange} type="text" placeholder="Dirección exacta" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white placeholder:text-zinc-500 text-sm font-medium" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Barrio / Localidad</label>
-            <input aria-label="Barrio / localidad" name="barrio" value={formData.barrio} onChange={handleChange} type="text" placeholder="Ej: Palermo" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+            <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Barrio / Localidad</label>
+            <input aria-label="Barrio / localidad" name="barrio" value={formData.barrio} onChange={handleChange} type="text" placeholder="Ej: Palermo" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white placeholder:text-zinc-500 text-sm font-medium" />
           </div>
           <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ciudad</label>
-            <input aria-label="Ciudad" name="ciudad" value={formData.ciudad} onChange={handleChange} type="text" placeholder="Ej: CABA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+            <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Ciudad</label>
+            <input aria-label="Ciudad" name="ciudad" value={formData.ciudad} onChange={handleChange} type="text" placeholder="Ej: CABA" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white placeholder:text-zinc-500 text-sm font-medium" />
           </div>
         </div>
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Ubicación GPS</label>
+          <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Ubicación GPS</label>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center justify-between">
             <div className="text-sm">
               {location.loading ? (
@@ -3224,14 +3812,14 @@ export const Screen8VenueRegistration = () => {
                 <span className="text-zinc-500">No se detectó ubicación</span>
               )}
             </div>
-            <button onClick={requestLocation} disabled={location.loading} className="text-xs bg-zinc-800 text-zinc-300 font-bold px-3 py-1.5 rounded-lg">
+            <button onClick={requestLocation} disabled={location.loading} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold px-3 py-1.5 rounded-lg transition cursor-pointer">
               Actualizar
             </button>
           </div>
         </div>
         <div>
-          <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Teléfono de Contacto</label>
-          <input aria-label="Teléfono" name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="Ej: 11 1234 5678" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500" />
+          <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Teléfono de Contacto</label>
+          <input aria-label="Teléfono" name="telefono" value={formData.telefono} onChange={handleChange} type="tel" placeholder="Ej: 11 1234 5678" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white placeholder:text-zinc-500 text-sm font-medium" />
         </div>
 
         <div className="pt-4 border-t border-zinc-800 space-y-4">
@@ -3239,12 +3827,12 @@ export const Screen8VenueRegistration = () => {
             Cobro de Seña y Datos Bancarios
           </h3>
           <div>
-            <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Modalidad de la Seña</label>
+            <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Modalidad de la Seña</label>
             <div className="grid grid-cols-2 gap-2 mb-3">
               <button
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, tipoSena: 'fijo' }))}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
                   formData.tipoSena === 'fijo'
                     ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
                     : 'border-zinc-800 bg-zinc-900 text-zinc-400'
@@ -3255,7 +3843,7 @@ export const Screen8VenueRegistration = () => {
               <button
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, tipoSena: 'porcentaje' }))}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition cursor-pointer ${
                   formData.tipoSena === 'porcentaje'
                     ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
                     : 'border-zinc-800 bg-zinc-900 text-zinc-400'
@@ -3266,12 +3854,12 @@ export const Screen8VenueRegistration = () => {
             </div>
             {formData.tipoSena === 'fijo' ? (
               <div>
-                <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Monto de la Seña Fija ($)</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Monto de la Seña Fija ($)</label>
                 <input aria-label="Monto de la seña" name="montoSena" value={formData.montoSena} onChange={handleChange} type="number" min="0" step="500" placeholder="Ej: 4000" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-bold text-emerald-400" />
               </div>
             ) : (
               <div>
-                <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Porcentaje de Seña (%)</label>
+                <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Porcentaje de Seña (%)</label>
                 <input aria-label="Porcentaje de la seña" name="porcentajeSena" value={formData.porcentajeSena} onChange={handleChange} type="number" min="5" max="100" step="5" placeholder="Ej: 50" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-bold text-emerald-400" />
               </div>
             )}
@@ -3279,12 +3867,12 @@ export const Screen8VenueRegistration = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Alias (MP / Banco)</label>
-              <input aria-label="Alias de transferencia" name="alias" value={formData.alias} onChange={handleChange} type="text" placeholder="Ej: complejo.mp" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-mono text-sm" />
+              <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Alias (MP / Banco)</label>
+              <input aria-label="Alias de transferencia" name="alias" value={formData.alias} onChange={handleChange} type="text" placeholder="Ej: complejo.mp" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 font-mono text-sm text-white placeholder:text-zinc-500" />
             </div>
             <div>
-              <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block">Titular de la cuenta</label>
-              <input aria-label="Titular de la cuenta" name="titular" value={formData.titular} onChange={handleChange} type="text" placeholder="Ej: Juan Pérez" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm" />
+              <label className="text-xs font-bold text-zinc-400 uppercase mb-2 block">Titular de la cuenta</label>
+              <input aria-label="Titular de la cuenta" name="titular" value={formData.titular} onChange={handleChange} type="text" placeholder="Ej: Juan Pérez" className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-white placeholder:text-zinc-500" />
             </div>
           </div>
         </div>
@@ -3295,7 +3883,7 @@ export const Screen8VenueRegistration = () => {
         <button 
           onClick={handleSubmit} 
           disabled={cargando} 
-          className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
         >
           {cargando ? 'GUARDANDO COMPLEJO...' : 'GUARDAR Y CONTINUAR'}
         </button>
@@ -3310,12 +3898,12 @@ export const Screen8VenueRegistration = () => {
 export const Screen9VenueSubscription = () => {
   const navigate = useNavigate();
   return (
-    <div className="h-full bg-canvas p-6 flex flex-col items-center justify-center font-sans text-white text-center">
+    <div className="h-full bg-transparent p-6 flex flex-col items-center justify-center font-sans text-slate-800 text-center">
       <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6">
         <Building className="w-10 h-10 text-emerald-500" />
       </div>
-      <h2 className="text-3xl font-black mb-2">Activá tu Predio</h2>
-      <p className="text-zinc-400 text-sm px-4 mb-8">Para figurar en el radar y recibir partidos automáticos, requerimos una suscripción mensual.</p>
+      <h2 className="text-3xl font-black mb-2 text-slate-900">Activá tu Predio</h2>
+      <p className="text-slate-500 text-sm px-4 mb-8">Para figurar en el radar y recibir partidos automáticos, requerimos una suscripción mensual.</p>
       
       <div className="w-full max-w-sm bg-zinc-900 rounded-2xl p-6 border border-zinc-800 text-left">
         <h3 className="font-bold text-emerald-500 mb-4">Membresía PRO</h3>
@@ -3338,7 +3926,7 @@ export const Screen9VenueSubscription = () => {
 // ==========================================
 export const Screen10VenueDashboard = () => {
   return (
-    <div className="mx-auto h-full w-full max-w-3xl bg-canvas p-6 font-sans text-white">
+    <div className="mx-auto h-full w-full max-w-3xl bg-zinc-950 p-6 font-sans text-white">
       <header className="flex justify-between items-center mb-8 mt-4">
         <div>
           <h1 className="text-2xl font-black">El Templo 🏟️</h1>

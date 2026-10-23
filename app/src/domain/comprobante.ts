@@ -31,4 +31,4 @@ export interface Comprobante {
 export const storagePathComprobante = (turnoId: string, uid: string, archivo: string): string =>
   `comprobantes/${uid}/${turnoId}/${archivo}`
 
-export const EXTENSIONES_COMPROBANTE = ['jpg', 'jpeg', 'png', 'webp', 'heic'] as const
+export const EXTENSIONES_COMPROBANTE = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf'] as const

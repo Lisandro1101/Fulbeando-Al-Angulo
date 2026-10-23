@@ -113,6 +113,8 @@ export const COLECCIONES = {
   publicaciones: 'publicaciones',
   /** Grafo social: `follows/{followerUid}_{followedUid}`. */
   follows: 'follows',
+  /** Publicidad nativa y sponsors locales. */
+  publicidades: 'publicidades',
 } as const
 
 /**

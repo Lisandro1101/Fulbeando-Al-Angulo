@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Loader2, MessageCircle, Send, Share2, Sparkles, Trash2, UserPlus, UserCheck } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { REACCIONES, type Comentario, type Publicacion, type TipoReaccion } from '@/domain'
 import { aMillis } from '@/core/firestore'
 import { useSesion } from '@/modules/auth/useSesion'
@@ -195,20 +196,29 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
   const puedeSeguir = usuario && !esMio
 
   return (
-    <article className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700/80 transition-all">
+    <motion.article
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+      whileHover={{ y: -2 }}
+      className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden hover:border-zinc-700/80 transition-shadow shadow-sm hover:shadow-md"
+    >
       {/* Cabecera del autor */}
       <header className="flex items-center gap-3 p-4">
-        <button
+        <motion.button
           onClick={irAlPerfil}
           title="Ver perfil y carta del jugador"
-          className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-700 hover:ring-2 hover:ring-amber-500/50 hover:scale-105 transition-all cursor-pointer"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.94 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="w-11 h-11 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-700 hover:ring-2 hover:ring-amber-500/50 transition-all cursor-pointer"
         >
           {pub.autorFotoUrl?.startsWith('http') ? (
             <img src={pub.autorFotoUrl} alt={pub.autorApodo} className="w-full h-full object-cover" />
           ) : (
             <span className="text-xl">{pub.autorFotoUrl || pub.autorApodo.slice(0, 1).toUpperCase()}</span>
           )}
-        </button>
+        </motion.button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -232,9 +242,12 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           </p>
         </div>
         {puedeSeguir && onAlternarSeguir && (
-          <button
+          <motion.button
             onClick={onAlternarSeguir}
-            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition active:scale-95 cursor-pointer ${
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition cursor-pointer ${
               siguiendo
                 ? 'border-zinc-600 text-zinc-300 hover:border-red-500/60 hover:text-red-400'
                 : 'border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10'
@@ -242,12 +255,18 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           >
             {siguiendo ? <UserCheck className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
             {siguiendo ? 'Siguiendo' : 'Seguir'}
-          </button>
+          </motion.button>
         )}
         {esMio && (
-          <button onClick={borrarPublicacion} className="text-zinc-500 hover:text-red-400 transition p-1 cursor-pointer" aria-label="Borrar">
+          <motion.button
+            onClick={borrarPublicacion}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            className="text-zinc-500 hover:text-red-400 transition p-1 cursor-pointer"
+            aria-label="Borrar"
+          >
             <Trash2 className="w-4 h-4" />
-          </button>
+          </motion.button>
         )}
       </header>
 
@@ -269,7 +288,7 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
         (media.length === 1 ? (
           // Foto unica: se muestra COMPLETA (sin recorte), ajustada al ancho y
           // con altura tope para no desbordar la pantalla (estilo Facebook).
-          <div className="bg-canvas flex justify-center">
+          <div className="bg-black/40 flex justify-center">
             <img
               src={media[0]?.url}
               alt="Foto de la publicación"
@@ -302,12 +321,15 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           }
 
           return (
-            <button
+            <motion.button
               key={tipo}
               onClick={() => reaccionarA(tipo)}
               disabled={!usuario || reaccionando}
               title={etiqueta}
-              className={`flex items-center gap-1 text-sm py-1.5 px-2.5 rounded-full border transition-all duration-150 active:scale-125 hover:scale-105 disabled:opacity-50 cursor-pointer ${
+              whileHover={{ scale: 1.12 }}
+              whileTap={{ scale: 0.88 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 20 }}
+              className={`flex items-center gap-1 text-sm py-1.5 px-2.5 rounded-full border transition-colors disabled:opacity-50 cursor-pointer ${
                 activa
                   ? estilosActivos[tipo]
                   : 'bg-zinc-800/60 border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800'
@@ -315,7 +337,7 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
             >
               <span>{emoji}</span>
               {count > 0 && <span className={`text-[11px] font-bold ${activa ? 'font-black' : 'text-zinc-300'}`}>{count}</span>}
-            </button>
+            </motion.button>
           )
         })}
         {totalReacciones > 0 && (
@@ -323,9 +345,12 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
         )}
 
         <div className="flex items-center gap-2 ml-auto">
-          <button
+          <motion.button
             onClick={compartirPost}
-            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition active:scale-95 cursor-pointer ${
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className={`flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 rounded-full border transition cursor-pointer ${
               copiado
                 ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-400'
                 : 'border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:text-white hover:border-zinc-500'
@@ -334,16 +359,19 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
           >
             {copiado ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{copiado ? 'Copiado' : 'Compartir'}</span>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             onClick={() => setComentariosAbiertos((v) => !v)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400 hover:text-white py-1.5 px-2.5 rounded-full bg-zinc-800/60 border border-zinc-700 hover:border-zinc-500 transition cursor-pointer"
             title="Ver comentarios"
           >
             <MessageCircle className="w-3.5 h-3.5" />
             <span>{totalComentarios}</span>
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -388,17 +416,20 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
               placeholder="Escribí un comentario..."
               className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-500/50"
             />
-            <button
+            <motion.button
               onClick={enviarComentario}
               disabled={!borrador.trim() || enviandoComentario}
-              className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-2 rounded-xl active:scale-95 disabled:opacity-40 transition"
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-2 rounded-xl disabled:opacity-40 transition cursor-pointer"
               aria-label="Enviar comentario"
             >
               {enviandoComentario ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            </button>
+            </motion.button>
           </div>
         </div>
       )}
-    </article>
+    </motion.article>
   )
 }

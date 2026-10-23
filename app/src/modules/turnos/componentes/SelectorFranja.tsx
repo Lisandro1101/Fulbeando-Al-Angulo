@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays, Sparkles } from 'lucide-react'
 import type { CanchaResumen, Predio, Turno } from '@/domain'
 import { bloqueoVencio, calcularMontoSena } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'
@@ -99,12 +99,13 @@ export function SelectorFranja({
       .sort((a, b) => {
         if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha)
         return a.horaInicio.localeCompare(b.horaInicio)
-      })[0]
+      })[0] ?? null
   }, [turnos])
 
+  // Seleccionar automáticamente el primer turno sugerido si no hay selección previa
   useEffect(() => {
-    if (cargando || turnos.length === 0 || autoSeleccionado) return
-    if (turnoSugerido && !seleccion) {
+    if (cargando) return
+    if (!autoSeleccionado && turnos.length > 0 && !seleccion && turnoSugerido) {
       alSeleccionar({
         canchaId: turnoSugerido.canchaId,
         fecha: turnoSugerido.fecha,
@@ -126,58 +127,59 @@ export function SelectorFranja({
   }
 
   if (canchas.length === 0) {
-    return <p className="text-sm text-ink-muted">Este predio todavía no publicó canchas.</p>
+    return <p className="text-sm text-slate-700 font-bold">Este predio todavía no publicó canchas.</p>
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* CANCHAS DISPONIBLES Y TARIFAS */}
-      <div className="bg-canvas/70 border border-zinc-800 rounded-2xl p-3.5 space-y-2">
-        <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+      <div className="bg-slate-100/80 border border-slate-300 rounded-2xl p-4 space-y-2.5 shadow-sm">
+        <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
           Canchas y Precios configurados
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {canchas.map((c) => (
-            <div key={c.id} className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800/80 rounded-xl px-3 py-2 text-xs">
+            <div key={c.id} className="flex items-center justify-between bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs shadow-sm">
               <div>
-                <span className="font-bold text-white">⚽ {c.nombre}</span>
-                <span className="text-zinc-500 ml-1.5 font-medium">({c.tipo.toUpperCase()}{c.techada ? ' · Techada' : ''})</span>
+                <span className="font-black text-slate-950">⚽ {c.nombre}</span>
+                <span className="text-slate-600 ml-1.5 font-bold">({c.tipo.toUpperCase()}{c.techada ? ' · Techada' : ''})</span>
               </div>
-              <span className="font-black text-emerald-400">{formatearMoneda(c.precioHora)}/h</span>
+              <span className="font-black text-emerald-850 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-lg text-emerald-900">{formatearMoneda(c.precioHora)}/h</span>
             </div>
           ))}
         </div>
       </div>
 
       {cargando ? (
-        <p className="text-sm text-ink-muted animate-pulse">Buscando horarios...</p>
+        <p className="text-sm text-slate-500 font-medium animate-pulse">Buscando horarios...</p>
       ) : (
         <>
           {/* SECCIÓN 1: SUGERENCIA */}
           {turnoSugerido ? (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
-              <h3 className="text-emerald-500 font-black text-sm uppercase tracking-wider mb-2">
-                Sugerencia: Turno más próximo
+            <div className="bg-gradient-to-b from-emerald-50 via-emerald-50/80 to-teal-50/40 border border-emerald-300 rounded-2xl p-4 shadow-sm">
+              <h3 className="text-emerald-900 font-black text-xs uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" /> Sugerencia: Turno más próximo
               </h3>
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
                 <div>
-                  <p className="text-white font-bold">{formatearFechaCorta(turnoSugerido.fecha)}</p>
-                  <p className="text-zinc-300 text-sm font-semibold">
+                  <p className="text-base font-black text-slate-900">{formatearFechaCorta(turnoSugerido.fecha)}</p>
+                  <p className="text-slate-700 text-sm font-bold">
                     {turnoSugerido.horaInicio} a {turnoSugerido.horaFin}
                   </p>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Cancha {canchas.find(c => c.id === turnoSugerido.canchaId)?.nombre ?? 'Principal'}
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">
+                    Cancha <strong className="text-slate-900">{canchas.find(c => c.id === turnoSugerido.canchaId)?.nombre ?? 'Principal'}</strong>
                   </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-xs bg-zinc-900 border border-zinc-800 text-white font-bold px-2.5 py-1 rounded-lg">
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <span className="text-xs bg-white border border-slate-300 text-slate-900 font-bold px-2.5 py-1 rounded-lg shadow-sm">
                       Total: {formatearMoneda(turnoSugerido.precioTotal)}
                     </span>
-                    <span className="text-xs bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold px-2.5 py-1 rounded-lg">
+                    <span className="text-xs bg-amber-50 border border-amber-300 text-amber-900 font-extrabold px-2.5 py-1 rounded-lg shadow-sm">
                       {etiquetaSena}: {formatearMoneda(calcularSena(turnoSugerido))}
                     </span>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() =>
                     alSeleccionar({
                       canchaId: turnoSugerido.canchaId,
@@ -188,53 +190,54 @@ export function SelectorFranja({
                       montoSena: calcularSena(turnoSugerido),
                     })
                   }
-                  className={`px-4 py-2 rounded-xl font-bold transition-all shrink-0 ${
+                  className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all shrink-0 cursor-pointer shadow-sm ${
                     seleccion?.horaInicio === turnoSugerido.horaInicio && seleccion?.fecha === turnoSugerido.fecha
-                      ? 'bg-emerald-500 text-zinc-950'
-                      : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                      ? 'bg-emerald-600 text-white shadow-emerald-600/30 ring-2 ring-emerald-500 ring-offset-2'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
                   }`}
                 >
-                  {seleccion?.horaInicio === turnoSugerido.horaInicio && seleccion?.fecha === turnoSugerido.fecha ? 'Seleccionado' : 'Elegir'}
+                  {seleccion?.horaInicio === turnoSugerido.horaInicio && seleccion?.fecha === turnoSugerido.fecha ? '✓ Seleccionado' : 'Elegir este'}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-center">
-              <p className="text-red-400 font-bold">No hay turnos disponibles para los próximos 7 días.</p>
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-center">
+              <p className="text-rose-700 font-bold text-sm">No hay turnos disponibles para los próximos 7 días.</p>
             </div>
           )}
 
           {/* SECCIÓN 2: BUSCADOR MANUAL */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <h3 className="text-white font-bold mb-4">Buscar otro turno</h3>
-            <div className="flex gap-2 mb-4">
-              <div className="flex-1">
-                <label htmlFor="franja-fecha" className="block text-xs text-zinc-500 mb-1">Fecha</label>
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-3 shadow-sm">
+            <h3 className="text-slate-900 font-extrabold text-sm">Buscar otro turno</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="franja-fecha" className="block text-xs font-bold text-slate-600 mb-1">Fecha</label>
                 <select 
                   id="franja-fecha"
                   value={fechaBusqueda}
                   onChange={(e) => setFechaBusqueda(e.target.value)}
-                  className="w-full bg-canvas border border-zinc-800 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
                 >
                   {fechas.map(f => (
                     <option key={f} value={f}>{esHoy(f) ? 'Hoy' : formatearFechaCorta(f)}</option>
                   ))}
                 </select>
               </div>
-              <div className="flex-1">
-                <label htmlFor="franja-hora" className="block text-xs text-zinc-500 mb-1">A partir de las</label>
+              <div>
+                <label htmlFor="franja-hora" className="block text-xs font-bold text-slate-600 mb-1">A partir de las</label>
                 <input 
                   id="franja-hora"
                   type="time" 
                   value={horaBusqueda}
                   onChange={(e) => setHoraBusqueda(e.target.value)}
-                  className="w-full bg-canvas border border-zinc-800 rounded-xl px-3 py-2 text-white outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm"
                 />
               </div>
             </div>
             <button 
+              type="button"
               onClick={buscarTurno}
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2 rounded-xl transition"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl transition text-xs uppercase tracking-wider cursor-pointer shadow-sm"
             >
               Buscar disponibilidad
             </button>
@@ -243,22 +246,23 @@ export function SelectorFranja({
           {/* RESULTADOS BÚSQUEDA */}
           {resultadoBusqueda !== null && (
             <div className="space-y-2">
-              <h4 className="text-sm font-bold text-zinc-400">Resultados:</h4>
+              <h4 className="text-xs font-black uppercase tracking-wide text-slate-700">Resultados encontrados:</h4>
               {resultadoBusqueda.length > 0 ? (
                 resultadoBusqueda.map((t) => {
                   const elegido = seleccion?.horaInicio === t.horaInicio && seleccion?.fecha === t.fecha && seleccion?.canchaId === t.canchaId;
                   const senaT = calcularSena(t);
                   return (
-                    <div key={t.id} className={`flex justify-between items-center p-3 rounded-xl border ${elegido ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
+                    <div key={t.id} className={`flex justify-between items-center p-3.5 rounded-xl border transition-all ${elegido ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-300 bg-white hover:border-slate-400'}`}>
                       <div>
-                        <p className="text-white font-bold">{t.horaInicio} a {t.horaFin}</p>
-                        <p className="text-xs text-zinc-400">Cancha {canchas.find(c => c.id === t.canchaId)?.nombre}</p>
+                        <p className="text-sm font-black text-slate-900">{t.horaInicio} a {t.horaFin}</p>
+                        <p className="text-xs text-slate-600 font-semibold">Cancha {canchas.find(c => c.id === t.canchaId)?.nombre}</p>
                         <div className="mt-1 flex items-center gap-2 text-xs">
-                          <span className="font-bold text-white">Total: {formatearMoneda(t.precioTotal)}</span>
-                          <span className="text-amber-400 font-bold">· {etiquetaSena}: {formatearMoneda(senaT)}</span>
+                          <span className="font-bold text-slate-800">Total: {formatearMoneda(t.precioTotal)}</span>
+                          <span className="text-amber-900 font-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">· {etiquetaSena}: {formatearMoneda(senaT)}</span>
                         </div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => alSeleccionar({
                           canchaId: t.canchaId,
                           fecha: t.fecha,
@@ -267,15 +271,15 @@ export function SelectorFranja({
                           precioTotal: t.precioTotal,
                           montoSena: senaT,
                         })}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${elegido ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-800 text-white'}`}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${elegido ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}
                       >
-                        {elegido ? 'Seleccionado' : 'Elegir'}
+                        {elegido ? '✓ Seleccionado' : 'Elegir'}
                       </button>
                     </div>
                   )
                 })
               ) : (
-                <p className="text-zinc-500 text-sm text-center py-2">No hay turnos disponibles desde esa hora.</p>
+                <p className="text-slate-600 text-sm text-center py-3 bg-slate-100 rounded-xl border border-slate-300 font-semibold">No hay turnos disponibles desde esa hora.</p>
               )}
             </div>
           )}
@@ -283,18 +287,18 @@ export function SelectorFranja({
       )}
 
       {seleccion && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-4 bg-zinc-900/50 p-3 rounded-xl">
-          <p className="flex items-center gap-1.5 text-xs sm:text-sm text-zinc-300">
-            <CalendarDays className="h-4 w-4 text-emerald-500 shrink-0" />
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/70 p-3.5 rounded-2xl shadow-sm">
+          <p className="flex items-center gap-2 text-xs sm:text-sm text-slate-800 font-bold">
+            <CalendarDays className="h-4 w-4 text-emerald-600 shrink-0" />
             {formatearFechaCorta(seleccion.fecha)} · {seleccion.horaInicio} a {seleccion.horaFin} ·{' '}
-            <span className="text-zinc-400 font-medium">Cancha {canchas.find(c => c.id === seleccion.canchaId)?.nombre}</span>
+            <span className="text-slate-600 font-medium">Cancha {canchas.find(c => c.id === seleccion.canchaId)?.nombre}</span>
           </p>
           <div className="flex items-center gap-2 text-xs">
-            <span className="bg-zinc-800 px-2 py-1 rounded-lg text-zinc-300">
-              Total: <strong className="text-white">{formatearMoneda(seleccion.precioTotal)}</strong>
+            <span className="bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-slate-700 shadow-sm">
+              Total: <strong className="text-slate-900 font-black">{formatearMoneda(seleccion.precioTotal)}</strong>
             </span>
-            <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-1 rounded-lg">
-              {etiquetaSena}: <strong>{formatearMoneda(seleccion.montoSena)}</strong>
+            <span className="bg-amber-100/80 border border-amber-300 text-amber-900 font-bold px-2.5 py-1 rounded-xl shadow-sm">
+              {etiquetaSena}: <strong className="font-black">{formatearMoneda(seleccion.montoSena)}</strong>
             </span>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
 import { X, MessageSquare, Bell } from 'lucide-react';
@@ -15,6 +15,7 @@ import { ModalProponerDesafio } from '@/modules/radar/componentes/ModalProponerD
 // Modales que queremos que floten en desktop
 import CargaDeSena from '@/modules/turnos/pantallas/CargaDeSena';
 import { Screen6LaunchChallenge, Screen7MyTeam, Screen8VenueRegistration } from '@/modules/ui/Screens';
+import { BannersPersistentes } from '@/modules/ui/BannersPersistentes';
 
 const FlotanteModal = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -49,6 +50,50 @@ export const AppLayout = () => {
   const [mostrarBandejaChats, setMostrarBandejaChats] = useState(false);
   const [mostrarPanelNotificaciones, setMostrarPanelNotificaciones] = useState(false);
   const [desafioChatActivo, setDesafioChatActivo] = useState<InvitacionEquipo | null>(null);
+  const [chatRivalActivo, setChatRivalActivo] = useState<{
+    equipoId: string;
+    nombre: string;
+    modalidad?: string;
+    escudoUrl?: string | null;
+    captainId?: string;
+    divisionInfo?: { nombre: string; color: string; badge: string };
+  } | null>(null);
+
+  useEffect(() => {
+    const handleAbrirBandeja = () => {
+      setMostrarBandejaChats(true);
+    };
+
+    const handleAbrirChat = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        desafio?: InvitacionEquipo | null;
+        rival?: {
+          equipoId: string;
+          nombre: string;
+          modalidad?: string;
+          escudoUrl?: string | null;
+          captainId?: string;
+          divisionInfo?: { nombre: string; color: string; badge: string };
+        };
+      }>;
+      if (customEvent.detail?.desafio) {
+        setDesafioChatActivo(customEvent.detail.desafio);
+        setChatRivalActivo(null);
+      } else if (customEvent.detail?.rival) {
+        setChatRivalActivo(customEvent.detail.rival);
+        setDesafioChatActivo(null);
+      }
+      setMostrarBandejaChats(false);
+    };
+
+    window.addEventListener('abrir-bandeja-chats', handleAbrirBandeja);
+    window.addEventListener('abrir-chat-desafio', handleAbrirChat);
+
+    return () => {
+      window.removeEventListener('abrir-bandeja-chats', handleAbrirBandeja);
+      window.removeEventListener('abrir-chat-desafio', handleAbrirChat);
+    };
+  }, []);
 
   useEffect(() => {
     if (!sesion.user?.uid) {
@@ -64,27 +109,51 @@ export const AppLayout = () => {
     };
   }, [sesion.user?.uid]);
 
-  // Cantidad de desafíos pendientes o no leídos dirigidos al usuario
-  const noLeidosCount = desafios.filter(
-    (d) => !d.leida && d.destinatarioUid === sesion.user?.uid
-  ).length;
+  // Cantidad de desafíos pendientes o no leídos dirigidos al usuario (deduplicados y omitiendo los enviados por uno mismo)
+  const noLeidosCount = useMemo(() => {
+    const vistos = new Set<string>();
+    return desafios.filter((d) => {
+      const clave = d.desafioId || d.pactoPartido?.id || d.id;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      if (d.pactoPartido?.estado === 'pactado' || d.pactoPartido?.estado === 'rechazado') return false;
+      const ultimoPing = d.pactoPartido?.pingsTacticos?.slice(-1)[0];
+      const ultimoEmisor = ultimoPing?.emisorUid || d.ultimoEmisorUid || d.remitenteUid;
+      if (ultimoEmisor === sesion.user?.uid) return false;
+      return !d.leida;
+    }).length;
+  }, [desafios, sesion.user?.uid]);
 
-  // Cantidad de notificaciones generales no leídas
-  const notificacionesNoLeidasCount = notificaciones.filter(
-    (n) => !n.leida
-  ).length;
+  // Cantidad de notificaciones generales no leídas (deduplicadas)
+  const notificacionesNoLeidasCount = useMemo(() => {
+    const vistos = new Set<string>();
+    return notificaciones.filter((n) => {
+      const clave = n.desafioId || n.pactoPartido?.id || n.id;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      return !n.leida;
+    }).length;
+  }, [notificaciones]);
 
   // Decide if we should render background + modal
   // We only do this if we actually match one of the floating routes and have a backgroundLocation
   const esModal = Boolean(state?.backgroundLocation);
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-[#0B0F19] text-white font-sans">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-[#1E0D4A] font-sans">
       {/* Alerta Push de Invitaciones en tiempo real para el jugador */}
       <AlertaInvitacionPush />
 
+      {/* Carteles Flotantes Permanentes: Instalar App & Permiso Notificaciones */}
+      <BannersPersistentes />
+
       {/* Sidebar (Desktop) / Bottom Nav (Mobile) */}
-      <MenuNavegacion />
+      <MenuNavegacion 
+        onAbrirNotificaciones={() => setMostrarPanelNotificaciones(true)}
+        onAbrirChats={() => setMostrarBandejaChats(true)}
+        notificacionesNoLeidas={notificacionesNoLeidasCount}
+        chatsNoLeidos={noLeidosCount}
+      />
 
       {/* Cabecera mobile: logo a la izquierda e iconos de Notificaciones y Mensajes con badge a la derecha */}
       <header className="md:hidden fixed inset-x-0 top-0 z-[90] border-b border-[#4c24b2]/40 bg-gradient-to-r from-[#361982] via-[#281165] to-[#361982] backdrop-blur-md shadow-md">
@@ -130,6 +199,41 @@ export const AppLayout = () => {
         </div>
       </header>
 
+      {/* Botones de Notificaciones y Mensajes en Desktop (PC - esquina superior derecha) */}
+      {sesion.user && (
+        <div className="hidden md:flex fixed top-4 right-6 z-[110] items-center gap-3 bg-[#281165]/85 hover:bg-[#281165] backdrop-blur-md px-3.5 py-2 rounded-2xl border border-[#4c24b2]/50 shadow-xl shadow-black/30 transition-all">
+          {/* Botón Campanita de Notificaciones */}
+          <button
+            onClick={() => setMostrarPanelNotificaciones(true)}
+            aria-label="Abrir panel de notificaciones"
+            title="Notificaciones"
+            className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
+          >
+            <Bell className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+            {notificacionesNoLeidasCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+                {notificacionesNoLeidasCount > 9 ? '9+' : notificacionesNoLeidasCount}
+              </span>
+            )}
+          </button>
+
+          {/* Botón de Mensajes / Notificaciones de Desafíos */}
+          <button
+            onClick={() => setMostrarBandejaChats(true)}
+            aria-label="Abrir chats de desafíos"
+            title="Mensajes y Desafíos"
+            className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
+          >
+            <MessageSquare className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            {noLeidosCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+                {noLeidosCount > 9 ? '9+' : noLeidosCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Panel Flotante de Notificaciones Generales */}
       {mostrarPanelNotificaciones && sesion.user && (
         <PanelNotificaciones
@@ -158,30 +262,35 @@ export const AppLayout = () => {
         />
       )}
 
-      {/* Modal de Chat de Desafío Seleccionado */}
-      {desafioChatActivo && sesion.user && (
+      {/* Modal de Chat de Desafío Seleccionado o Nuevo Desafío (Módulo de Chats) */}
+      {(desafioChatActivo || chatRivalActivo) && sesion.user && (
         <ModalProponerDesafio
-          abierto={Boolean(desafioChatActivo)}
-          onCerrar={() => setDesafioChatActivo(null)}
-          desafioInicial={desafioChatActivo}
-          rival={{
-            equipoId:
-              desafioChatActivo.remitenteUid === sesion.user.uid
-                ? desafioChatActivo.pactoPartido?.equipoRivalId || ''
-                : desafioChatActivo.equipoId,
-            nombre:
-              desafioChatActivo.remitenteUid === sesion.user.uid
-                ? desafioChatActivo.pactoPartido?.equipoRivalNombre || desafioChatActivo.destinatarioNombre || 'Equipo Rival'
-                : desafioChatActivo.equipoNombre,
-            escudoUrl:
-              desafioChatActivo.remitenteUid === sesion.user.uid
-                ? desafioChatActivo.pactoPartido?.equipoRivalEscudoUrl || null
-                : desafioChatActivo.equipoEscudoUrl || null,
-            captainId:
-              desafioChatActivo.remitenteUid === sesion.user.uid
-                ? desafioChatActivo.destinatarioUid
-                : desafioChatActivo.remitenteUid,
+          abierto={Boolean(desafioChatActivo || chatRivalActivo)}
+          onCerrar={() => {
+            setDesafioChatActivo(null);
+            setChatRivalActivo(null);
           }}
+          desafioInicial={desafioChatActivo}
+          rival={
+            chatRivalActivo || {
+              equipoId:
+                desafioChatActivo!.remitenteUid === sesion.user.uid
+                  ? desafioChatActivo!.pactoPartido?.equipoRivalId || ''
+                  : desafioChatActivo!.equipoId,
+              nombre:
+                desafioChatActivo!.remitenteUid === sesion.user.uid
+                  ? desafioChatActivo!.pactoPartido?.equipoRivalNombre || desafioChatActivo!.destinatarioNombre || 'Equipo Rival'
+                  : desafioChatActivo!.equipoNombre,
+              escudoUrl:
+                desafioChatActivo!.remitenteUid === sesion.user.uid
+                  ? desafioChatActivo!.pactoPartido?.equipoRivalEscudoUrl || null
+                  : desafioChatActivo!.equipoEscudoUrl || null,
+              captainId:
+                desafioChatActivo!.remitenteUid === sesion.user.uid
+                  ? desafioChatActivo!.destinatarioUid
+                  : desafioChatActivo!.remitenteUid,
+            }
+          }
           usuarioActual={{
             uid: sesion.user.uid,
             nombre: sesion.usuario?.nombre || sesion.user.displayName || 'Capitán',
@@ -190,8 +299,8 @@ export const AppLayout = () => {
         />
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 h-full relative overflow-hidden pt-16 md:pt-0 md:pl-64">
+      {/* Main Content Area con degradé claro deportivo para contraste óptimo */}
+      <main className="flex-1 h-full relative overflow-hidden pt-16 md:pt-0 md:pl-64 bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0]/70 text-slate-800">
         {/* We use React Router's trick to render the background if state.backgroundLocation exists */}
         {esModal ? (
           <Routes location={state.backgroundLocation}>

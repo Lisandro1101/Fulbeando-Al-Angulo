@@ -53,7 +53,7 @@ export function PerfilDeportivoCard({
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs text-ink-muted" htmlFor="perfil-posicion">
+          <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="perfil-posicion">
             Posicion preferida
           </label>
           <select
@@ -76,7 +76,7 @@ export function PerfilDeportivoCard({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs text-ink-muted" htmlFor="perfil-pierna">
+          <label className="mb-1 block text-xs font-bold text-slate-700" htmlFor="perfil-pierna">
             Pierna habil
           </label>
           <select
@@ -107,7 +107,7 @@ export function PerfilDeportivoCard({
               className={`h-10 flex-1 rounded-xl border text-sm font-bold transition shadow-sm cursor-pointer ${
                 perfil.nivel === n
                   ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
-                  : 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:border-slate-400'
+                  : 'border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200 hover:text-slate-950 font-bold hover:border-slate-400'
               }`}
               onClick={() => void actualizar({ nivel: perfil.nivel === n ? null : n })}
             >
@@ -187,7 +187,7 @@ export function UbicacionCard({
     <div className="space-y-3">
       {usuario.geo === null ? (
         <>
-          <p className="text-sm text-ink-muted">
+          <p className="text-sm text-slate-600 font-medium">
             Sin ubicacion no podes ver el radar de suplentes ni que te encuentren.
           </p>
           <button type="button" className="btn-ghost w-full" onClick={ubicar} disabled={pidiendo}>
@@ -196,7 +196,7 @@ export function UbicacionCard({
           </button>
         </>
       ) : (
-        <p className="flex items-center gap-2 text-sm text-ink-muted">
+        <p className="flex items-center gap-2 text-sm text-slate-600 font-medium">
           <MapPin className="h-4 w-4 text-pitch" />
           Ubicacion guardada ({usuario.geo.lat.toFixed(3)}, {usuario.geo.lng.toFixed(3)}). Se
           guarda una zona aproximada, no tu posicion exacta.
@@ -223,11 +223,11 @@ function Interruptor({
   return (
     <label
       htmlFor={id}
-      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-3 hover:bg-slate-100/80 transition shadow-sm"
+      className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-100/80 border border-slate-300 px-3.5 py-3 hover:bg-slate-200/80 transition shadow-sm"
     >
       <span>
         <span className="block text-sm font-bold text-slate-900">{titulo}</span>
-        <span className="block text-xs text-slate-500 font-medium">{descripcion}</span>
+        <span className="block text-xs text-slate-600 font-semibold">{descripcion}</span>
       </span>
       <input
         id={id}
@@ -307,13 +307,13 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
           onChange={(e) => setFechaNacimiento(e.target.value)}
           className="field"
         />
-        <p className="mt-1 text-xs text-slate-500 font-medium">
+        <p className="mt-1 text-xs text-slate-600 font-semibold">
           De acá sale tu edad en la ficha del perfil.
         </p>
       </div>
       <div>
         <label className="mb-1 block text-xs font-bold text-slate-700">Foto de Perfil</label>
-        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-4 bg-slate-100/80 p-4 rounded-2xl border border-slate-300 shadow-sm">
           <div 
             className="w-16 h-16 rounded-full overflow-hidden bg-white flex items-center justify-center text-3xl border-2 border-emerald-500/40 cursor-pointer hover:border-emerald-500 transition-colors relative group shadow-sm"
             onClick={() => document.getElementById('avatar-upload')?.click()}

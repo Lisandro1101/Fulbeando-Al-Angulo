@@ -18,7 +18,7 @@
     "datos:importar": "tsx scripts/importar-datos-prueba.ts",
     "dev:app": "npm run dev --prefix app",
     "test:rules": "tsx scripts/firebase.ts emulators:exec --only firestore \"tsx scripts/test-reglas-equipos.ts && tsx scripts/test-reglas-turnos.ts\"",
-    "build:app": "npm run build --prefix app",
+    "build:app": "node scripts/bump-sw.cjs && npm run build --prefix app",
     "deploy:hosting": "npm run build:app && tsx scripts/deploy-hosting.ts",
     "deploy:preview": "npm run build:app && tsx scripts/deploy-hosting.ts --preview pre-produccion",
     "deploy:rules": "npm run test:rules && tsx scripts/deploy-hosting.ts --rules",

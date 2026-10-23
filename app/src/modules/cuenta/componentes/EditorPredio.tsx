@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Crosshair, Loader2, MapPin, Save } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Crosshair, Loader2, MapPin, Plus, Save } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import type { Predio } from '@/domain'
 import { appEnv } from '@/core/config'
 import { aGeoIndex } from '@/core/geo'
@@ -39,6 +39,7 @@ const desdePredio = (p: Predio): Borrador => ({
  * cancha (direccion exacta + punto en el mapa), el contacto y los datos de cobro/seña.
  */
 export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
+  const routerLocation = useLocation()
   const [predios, setPredios] = useState<Predio[] | null>(null)
   const [indice, setIndice] = useState(0)
   const [borrador, setBorrador] = useState<Borrador | null>(null)
@@ -170,11 +171,20 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
 
   return (
     <div className="space-y-4">
-      {predios.length > 1 && (
-        <div>
-          <label className="mb-1 block text-xs text-ink-muted" htmlFor="predio-elegir">
-            Predio a editar
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs font-bold text-slate-600" htmlFor="predio-elegir">
+            {predios.length > 1 ? 'Predio a editar' : 'Predio'}
           </label>
+          <Link
+            to="/venue-registration"
+            state={{ backgroundLocation: routerLocation }}
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition"
+          >
+            <Plus className="w-3.5 h-3.5" /> Dar de alta otro predio
+          </Link>
+        </div>
+        {predios.length > 1 && (
           <select
             id="predio-elegir"
             className="field"
@@ -187,8 +197,8 @@ export function EditorPredioCard({ duenoUid }: { duenoUid: string }) {
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

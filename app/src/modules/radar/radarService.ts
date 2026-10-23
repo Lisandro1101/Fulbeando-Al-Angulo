@@ -85,6 +85,7 @@ export interface RadarPinEquipo extends RadarPinBase {
   modalidad: string
   cantidadJugadores: number
   escudoUrl: string | null
+  captainId?: string
   fairPlayScore?: number
   stats?: { wins: number; draws: number; losses: number }
 }

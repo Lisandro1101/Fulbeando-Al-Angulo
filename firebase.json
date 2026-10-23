@@ -27,12 +27,7 @@
           {
             "key": "Cross-Origin-Embedder-Policy",
             "value": "unsafe-none"
-          }
-        ]
-      },
-      {
-        "source": "/+(index.html|firebase-messaging-sw.js|sw.js|registerSW.js|manifest.webmanifest)",
-        "headers": [
+          },
           {
             "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"

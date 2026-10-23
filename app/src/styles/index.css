@@ -16,7 +16,7 @@
   }
 
   body {
-    @apply bg-[#0B0F19] text-white;
+    @apply bg-[#1E0D4A] text-slate-900;
   }
 
   * {
@@ -27,11 +27,11 @@
 @layer components {
   /* Superficie estandar del PRD: Tarjeta limpia con degradé sutil y sombra refinada */
   .surface {
-    @apply rounded-2xl bg-gradient-to-b from-white via-white/95 to-slate-50/90 p-4 border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.03)] text-slate-800;
+    @apply rounded-2xl bg-white p-4 border border-slate-300 shadow-sm text-slate-900;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99];
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99];
   }
 
   .btn-primary {
@@ -47,11 +47,11 @@
   }
 
   .btn-ghost {
-    @apply btn bg-gradient-to-b from-white to-slate-100 hover:from-slate-50 hover:to-slate-200 text-slate-700 border border-slate-200/90 shadow-sm;
+    @apply btn bg-slate-100 hover:bg-slate-200 text-slate-900 border border-slate-300 hover:border-slate-400 font-bold shadow-sm;
   }
 
   .field {
-    @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none shadow-sm transition-all;
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-900 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none shadow-sm transition-all;
   }
 
   .badge {

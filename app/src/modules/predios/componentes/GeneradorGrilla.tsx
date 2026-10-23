@@ -296,7 +296,7 @@ export function GeneradorGrilla({
             {franjas.map((f, i) => (
               <span
                 key={i}
-                className="bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                className="bg-white border border-slate-300 text-slate-900 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
                 <span className="text-emerald-600 font-mono">#{i + 1}</span>
                 {f.horaInicio} - {f.horaFin}
@@ -307,11 +307,11 @@ export function GeneradorGrilla({
       </div>
 
       {/* SECCIÓN 2: OPCIONES DE REPETICIÓN (FECHAS Y DÍAS) */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-300 bg-slate-100/70 p-4 space-y-4 shadow-sm">
         <h3 className="text-sm font-extrabold text-slate-900">Días y Rango de Fechas</h3>
 
         <div>
-          <label className="mb-1 block text-xs font-bold text-slate-600 uppercase" htmlFor="gen-hasta">
+          <label className="mb-1 block text-xs font-bold text-slate-700 uppercase" htmlFor="gen-hasta">
             Generar desde el {fecha.split('-').reverse().join('/')} hasta el:
           </label>
           <input
@@ -325,7 +325,7 @@ export function GeneradorGrilla({
         </div>
 
         <div>
-          <label className="mb-2 block text-xs font-bold text-slate-600 uppercase">
+          <label className="mb-2 block text-xs font-bold text-slate-700 uppercase">
             Días de la semana a generar
           </label>
           <div className="flex flex-wrap gap-2">
@@ -343,7 +343,7 @@ export function GeneradorGrilla({
                 className={`flex cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition shadow-sm ${
                   dias.includes(val)
                     ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-extrabold'
-                    : 'border-slate-300 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-400'
+                    : 'border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200 hover:text-slate-950 font-bold hover:border-slate-400'
                 }`}
               >
                 <input
