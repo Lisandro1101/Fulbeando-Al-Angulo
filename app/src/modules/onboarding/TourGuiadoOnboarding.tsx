@@ -437,6 +437,33 @@ export function TourGuiadoOnboarding() {
     }
   }
 
+  // --- FINALIZAR TOUR SIN PUBLICAR (PASO 3 OPCIONAL) ---
+  const handleFinalizarSinPublicar = async () => {
+    if (!user) return
+    setCargando(true)
+    setError(null)
+
+    try {
+      await completarOnboarding(user.uid)
+      if (user?.uid && typeof window !== 'undefined') {
+        localStorage.setItem(`onboarding_completed_${user.uid}`, 'true')
+      }
+      setCompletadoLocal(true)
+      setModalAbierto(false)
+      setExitoCelebracion(true)
+      void sesion.refrescar?.()
+
+      setTimeout(() => {
+        setExitoCelebracion(false)
+      }, 3500)
+    } catch (err: any) {
+      console.error('Error al completar tour:', err)
+      setError('Hubo un error al completar el tour.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
   return (
     <>
       {/* =========================================================================
@@ -898,15 +925,15 @@ export function TourGuiadoOnboarding() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-wider">
-                    Paso 3 de 3 · Final
+                    Paso 3 de 3 · Opcional
                   </span>
                   <span className="text-xs text-zinc-400">En pantalla: Muro Social</span>
                 </div>
 
-                <h3 className="text-xl font-black tracking-tight">Hacé tu debut en la comunidad</h3>
+                <h3 className="text-xl font-black tracking-tight">Hacé tu debut en la comunidad (Opcional)</h3>
                 <p className="text-xs text-zinc-300 leading-relaxed">
                   Presentate en el Muro Social con tu Carta FUT adjunta para que los capitanes y predios
-                  de tu zona te contacten para jugar.
+                  de tu zona te contacten para jugar, o finalizá directamente sin publicar.
                 </p>
 
                 <div>
@@ -934,15 +961,26 @@ export function TourGuiadoOnboarding() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handlePublicarDebut}
-                  disabled={cargando || !textoPost.trim()}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.5)] transition cursor-pointer disabled:opacity-40 mt-2"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Publicar en el Muro y Finalizar Tour</span>
-                </button>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handlePublicarDebut}
+                    disabled={cargando || !textoPost.trim()}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 text-zinc-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.5)] transition cursor-pointer disabled:opacity-40"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Publicar en el Muro y Finalizar Tour</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleFinalizarSinPublicar}
+                    disabled={cargando}
+                    className="w-full py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 border border-zinc-800"
+                  >
+                    <span>Finalizar sin publicar (Omitir) →</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

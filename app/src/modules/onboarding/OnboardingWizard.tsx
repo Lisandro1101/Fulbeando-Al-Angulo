@@ -358,6 +358,27 @@ export function OnboardingWizard() {
     }
   }
 
+  // --- ACCIÓN: FINALIZAR ONBOARDING SIN PUBLICAR EN EL MURO (PASO 3 OPCIONAL) ---
+  const handleFinalizarSinPublicar = async () => {
+    if (!user) return
+    setCargando(true)
+    setError(null)
+    try {
+      await completarOnboarding(user.uid)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`onboarding_completed_${user.uid}`, 'true')
+      }
+      setExitoFinal(true)
+      setTimeout(() => {
+        window.location.href = '/'
+      }, 1400)
+    } catch (err: any) {
+      console.error('Error al finalizar onboarding:', err)
+      setError('Hubo un error al completar tu registro.')
+      setCargando(false)
+    }
+  }
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-[#0e0725] via-[#140b33] to-[#080314] text-white flex flex-col items-center justify-start p-4 sm:p-6 md:p-8 font-sans selection:bg-emerald-500 selection:text-black">
       <CargandoFulbeando visible={cargando} />
@@ -953,11 +974,11 @@ export function OnboardingWizard() {
               <Send className="w-7 h-7" />
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              ¡Hacé tu debut en la comunidad!
+              ¡Hacé tu debut en la comunidad! (Opcional)
             </h2>
             <p className="text-zinc-400 text-sm mt-1 max-w-md mx-auto">
               Publicá tu carta en el muro social de tu zona para que los capitanes y canchas te
-              conozcan y te inviten a jugar.
+              conozcan, o finalizá directamente sin publicar.
             </p>
           </div>
 
@@ -1029,7 +1050,7 @@ export function OnboardingWizard() {
             </div>
           </div>
 
-          {/* Botón de Publicar */}
+          {/* Botones de Acción */}
           <div className="flex flex-col gap-3">
             <button
               type="button"
@@ -1039,6 +1060,15 @@ export function OnboardingWizard() {
             >
               <Send className="w-5 h-5" />
               <span>Publicar en el Muro y Comenzar</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFinalizarSinPublicar}
+              disabled={cargando}
+              className="w-full py-3.5 px-6 rounded-xl bg-zinc-950/80 hover:bg-zinc-800 text-zinc-300 hover:text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer border border-zinc-700/80 flex items-center justify-center gap-2"
+            >
+              <span>Finalizar sin publicar en el Muro (Omitir) →</span>
             </button>
 
             <button
