@@ -6,7 +6,7 @@ import { haversineKm, prefijosQueCubren, type Punto } from '@/core/geo/geohash'
 import type { Desafio } from '@/domain'
 
 /**
- * MOTOR GEOESPACIAL DE DESAFIOS ("AL ANGULO").
+ * MOTOR GEOESPACIAL DE DESAFIOS DE FULBEANDO.
  *
  * Usa el mismo `GeoIndex` y los mismos helpers que el modulo FULBEANDO
  * (`prefijosQueCubren` + `haversineKm`), asi el mapa unificado consulta canchas,

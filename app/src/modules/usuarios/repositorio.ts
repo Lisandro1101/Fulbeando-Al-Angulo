@@ -85,6 +85,8 @@ export const asegurarUsuario = async (
     zona: null,
     fotoUrl: null,
     fechaNacimiento,
+    onboarding_step: 1,
+    onboarding_completed: false,
     estado: 'activo',
     ...auditoriaInicial(),
   }
@@ -132,6 +134,45 @@ export const actualizarDatosBasicos = async (
   },
 ): Promise<void> => {
   await updateDoc(ref(uid), { ...cambios, ...auditoriaUpdate() })
+}
+
+export const actualizarOnboardingStep = async (
+  uid: string,
+  step: number,
+): Promise<void> => {
+  await updateDoc(ref(uid), {
+    onboarding_step: step,
+    ...auditoriaUpdate(),
+  })
+}
+
+export const completarOnboarding = async (
+  uid: string,
+): Promise<void> => {
+  await updateDoc(ref(uid), {
+    onboarding_completed: true,
+    onboarding_step: 3,
+    ...auditoriaUpdate(),
+  })
+}
+
+export const guardarPaso1Onboarding = async (
+  uid: string,
+  datos: {
+    nombre: string
+    fechaNacimiento: string
+    telefono?: string | null
+    municipio: string | null
+    zona: string | null
+    geo?: GeoIndex | null
+    perfilDeportivo: PerfilDeportivo
+    onboarding_step: number
+  },
+): Promise<void> => {
+  await updateDoc(ref(uid), {
+    ...datos,
+    ...auditoriaUpdate(),
+  })
 }
 
 /** Guardar ubicacion aproximada (la que el usuario acepta compartir). */

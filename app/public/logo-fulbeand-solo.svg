@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 85" width="320" height="85" fill="none">
+  <defs>
+    <filter id="sports-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#sports-shadow)">
+    <!-- SOLO LA PALABRA FULBEAND CENTRADA -->
+    <text
+      x="160"
+      y="58"
+      text-anchor="middle"
+      fill="#FFFFFF"
+      font-family="system-ui, -apple-system, 'Outfit', 'Montserrat', 'Segoe UI', 'Impact', sans-serif"
+      font-size="52"
+      font-weight="900"
+      font-style="italic"
+      letter-spacing="0.5px"
+    >FULBEAND</text>
+  </g>
+</svg>

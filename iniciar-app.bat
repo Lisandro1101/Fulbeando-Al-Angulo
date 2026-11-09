@@ -1,6 +1,6 @@
 @echo off
 echo ====================================================
-echo       ⚽ INICIANDO "AL ANGULO" DEV ENV ⚽
+echo       ⚽ INICIANDO "FULBEANDO" DEV ENV ⚽
 echo ====================================================
 echo.
 echo [1/3] Instalando herramientas globales (concurrently, wait-on, tsx)...
@@ -12,7 +12,7 @@ call npm install
 echo - Frontend (App)...
 call npm install --prefix app
 echo - Cloud Functions...
-call npm install --prefix "AL ANGULO/firebase/functions"
+call npm install --prefix app/firebase/functions
 
 echo.
 echo [3/4] Abriendo el navegador...

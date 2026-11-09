@@ -26,7 +26,11 @@
     "deploy:prod": "npm run test:rules && npm run build:app && tsx scripts/deploy-hosting.ts --all",
     "test:k6": "k6 run testing/k6/navegacion-100-usuarios.js",
     "test:k6:100": "k6 run -e TARGET_VUS=100 testing/k6/navegacion-100-usuarios.js",
-    "test:ui:reserva": "tsx testing/ui-ux/01-reserva-y-aprobacion.ts"
+    "test:ui:reserva": "tsx testing/ui-ux/01-reserva-y-aprobacion.ts",
+    "test:ui:desafio": "tsx testing/ui-ux/02-desafio-entre-capitanes.ts",
+    "test:ui:muro": "tsx testing/ui-ux/03-muro-comunidad-y-convocatoria.ts",
+    "test:ui:mvp": "tsx testing/ui-ux/04-tercer-tiempo-y-mvp.ts",
+    "test:ui:resultado": "tsx testing/ui-ux/05-confirmacion-resultado-capitanes.ts"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",

@@ -16,9 +16,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'Al Ángulo',
-        short_name: 'Al Ángulo',
-        description: 'Al Ángulo - Reservá canchas y sumate al equipo que falta.',
+        name: 'Fulbeando',
+        short_name: 'Fulbeando',
+        description: 'Fulbeando - Reservá canchas y sumate al equipo que falta.',
         theme_color: '#0B0F19',
         background_color: '#0B0F19',
         display: 'standalone',

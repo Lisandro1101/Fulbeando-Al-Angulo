@@ -95,13 +95,13 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
   const compartirPost = async () => {
     const urlCompartir = `${window.location.origin}/carta/${pub.autorUid}`
     const textoCompartir = pub.texto
-      ? `${pub.autorApodo} en Al Ángulo: "${pub.texto.slice(0, 80)}${pub.texto.length > 80 ? '...' : ''}"`
-      : `Mirá la publicación de ${pub.autorApodo} en Al Ángulo ⚽`
+      ? `${pub.autorApodo} en Fulbeando: "${pub.texto.slice(0, 80)}${pub.texto.length > 80 ? '...' : ''}"`
+      : `Mirá la publicación de ${pub.autorApodo} en Fulbeando ⚽`
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Al Ángulo - Comunidad',
+          title: 'Fulbeando - Comunidad',
           text: textoCompartir,
           url: urlCompartir,
         })

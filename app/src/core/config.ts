@@ -98,7 +98,7 @@ export const COLECCIONES = {
   notificaciones: 'notificaciones',
   solicitudes: 'solicitudes',
 
-  // Colecciones del modulo "AL ANGULO". La clave es en español (consistencia con
+  // Colecciones de equipos y partidos. La clave es en español (consistencia con
   // el resto) pero el valor conserva el nombre legacy en ingles: renombrarlas
   // dejaria huerfano el contenido del proyecto real `fulbeando-al-angulo-26`
   // y obligaria a migrar `firestore.rules`. No cambiar sin una migracion.

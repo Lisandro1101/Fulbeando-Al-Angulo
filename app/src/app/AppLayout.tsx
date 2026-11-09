@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
-import { X, MessageSquare, Bell, Settings } from 'lucide-react';
+import { X, MessageSquare, Bell, Settings, HelpCircle } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 import {
   escucharDesafiosUsuario,
@@ -11,11 +11,13 @@ import {
 import { BandejaChatsDesafio } from '@/modules/teams/components/BandejaChatsDesafio';
 import { PanelNotificaciones } from '@/modules/teams/components/PanelNotificaciones';
 import { ModalProponerDesafio } from '@/modules/radar/componentes/ModalProponerDesafio';
+import { ModalFeedback } from '@/modules/soporte/ModalFeedback';
 
 // Modales que queremos que floten en desktop
 import CargaDeSena from '@/modules/turnos/pantallas/CargaDeSena';
 import { Screen6LaunchChallenge, Screen7MyTeam, Screen8VenueRegistration } from '@/modules/ui/Screens';
 import { BannersPersistentes } from '@/modules/ui/BannersPersistentes';
+import { TourGuiadoOnboarding } from '@/modules/onboarding/TourGuiadoOnboarding';
 
 const FlotanteModal = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
@@ -50,6 +52,7 @@ export const AppLayout = () => {
   const [notificaciones, setNotificaciones] = useState<InvitacionEquipo[]>([]);
   const [mostrarBandejaChats, setMostrarBandejaChats] = useState(false);
   const [mostrarPanelNotificaciones, setMostrarPanelNotificaciones] = useState(false);
+  const [mostrarModalFeedback, setMostrarModalFeedback] = useState(false);
   const [desafioChatActivo, setDesafioChatActivo] = useState<InvitacionEquipo | null>(null);
   const [chatRivalActivo, setChatRivalActivo] = useState<{
     equipoId: string;
@@ -148,35 +151,50 @@ export const AppLayout = () => {
       {/* Carteles Flotantes Permanentes: Instalar App & Permiso Notificaciones */}
       <BannersPersistentes />
 
+      {/* Tour Guiado Onboarding para Jugadores */}
+      <TourGuiadoOnboarding />
+
       {/* Sidebar (Desktop) / Bottom Nav (Mobile) */}
       <MenuNavegacion 
         onAbrirNotificaciones={() => setMostrarPanelNotificaciones(true)}
         onAbrirChats={() => setMostrarBandejaChats(true)}
+        onAbrirFeedback={() => setMostrarModalFeedback(true)}
         notificacionesNoLeidas={notificacionesNoLeidasCount}
         chatsNoLeidos={noLeidosCount}
       />
 
       {/* Cabecera mobile: logo a la izquierda e iconos de Notificaciones y Mensajes con badge a la derecha */}
       <header className="md:hidden fixed inset-x-0 top-0 z-[90] border-b border-[#4c24b2]/40 bg-gradient-to-r from-[#361982] via-[#281165] to-[#361982] backdrop-blur-md shadow-md">
-        <div className="flex h-16 items-center justify-between px-4">
+        <div className="flex h-16 items-center justify-between px-3 sm:px-4">
           <img 
-            src="/logo-anterior.svg" 
-            alt="Al Ángulo" 
-            className="h-12 w-auto max-w-[190px] object-contain object-left drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]" 
+            src="/logo-fulbeand-completo.svg?v=20261109" 
+            alt="FULBEAND" 
+            className="h-9 sm:h-11 w-auto max-w-[125px] sm:max-w-[160px] object-contain object-left shrink min-w-0 drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]" 
           />
 
           {/* Botones de Notificaciones y Mensajes */}
           {sesion.user && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Botón de Centro de Ayuda y Preguntas Frecuentes */}
+              <button
+                onClick={() => setMostrarModalFeedback(true)}
+                aria-label="Centro de Ayuda y Preguntas Frecuentes"
+                title="Centro de Ayuda"
+                className="relative p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md shrink-0"
+              >
+                <HelpCircle className="w-4.5 h-4.5 text-indigo-300 hover:text-white" />
+              </button>
+
               {/* Botón Campanita de Notificaciones */}
               <button
                 onClick={() => setMostrarPanelNotificaciones(true)}
                 aria-label="Abrir panel de notificaciones"
-                className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md"
+                title="Notificaciones"
+                className="relative p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md shrink-0"
               >
-                <Bell className="w-5 h-5 text-amber-400" />
+                <Bell className="w-4.5 h-4.5 text-amber-400" />
                 {notificacionesNoLeidasCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-amber-400/30">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 bg-amber-500 text-zinc-950 text-[10px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-amber-400/30">
                     {notificacionesNoLeidasCount > 9 ? '9+' : notificacionesNoLeidasCount}
                   </span>
                 )}
@@ -186,11 +204,12 @@ export const AppLayout = () => {
               <button
                 onClick={() => setMostrarBandejaChats(true)}
                 aria-label="Abrir chats de desafíos"
-                className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md"
+                title="Mensajes y Desafíos"
+                className="relative p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md shrink-0"
               >
-                <MessageSquare className="w-5 h-5 text-emerald-400" />
+                <MessageSquare className="w-4.5 h-4.5 text-emerald-400" />
                 {noLeidosCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-emerald-400/30">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-emerald-400/30">
                     {noLeidosCount > 9 ? '9+' : noLeidosCount}
                   </span>
                 )}
@@ -202,9 +221,9 @@ export const AppLayout = () => {
                   onClick={() => navigate('/ajustes')}
                   aria-label="Configuración del jugador"
                   title="Configuración del jugador"
-                  className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md"
+                  className="relative p-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md shrink-0"
                 >
-                  <Settings className="w-5 h-5 text-purple-300" />
+                  <Settings className="w-4.5 h-4.5 text-purple-300" />
                 </button>
               )}
             </div>
@@ -212,52 +231,7 @@ export const AppLayout = () => {
         </div>
       </header>
 
-      {/* Botones de Notificaciones y Mensajes en Desktop (PC - esquina superior derecha) */}
-      {sesion.user && (
-        <div className="hidden md:flex fixed top-4 right-6 z-[110] items-center gap-3 bg-[#281165]/85 hover:bg-[#281165] backdrop-blur-md px-3.5 py-2 rounded-2xl border border-[#4c24b2]/50 shadow-xl shadow-black/30 transition-all">
-          {/* Botón Campanita de Notificaciones */}
-          <button
-            onClick={() => setMostrarPanelNotificaciones(true)}
-            aria-label="Abrir panel de notificaciones"
-            title="Notificaciones"
-            className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
-          >
-            <Bell className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-            {notificacionesNoLeidasCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-amber-400/30">
-                {notificacionesNoLeidasCount > 9 ? '9+' : notificacionesNoLeidasCount}
-              </span>
-            )}
-          </button>
 
-          {/* Botón de Mensajes / Notificaciones de Desafíos */}
-          <button
-            onClick={() => setMostrarBandejaChats(true)}
-            aria-label="Abrir chats de desafíos"
-            title="Mensajes y Desafíos"
-            className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
-          >
-            <MessageSquare className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
-            {noLeidosCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-emerald-400/30">
-                {noLeidosCount > 9 ? '9+' : noLeidosCount}
-              </span>
-            )}
-          </button>
-
-          {/* Botón de Configuración si está en la pantalla Perfil */}
-          {location.pathname === '/perfil' && (
-            <button
-              onClick={() => navigate('/ajustes')}
-              aria-label="Configuración del jugador"
-              title="Configuración del jugador"
-              className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
-            >
-              <Settings className="w-5 h-5 text-purple-300 group-hover:rotate-45 transition-transform" />
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Panel Flotante de Notificaciones Generales */}
       {mostrarPanelNotificaciones && sesion.user && (
@@ -345,6 +319,12 @@ export const AppLayout = () => {
           <Route path="/venue-registration" element={<FlotanteModal><Screen8VenueRegistration /></FlotanteModal>} />
         </Routes>
       )}
+
+      {/* Modal de Feedback y Reporte de Problemas */}
+      <ModalFeedback
+        abierto={mostrarModalFeedback}
+        onCerrar={() => setMostrarModalFeedback(false)}
+      />
     </div>
   );
 };

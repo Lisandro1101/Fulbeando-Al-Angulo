@@ -123,7 +123,7 @@ export const BannersPersistentes: React.FC = () => {
                   className="flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer"
                 >
                   <Smartphone className="w-4 h-4 animate-pulse text-emerald-400" />
-                  <span>Instalar App Al Ángulo</span>
+                  <span>Instalar App Fulbeando</span>
                 </button>
                 <div className="flex items-center gap-2">
                   <motion.button
@@ -156,7 +156,7 @@ export const BannersPersistentes: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-xs sm:text-sm font-black text-white tracking-wide">
-                          Instalá Al Ángulo en tu celular
+                          Instalá Fulbeando en tu celular
                         </h4>
                         <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
                           App Oficial
@@ -326,7 +326,7 @@ export const BannersPersistentes: React.FC = () => {
               <Smartphone className="w-6 h-6" />
             </div>
             <div className="text-center">
-              <h3 className="font-black text-lg">Instalá Al Ángulo en tu iPhone</h3>
+              <h3 className="font-black text-lg">Instalá Fulbeando en tu iPhone</h3>
               <p className="text-xs text-zinc-300 mt-1">Seguí estos 3 simples pasos en Safari:</p>
             </div>
             <div className="space-y-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800 text-xs text-zinc-200">
@@ -385,7 +385,7 @@ export const BannersPersistentes: React.FC = () => {
               <Download className="w-6 h-6" />
             </div>
             <div className="text-center">
-              <h3 className="font-black text-lg">Instalá Al Ángulo</h3>
+              <h3 className="font-black text-lg">Instalá Fulbeando</h3>
               <p className="text-xs text-zinc-300 mt-1">Podés instalarla desde el menú de tu navegador:</p>
             </div>
             <div className="space-y-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800 text-xs text-zinc-200">

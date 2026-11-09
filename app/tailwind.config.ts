@@ -2,7 +2,7 @@ import type { Config } from 'tailwindcss'
 import tailwindcssAnimate from 'tailwindcss-animate'
 
 /**
- * Paleta Fusionada "Fulbeando x Al Ángulo".
+ * Paleta Deportiva "Fulbeando".
  * Dark mode por defecto, alto contraste para exteriores y estética FUT deportiva.
  */
 export default {
@@ -29,7 +29,7 @@ export default {
           muted: '#16A34A',
           faint: '#DCFCE7',
         },
-        // Acentos "FUT" enérgicos de Al Ángulo
+        // Acentos "FUT" enérgicos de Fulbeando
         neon: {
           green: '#22C55E', // Éxito, confirmación, status 'open' (#22C55E)
           orange: '#EA580C', // Alertas, CTAs principales

@@ -30,7 +30,7 @@ const loadImage = (file: File | Blob): Promise<HTMLImageElement> => {
     
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('[Al Ángulo] El archivo está corrupto o no es una imagen válida.'));
+      reject(new Error('[Fulbeando] El archivo está corrupto o no es una imagen válida.'));
     };
     
     img.src = url;
@@ -97,7 +97,7 @@ export const optimizeAvatarImage = async (
   const ctx = canvas.getContext('2d');
 
   if (!ctx) {
-    throw new Error('[Al Ángulo] Renderizador gráfico (Canvas) no soportado en este dispositivo.');
+    throw new Error('[Fulbeando] Renderizador gráfico (Canvas) no soportado en este dispositivo.');
   }
 
   // Fondo negro puro de respaldo por si se carga una imagen con transparencias
@@ -120,7 +120,7 @@ export const optimizeAvatarImage = async (
           // Devolvemos el archivo ultra comprimido, listo para inyectarse al Firebase Storage / R2
           resolve(blob);
         } else {
-          reject(new Error('[Al Ángulo] Falló la compresión final del archivo.'));
+          reject(new Error('[Fulbeando] Falló la compresión final del archivo.'));
         }
       },
       mimeType,

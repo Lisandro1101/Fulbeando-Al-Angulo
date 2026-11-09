@@ -4,12 +4,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2, Clock, Trophy } from 'lucide-react';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
+import { ModalTerminos } from '@/modules/legales/ModalTerminos';
 import { useSesion } from '@/modules/auth/useSesion';
 import { toast } from '@/components/ui/sonner';
 import { MONTO_SENA_DEFAULT, COLECCIONES } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, eliminarEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp } from '@/modules/teams/teamService';
+import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, eliminarEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp, proponerResultadoPartido, confirmarResultadoMutuo, rechazarResultadoPropuesto } from '@/modules/teams/teamService';
 import { doc, updateDoc, serverTimestamp, collection, setDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/core/firebase';
 import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador, calcularDivisionEquipo, calcularRutaDestino } from '@/domain';
@@ -39,6 +40,8 @@ export const Screen1Login = () => {
   const [password, setPassword] = useState('');
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [mostrarModalTerminos, setMostrarModalTerminos] = useState(false);
 
   // Redirigir limpiamente cuando la sesión y el perfil del usuario estén listos
   React.useEffect(() => {
@@ -75,6 +78,10 @@ export const Screen1Login = () => {
     }
     if (isRegister && (!nombre || !apellido)) {
       setError('Por favor completá tu nombre y apellido.');
+      return;
+    }
+    if (isRegister && !aceptaTerminos) {
+      setError('Debés aceptar los Términos y Condiciones y Normas de Convivencia para registrarte.');
       return;
     }
 
@@ -118,7 +125,7 @@ export const Screen1Login = () => {
       <CargandoFulbeando visible={cargando} mensaje="Ingresando…" />
       <div className="w-full max-w-sm space-y-6 bg-white/5 backdrop-blur-xl border border-[#4c24b2]/40 p-6 sm:p-8 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
         <div className="text-center">
-          <img src="/logo-anterior.svg" alt="Al Ángulo" className="w-full h-32 object-contain object-center mx-auto drop-shadow-[0_4px_16px_rgba(0,0,0,0.45)]" />
+          <img src="/logo-fulbeand-completo.svg?v=20261109" alt="FULBEAND" className="w-full h-32 object-contain object-center mx-auto drop-shadow-[0_4px_16px_rgba(0,0,0,0.45)]" />
           <p className="text-emerald-400 font-black uppercase tracking-widest text-xs mt-2">La red futbolera</p>
         </div>
         
@@ -165,6 +172,29 @@ export const Screen1Login = () => {
             onChange={e => setPassword(e.target.value)} 
             className="w-full bg-[#1c0a48]/70 border border-[#4c24b2]/60 rounded-xl px-4 py-3 text-white placeholder-indigo-200/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition" 
           />
+
+          {isRegister && (
+            <div className="flex items-start gap-2.5 pt-1 text-xs text-indigo-200">
+              <input 
+                type="checkbox" 
+                id="acepta-terminos" 
+                checked={aceptaTerminos} 
+                onChange={e => setAceptaTerminos(e.target.checked)} 
+                className="mt-0.5 w-4 h-4 rounded border-[#4c24b2] accent-emerald-500 cursor-pointer shrink-0" 
+                required 
+              />
+              <label htmlFor="acepta-terminos" className="cursor-pointer leading-tight select-none">
+                Acepto los{' '}
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalTerminos(true)}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
+                >
+                  Términos, Condiciones y Normas de Convivencia
+                </button>
+              </label>
+            </div>
+          )}
           
           <motion.button 
             type="submit" 
@@ -205,7 +235,25 @@ export const Screen1Login = () => {
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
           {cargando ? 'Conectando...' : 'Continuar con Google'}
         </motion.button>
+
+        <p className="text-[11px] text-center text-indigo-300/70 pt-1 leading-relaxed">
+          Al continuar con Google o registrarte, aceptás nuestros{' '}
+          <button
+            type="button"
+            onClick={() => setMostrarModalTerminos(true)}
+            className="text-emerald-400 hover:text-emerald-300 underline font-semibold cursor-pointer"
+          >
+            Términos y Normas de Convivencia
+          </button>
+          .
+        </p>
       </div>
+
+      <ModalTerminos
+        abierto={mostrarModalTerminos}
+        onCerrar={() => setMostrarModalTerminos(false)}
+        onAceptar={() => setAceptaTerminos(true)}
+      />
     </div>
   );
 };
@@ -265,7 +313,7 @@ export const Screen2RoleSelector = () => {
         <div className="space-y-4">
           {/* Card Jugador */}
           <button 
-            onClick={() => elegirRol('jugador', '/onboarding-player')} 
+            onClick={() => elegirRol('jugador', '/perfil')} 
             disabled={cargando}
             className="w-full bg-white/5 backdrop-blur-md border border-[#4c24b2]/40 p-6 rounded-2xl flex flex-col items-start gap-4 hover:border-emerald-400 hover:bg-white/10 transition group text-left disabled:opacity-50 shadow-lg cursor-pointer"
           >
@@ -606,6 +654,7 @@ export const Screen3PlayerOnboarding = () => {
 // PANTALLA 4: Vista Carta (Welcome)
 // ==========================================
 export const Screen4WelcomeCard = () => {
+  const navigate = useNavigate();
   const sesion = useSesion();
   const { datos, snapshot } = useDatosCarta(sesion.usuario);
   const cartaRef = React.useRef<HTMLDivElement>(null);
@@ -731,6 +780,15 @@ export const Screen4WelcomeCard = () => {
           >
             {publicando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
             {publicando ? 'Publicando...' : 'Publicar en la comunidad'}
+          </motion.button>
+          <motion.button
+            onClick={() => navigate('/ajustes')}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+            className="hidden md:flex w-full items-center justify-center gap-2 bg-zinc-900 border border-zinc-800 text-zinc-300 font-semibold py-3 rounded-xl cursor-pointer shadow-sm hover:border-zinc-700 hover:text-white"
+          >
+            <Settings className="w-4 h-4 text-purple-400" /> Configuración y Ajustes de Perfil
           </motion.button>
         </div>
       </div>
@@ -2172,6 +2230,33 @@ export const Screen7MyTeam = () => {
     setMostrarModalEstadisticas(true);
   };
 
+  // Auto-cierre de partido para el capitán proponente cuando el rival confirma el resultado
+  useEffect(() => {
+    if (
+      equipo &&
+      equipo.isCapitan &&
+      equipo.convocatoria?.resultadoPendiente?.estado === 'CONFIRMADO' &&
+      equipo.convocatoria.resultadoPendiente.propuestoPorEquipoId === equipo.id
+    ) {
+      const res = equipo.convocatoria.resultadoPendiente;
+      finalizarTercerTiempoYPartido(equipo.id, {
+        mvpId: res.mvpId ?? null,
+        stats: res.stats || {},
+        ausentesIds: res.ausentesIds || [],
+        golesFavor: res.golesPropio,
+        golesContra: res.golesRival,
+        calificacionPredio: res.calificacionPredio || null,
+        fairPlayRival: res.fairPlayRival || null,
+        equipoRivalId: equipo.convocatoria.equipoRivalId || null,
+      })
+        .then(() => {
+          setToastMessage('¡El capitán rival confirmó el resultado! Partido oficializado 🏆🤝');
+          setTimeout(() => setToastMessage(''), 3500);
+        })
+        .catch(console.warn);
+    }
+  }, [equipo?.convocatoria?.resultadoPendiente?.estado, equipo?.id, equipo?.isCapitan]);
+
   /**
    * Publica la alerta al Radar cuando no se completa el equipo.
    */
@@ -2413,7 +2498,7 @@ export const Screen7MyTeam = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-transparent font-sans text-white overflow-hidden relative">
+    <div className="h-full flex flex-col bg-zinc-950 font-sans text-white overflow-hidden relative">
       <div className="flex-1 overflow-y-auto pb-28 md:pb-8">
         {/* Toast Notification */}
         <Toast mensaje={toastMessage} />
@@ -2546,7 +2631,7 @@ export const Screen7MyTeam = () => {
                 <Users className="w-4 h-4" />
                 <span>1. Convocatoria</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  etapaPartido === 'convocatoria' ? 'bg-canvas/ text-zinc-950' : 'bg-zinc-800 text-amber-400'
+                  etapaPartido === 'convocatoria' ? 'bg-black/25 text-zinc-950 font-black' : 'bg-zinc-800 text-amber-400'
                 }`}>
                   {equipo.convocatoria.confirmados?.length || 0}
                 </span>
@@ -2765,8 +2850,175 @@ export const Screen7MyTeam = () => {
                 {/* Banner de Sponsor Oficial / Promo de Tercer Tiempo */}
                 <BannerSponsorTercerTiempo />
 
-                {/* Planilla Oficial del Capitán */}
-                {equipo.isCapitan ? (
+                {/* Planilla Oficial o Validación Mutua entre Capitanes */}
+                {equipo.convocatoria?.resultadoPendiente ? (
+                  equipo.convocatoria.resultadoPendiente.propuestoPorEquipoId === equipo.id ? (
+                    /* Caso A: Este equipo ya envió el resultado, esperando confirmación del rival */
+                    <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl p-4 text-left shadow-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 animate-spin" />
+                          Planilla Enviada — Esperando Validación Rival
+                        </span>
+                        <span className="text-[10px] text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                          Pendiente de Doble Check
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-200 mb-2 font-medium">
+                        Cargaste el resultado: <strong className="text-white text-sm">{equipo.convocatoria.resultadoPendiente.golesPropio} a {equipo.convocatoria.resultadoPendiente.golesRival}</strong>
+                        {equipo.convocatoria.resultadoPendiente.golesPropio > equipo.convocatoria.resultadoPendiente.golesRival
+                          ? ' (Victoria)'
+                          : equipo.convocatoria.resultadoPendiente.golesPropio < equipo.convocatoria.resultadoPendiente.golesRival
+                          ? ' (Derrota)'
+                          : ' (Empate)'}
+                      </p>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        El capitán de {equipo.convocatoria.equipoRivalNombre || 'tu rival'} debe revisar y confirmar el ganador en su pantalla para que impacte oficialmente en las estadísticas de ambos clubes.
+                      </p>
+                      {equipo.isCapitan && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (equipo.convocatoria?.equipoRivalId) {
+                              await rechazarResultadoPropuesto(equipo.id, equipo.convocatoria.equipoRivalId);
+                              setToastMessage('Propuesta cancelada. Podés volver a cargar la planilla.');
+                              setTimeout(() => setToastMessage(''), 2500);
+                            }
+                          }}
+                          className="mt-3 text-[11px] text-zinc-400 hover:text-rose-400 underline cursor-pointer"
+                        >
+                          Cancelar o corregir planilla cargada
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    /* Caso B: El rival envió el resultado; este capitán debe validar el ganador */
+                    <div className="bg-gradient-to-br from-amber-950/50 via-zinc-900 to-zinc-950 border-2 border-amber-500/60 rounded-2xl p-4 text-left shadow-2xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                          <Trophy className="w-4 h-4 text-amber-400" />
+                          Acta de Partido del Capitán Rival
+                        </span>
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/40">
+                          Confirmación Requerida
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-zinc-300 mb-2">
+                        El capitán <strong className="text-white">{equipo.convocatoria.resultadoPendiente.propuestoPorCapitanNombre}</strong> ({equipo.convocatoria.equipoRivalNombre || 'Rival'}) cargó el resultado del encuentro:
+                      </p>
+
+                      {/* Marcador grande */}
+                      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 my-2 text-center">
+                        <div className="text-[10px] text-zinc-400 uppercase font-black tracking-wider mb-1">
+                          Marcador Oficial Propuesto
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-white flex items-center justify-center gap-2.5">
+                          <span className="text-xs sm:text-sm text-zinc-300 truncate max-w-[120px]">{equipo.nombre}</span>
+                          <span className="px-3 py-1 bg-zinc-800 rounded-lg text-white font-mono text-xl">
+                            {equipo.convocatoria.resultadoPendiente.golesPropio}
+                          </span>
+                          <span className="text-zinc-500 font-bold">-</span>
+                          <span className="px-3 py-1 bg-zinc-800 rounded-lg text-white font-mono text-xl">
+                            {equipo.convocatoria.resultadoPendiente.golesRival}
+                          </span>
+                          <span className="text-xs sm:text-sm text-zinc-300 truncate max-w-[120px]">{equipo.convocatoria.equipoRivalNombre || 'Rival'}</span>
+                        </div>
+                        <div className="text-xs font-black text-amber-400 mt-2">
+                          {equipo.convocatoria.resultadoPendiente.golesPropio > equipo.convocatoria.resultadoPendiente.golesRival
+                            ? `🏆 Ganador declarado: ¡${equipo.nombre}!`
+                            : equipo.convocatoria.resultadoPendiente.golesPropio < equipo.convocatoria.resultadoPendiente.golesRival
+                            ? `🏆 Ganador declarado: ${equipo.convocatoria.equipoRivalNombre || 'Equipo Rival'}`
+                            : '🤝 Empate declarado'}
+                        </div>
+                      </div>
+
+                      {/* Fair Play opcional que califica este capitán */}
+                      {equipo.isCapitan && (
+                        <div className="my-3 pt-2 border-t border-zinc-800/80">
+                          <label className="text-[11px] font-bold text-zinc-300 block mb-1.5">
+                            Calificá el Fair Play de tu rival:
+                          </label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFairPlayRival(fairPlayRival === 'BUEN_RIVAL' ? null : 'BUEN_RIVAL')}
+                              className={`flex-1 py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                                fairPlayRival === 'BUEN_RIVAL'
+                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                                  : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                            >
+                              <span>🤝</span>
+                              <span>Buen rival / Limpio</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setFairPlayRival(fairPlayRival === 'CONFLICTIVO' ? null : 'CONFLICTIVO')}
+                              className={`flex-1 py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                                fairPlayRival === 'CONFLICTIVO'
+                                  ? 'bg-rose-500/20 border-rose-500 text-rose-400'
+                                  : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                            >
+                              <span>⚠️</span>
+                              <span>Conflictivo</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Botones de acción para el capitán */}
+                      {equipo.isCapitan ? (
+                        <div className="flex gap-2 mt-3 pt-2">
+                          <motion.button
+                            onClick={async () => {
+                              if (equipo.convocatoria?.equipoRivalId) {
+                                try {
+                                  await confirmarResultadoMutuo(
+                                    equipo.id,
+                                    equipo.convocatoria.equipoRivalId,
+                                    { fairPlayRival }
+                                  );
+                                  setToastMessage('¡Resultado y ganador confirmados por ambos capitanes! 🏆🤝');
+                                  setTimeout(() => setToastMessage(''), 3500);
+                                } catch (err: any) {
+                                  console.error('Error confirmando resultado:', err);
+                                  setToastMessage('Error al confirmar resultado');
+                                  setTimeout(() => setToastMessage(''), 2500);
+                                }
+                              }
+                            }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.97 }}
+                            className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-black py-3 px-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(16,185,129,0.35)]"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Confirmar Ganador y Cerrar Partido</span>
+                          </motion.button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (equipo.convocatoria?.equipoRivalId) {
+                                await rechazarResultadoPropuesto(equipo.id, equipo.convocatoria.equipoRivalId);
+                                setToastMessage('Propuesta de resultado descartada.');
+                                setTimeout(() => setToastMessage(''), 2500);
+                              }
+                            }}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold px-3 py-2 rounded-xl text-xs cursor-pointer"
+                          >
+                            Objetar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-400 flex items-center gap-2 mt-2">
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Esperando que el capitán {equipo.capitanNombre} confirme el acta.</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                ) : equipo.isCapitan ? (
                   <div className="bg-gradient-to-br from-emerald-950/40 to-zinc-950 border border-emerald-500/30 rounded-2xl p-4 text-left">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
@@ -2790,99 +3042,107 @@ export const Screen7MyTeam = () => {
                     </motion.button>
                   </div>
                 ) : (
-                  <div className="bg-canvas/ border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center gap-2">
+                  <div className="bg-zinc-950/70 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>El capitán {equipo.capitanNombre} es el encargado de cargar la planilla oficial tras el partido.</span>
                   </div>
                 )}
 
                 {/* Votación democrática de la Figura (MVP) por compañeros y rivales */}
-                {equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0 && (
-                  <div className="bg-canvas p-3.5 rounded-xl border border-zinc-800/80">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm">⭐</span>
-                        <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
-                          Votación de la Figura
+                {(() => {
+                  const listaParaVotar = (equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0)
+                    ? equipo.confirmadosDelPartido
+                    : (equipo.plantel || []);
+                  
+                  if (!listaParaVotar.length) return null;
+
+                  return (
+                    <div className="bg-zinc-950/70 p-4 rounded-2xl border border-zinc-800/80">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">⭐</span>
+                          <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                            Votación de la Figura
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-zinc-400 font-bold">
+                          {(() => {
+                            const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
+                            return totalVotos === 1 ? '1 voto registrado' : `${totalVotos} votos registrados`;
+                          })()}
                         </span>
                       </div>
-                      <span className="text-[10px] text-zinc-400 font-bold">
-                        {(() => {
-                          const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
-                          return totalVotos === 1 ? '1 voto registrado' : `${totalVotos} votos registrados`;
-                        })()}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 mb-3 font-medium leading-tight">
-                      Elegí quién la rompió hoy. Compañeros y rivales pueden votar con 1 tap.
-                    </p>
+                      <p className="text-[11px] text-zinc-400 mb-3 font-medium leading-tight">
+                        Elegí quién la rompió hoy. Compañeros y rivales pueden votar con 1 tap.
+                      </p>
 
-                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                      {equipo.confirmadosDelPartido.map((p: any) => {
-                        const esMiPropioUsuario = p.id === currentUid;
-                        const votosCandidato = Object.values(equipo.convocatoria?.votosMvp || {}).filter(
-                          (candId: any) => candId === p.id
-                        ).length;
-                        const yoLoVote = currentUid && equipo.convocatoria?.votosMvp?.[currentUid] === p.id;
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {listaParaVotar.map((p: any) => {
+                          const esMiPropioUsuario = p.id === currentUid;
+                          const votosCandidato = Object.values(equipo.convocatoria?.votosMvp || {}).filter(
+                            (candId: any) => candId === p.id
+                          ).length;
+                          const yoLoVote = currentUid && equipo.convocatoria?.votosMvp?.[currentUid] === p.id;
 
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            disabled={esMiPropioUsuario || !currentUid}
-                            onClick={async () => {
-                              if (esMiPropioUsuario || !currentUid) return;
-                              try {
-                                await emitirVotoMvp(
-                                  equipo.id,
-                                  currentUid,
-                                  p.id,
-                                  equipo.convocatoria?.equipoRivalId
-                                );
-                                setToastMessage(`¡Votaste a ${p.apodo} como figura del partido! ⭐`);
-                                setTimeout(() => setToastMessage(''), 2500);
-                              } catch (err: any) {
-                                setToastMessage(err.message || 'Error al registrar tu voto');
-                                setTimeout(() => setToastMessage(''), 2500);
-                              }
-                            }}
-                            className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left ${
-                              yoLoVote
-                                ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                                : esMiPropioUsuario
-                                ? 'bg-canvas/ border-zinc-800/40 opacity-50 cursor-not-allowed'
-                                : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/80 cursor-pointer'
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-sm shrink-0">{p.emoji || '🏃'}</span>
-                              <span className="text-xs font-bold text-white truncate">
-                                {p.apodo}
-                              </span>
-                            </div>
-                            <div className="shrink-0 flex items-center gap-1">
-                              {votosCandidato > 0 && (
-                                <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/40">
-                                  ⭐ {votosCandidato}
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              disabled={esMiPropioUsuario || !currentUid}
+                              onClick={async () => {
+                                if (esMiPropioUsuario || !currentUid) return;
+                                try {
+                                  await emitirVotoMvp(
+                                    equipo.id,
+                                    currentUid,
+                                    p.id,
+                                    equipo.convocatoria?.equipoRivalId
+                                  );
+                                  setToastMessage(`¡Votaste a ${p.apodo} como figura del partido! ⭐`);
+                                  setTimeout(() => setToastMessage(''), 2500);
+                                } catch (err: any) {
+                                  setToastMessage(err.message || 'Error al registrar tu voto');
+                                  setTimeout(() => setToastMessage(''), 2500);
+                                }
+                              }}
+                              className={`p-2.5 rounded-xl border flex items-center justify-between gap-1.5 transition-all text-left ${
+                                yoLoVote
+                                  ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                                  : esMiPropioUsuario
+                                  ? 'bg-zinc-950/40 border-zinc-800/40 opacity-50 cursor-not-allowed'
+                                  : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/80 cursor-pointer'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-sm shrink-0">{p.emoji || '🏃'}</span>
+                                <span className="text-xs font-bold text-white truncate">
+                                  {p.apodo}
                                 </span>
-                              )}
-                              {yoLoVote && (
-                                <span className="text-[10px] font-black text-amber-400">
-                                  ✓
-                                </span>
-                              )}
-                              {esMiPropioUsuario && (
-                                <span className="text-[9px] font-bold text-zinc-500">
-                                  (Vos)
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                              </div>
+                              <div className="shrink-0 flex items-center gap-1">
+                                {votosCandidato > 0 && (
+                                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/40">
+                                    ⭐ {votosCandidato}
+                                  </span>
+                                )}
+                                {yoLoVote && (
+                                  <span className="text-[10px] font-black text-amber-400">
+                                    ✓
+                                  </span>
+                                )}
+                                {esMiPropioUsuario && (
+                                  <span className="text-[9px] font-bold text-zinc-500">
+                                    (Vos)
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -2895,7 +3155,19 @@ export const Screen7MyTeam = () => {
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span className="text-[11px] uppercase font-black tracking-wider text-emerald-400">Último Partido Finalizado</span>
                   </div>
-                  <span className="text-xs font-bold text-zinc-400">{equipo.ultimoPartido.fecha}</span>
+                  <span className="text-xs font-bold text-zinc-400">
+                    {(() => {
+                      if (!equipo.ultimoPartido.fecha) return '';
+                      try {
+                        const d = new Date(equipo.ultimoPartido.fecha);
+                        return !isNaN(d.getTime())
+                          ? d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                          : equipo.ultimoPartido.fecha;
+                      } catch {
+                        return equipo.ultimoPartido.fecha;
+                      }
+                    })()}
+                  </span>
                 </div>
                 
                 {equipo.ultimoPartido.predioNombre && (
@@ -2906,7 +3178,7 @@ export const Screen7MyTeam = () => {
 
                 {/* Resultado Final del Partido */}
                 {typeof equipo.ultimoPartido.golesFavor === 'number' && typeof equipo.ultimoPartido.golesContra === 'number' && (
-                  <div className="bg-canvas border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between mb-3 shadow-inner">
+                  <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between mb-3 shadow-inner">
                     <span className="text-xs font-bold text-zinc-400">Resultado Oficial</span>
                     <span className={`text-xs sm:text-sm font-black px-3 py-1 rounded-lg border flex items-center gap-1.5 ${
                       equipo.ultimoPartido.golesFavor > equipo.ultimoPartido.golesContra
@@ -2944,7 +3216,7 @@ export const Screen7MyTeam = () => {
 
                 {/* Resumen de Goles y Asistencias cargadas */}
                 {equipo.ultimoPartido.stats && Object.keys(equipo.ultimoPartido.stats).length > 0 && (
-                  <div className="bg-canvas p-3 rounded-xl border border-zinc-800/80">
+                  <div className="bg-zinc-950/70 p-3 rounded-xl border border-zinc-800/80">
                     <span className="text-[11px] uppercase font-black text-zinc-500 tracking-wider block mb-2">
                       Goles y Asistencias Registrados
                     </span>
@@ -3103,7 +3375,7 @@ export const Screen7MyTeam = () => {
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all cursor-pointer ${
                         subPestanaPlantel === 'confirmados'
                           ? 'bg-emerald-500 text-zinc-950 shadow-md'
-                          : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold'
+                          : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 font-bold'
                       }`}
                     >
                       ✓ Confirmados ({jugadoresConfirmados.length})
@@ -3116,7 +3388,7 @@ export const Screen7MyTeam = () => {
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase transition-all cursor-pointer ${
                         subPestanaPlantel === 'todos'
                           ? 'bg-amber-500 text-zinc-950 shadow-md'
-                          : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold'
+                          : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 font-bold'
                       }`}
                     >
                       Plantel ({equipo.plantel.length})
@@ -3137,10 +3409,19 @@ export const Screen7MyTeam = () => {
 
                 {subPestanaPlantel === 'confirmados' ? (
                   jugadoresConfirmados.length === 0 ? (
-                    <div className="text-center py-8 bg-zinc-900/60 rounded-2xl border border-dashed border-zinc-800 p-6 space-y-2">
-                      <p className="text-sm font-bold text-zinc-300">Aún no hay jugadores confirmados</p>
-                      <p className="text-xs text-zinc-400">A medida que los integrantes pongan '✓ Voy' o se sumen refuerzos del Radar, irán apareciendo acá.</p>
-                    </div>
+                    etapaPartido === 'post_partido' ? (
+                      <div className="space-y-3">
+                        <div className="text-xs text-zinc-500 font-bold uppercase tracking-wider mb-2">
+                          Jugadores del Plantel para Estadísticas
+                        </div>
+                        {equipo.plantel.map((jugador: any) => renderTarjetaJugador(jugador, false))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-zinc-900/60 rounded-2xl border border-dashed border-zinc-800 p-6 space-y-2">
+                        <p className="text-sm font-bold text-zinc-300">Aún no hay jugadores confirmados</p>
+                        <p className="text-xs text-zinc-400">A medida que los integrantes pongan '✓ Voy' o se sumen refuerzos del Radar, irán apareciendo acá.</p>
+                      </div>
+                    )
                   ) : (
                     <div className="space-y-3">
                       {jugadoresConfirmados.map((jugador: any) => renderTarjetaJugador(jugador, false))}
@@ -3158,7 +3439,7 @@ export const Screen7MyTeam = () => {
           return (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                <h3 className="text-xs font-black text-zinc-400 uppercase tracking-wider">
                   Plantel del Equipo ({equipo.plantel.length}/{MAX_MEMBROS_EQUIPO})
                 </h3>
                 <button
@@ -3382,328 +3663,387 @@ export const Screen7MyTeam = () => {
       {modalCrearEquipo}
       {/* Modal Cargar Estadísticas */}
       {mostrarModalEstadisticas && equipo && (
-        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-canvas/ backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-in fade-in duration-200">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-black italic text-emerald-500">3er TIEMPO</h2>
-            <button onClick={() => setMostrarModalEstadisticas(false)} aria-label="Cerrar" className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto space-y-6">
-            {/* Carga del Resultado Final (Goles del Encuentro) */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-lg text-center">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  ⚽ Resultado Final del Encuentro
-                </span>
-                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
-                  golesFavor > golesContra
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : golesFavor === golesContra
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                }`}>
-                  {golesFavor > golesContra ? 'Victoria 🏆' : golesFavor === golesContra ? 'Empate 🤝' : 'Derrota 📉'}
-                </span>
+        <div className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🍻</span>
+                <h2 className="text-2xl font-black italic tracking-wide text-emerald-400">3er TIEMPO</h2>
               </div>
-
-              <div className="flex items-center justify-center gap-4 py-2">
-                {/* Mi Equipo */}
-                <div className="flex flex-col items-center flex-1">
-                  <span className="text-xs font-bold text-white truncate max-w-[120px] mb-1">
-                    {equipo.nombre}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGolesFavor((prev) => Math.max(0, prev - 1))}
-                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-3xl font-black text-emerald-400 w-10 text-center">{golesFavor}</span>
-                    <button
-                      type="button"
-                      onClick={() => setGolesFavor((prev) => prev + 1)}
-                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <span className="text-xl font-black text-zinc-600 px-1">VS</span>
-
-                {/* Rival */}
-                <div className="flex flex-col items-center flex-1">
-                  <span className="text-xs font-bold text-zinc-300 truncate max-w-[120px] mb-1">
-                    {equipo.convocatoria?.equipoRivalNombre || 'Rival'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGolesContra((prev) => Math.max(0, prev - 1))}
-                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-3xl font-black text-rose-400 w-10 text-center">{golesContra}</span>
-                    <button
-                      type="button"
-                      onClick={() => setGolesContra((prev) => prev + 1)}
-                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <p className="text-[11px] text-zinc-400 mt-2">
-                El marcador final actualizará automáticamente las victorias, empates y derrotas del equipo.
-              </p>
+              <button 
+                onClick={() => setMostrarModalEstadisticas(false)} 
+                aria-label="Cerrar" 
+                className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
+            
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+              {/* Carga del Resultado Final (Goles del Encuentro) */}
+              <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 shadow-lg text-center">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    ⚽ Resultado Final del Encuentro
+                  </span>
+                  <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                    golesFavor > golesContra
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : golesFavor === golesContra
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                  }`}>
+                    {golesFavor > golesContra ? 'Victoria 🏆' : golesFavor === golesContra ? 'Empate 🤝' : 'Derrota 📉'}
+                  </span>
+                </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-amber-500">Elegir MVP del Partido ⭐</h3>
-                {(() => {
-                  const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
-                  if (totalVotos > 0) {
-                    return (
-                      <span className="text-[11px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                        🗳️ {totalVotos} voto{totalVotos > 1 ? 's' : ''} de la cancha
-                      </span>
-                    );
-                  }
-                  return null;
-                })()}
+                <div className="flex items-center justify-center gap-4 py-2">
+                  {/* Mi Equipo */}
+                  <div className="flex flex-col items-center flex-1">
+                    <span className="text-xs font-bold text-white truncate max-w-[120px] mb-1">
+                      {equipo.nombre}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGolesFavor((prev) => Math.max(0, prev - 1))}
+                        className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="text-3xl font-black text-emerald-400 w-10 text-center">{golesFavor}</span>
+                      <button
+                        type="button"
+                        onClick={() => setGolesFavor((prev) => prev + 1)}
+                        className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <span className="text-xl font-black text-zinc-600 px-1">VS</span>
+
+                  {/* Rival */}
+                  <div className="flex flex-col items-center flex-1">
+                    <span className="text-xs font-bold text-zinc-300 truncate max-w-[120px] mb-1">
+                      {equipo.convocatoria?.equipoRivalNombre || 'Rival'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGolesContra((prev) => Math.max(0, prev - 1))}
+                        className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="text-3xl font-black text-rose-400 w-10 text-center">{golesContra}</span>
+                      <button
+                        type="button"
+                        onClick={() => setGolesContra((prev) => prev + 1)}
+                        className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-2">
+                  El marcador final actualizará automáticamente las victorias, empates y derrotas del equipo.
+                </p>
               </div>
 
+              {/* Elegir MVP del Partido ⭐ */}
               {(() => {
+                const listaJugadores = (equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0)
+                  ? equipo.confirmadosDelPartido
+                  : (equipo.plantel || []);
+
                 const votosMap: Record<string, number> = {};
                 Object.values(equipo.convocatoria?.votosMvp || {}).forEach((candId: any) => {
                   votosMap[candId] = (votosMap[candId] || 0) + 1;
                 });
                 const maxVotos = Math.max(0, ...Object.values(votosMap));
 
-                const candidatos = (equipo.confirmadosDelPartido || [])
+                const candidatos = listaJugadores
                   .filter((p: any) => !ausentesIds.includes(p.id))
                   .sort((a: any, b: any) => (votosMap[b.id] || 0) - (votosMap[a.id] || 0));
 
-                return (
-                  <div className="grid grid-cols-2 gap-2">
-                    {candidatos.map((p: any) => {
-                      const votos = votosMap[p.id] || 0;
-                      const esLider = votos > 0 && votos === maxVotos;
-                      const esSeleccionado = mvpId === p.id;
+                const totalVotos = Object.keys(equipo.convocatoria?.votosMvp || {}).length;
 
-                      return (
-                        <button 
-                          key={p.id}
-                          type="button"
-                          onClick={() => setMvpId(p.id)}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer relative ${
-                            esSeleccionado
-                              ? 'border-amber-500 bg-amber-500/15 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
-                              : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
-                          }`}
-                        >
-                          {esLider && (
-                            <span className="absolute -top-2 bg-amber-500 text-zinc-950 text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-md tracking-wider">
-                              👑 Más votado ({votos})
-                            </span>
-                          )}
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xl mt-1">
-                            {p.emoji || '🏃'}
-                          </div>
-                          <span className="text-xs font-bold text-white truncate w-full text-center">
-                            {p.apodo}
-                          </span>
-                          {votos > 0 && !esLider && (
-                            <span className="text-[10px] text-amber-400 font-bold">
-                              ⭐ {votos} voto{votos > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                return (
+                  <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-bold text-amber-400 flex items-center gap-1.5 text-sm">
+                        <span>⭐</span> Elegir MVP del Partido
+                      </h3>
+                      {totalVotos > 0 && (
+                        <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+                          🗳️ {totalVotos} voto{totalVotos > 1 ? 's' : ''} registrado{totalVotos > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+
+                    {candidatos.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-zinc-500 font-bold">
+                        No hay jugadores habilitados para MVP
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {candidatos.map((p: any) => {
+                          const votos = votosMap[p.id] || 0;
+                          const esLider = votos > 0 && votos === maxVotos;
+                          const esSeleccionado = mvpId === p.id;
+
+                          return (
+                            <button 
+                              key={p.id}
+                              type="button"
+                              onClick={() => setMvpId(p.id)}
+                              className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer relative ${
+                                esSeleccionado
+                                  ? 'border-amber-500 bg-amber-500/15 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+                                  : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                              }`}
+                            >
+                              {esLider && (
+                                <span className="absolute -top-2 bg-amber-500 text-zinc-950 text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-md tracking-wider">
+                                  👑 Más votado ({votos})
+                                </span>
+                              )}
+                              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xl mt-1">
+                                {p.emoji || '🏃'}
+                              </div>
+                              <span className="text-xs font-bold text-white truncate w-full text-center">
+                                {p.apodo}
+                              </span>
+                              {votos > 0 && !esLider && (
+                                <span className="text-[10px] text-amber-400 font-bold">
+                                  ⭐ {votos} voto{votos > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
-            </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-emerald-500">Goles, Asistencias y Asistencia</h3>
-                <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Silencio = Jugó ✅</span>
-              </div>
-              <div className="space-y-2.5">
-                {(equipo.confirmadosDelPartido || []).map((p: any) => {
-                  const estaAusente = ausentesIds.includes(p.id);
-                  const s = statsPartido[p.id] || { goles: 0, asistencias: 0 };
-                  const updateStats = (field: 'goles'|'asistencias', val: number) => {
-                    setStatsPartido(prev => ({...prev, [p.id]: { ...s, [field]: Math.max(0, s[field] + val) }}));
-                  };
-                  return (
-                    <div 
-                      key={p.id} 
-                      className={`border p-3 rounded-xl flex items-center gap-3 transition-colors ${
-                        estaAusente ? 'bg-canvas/ border-rose-900/40 opacity-70' : 'bg-zinc-900 border-zinc-800'
+              {/* Goles, Asistencias y Asistencia */}
+              {(() => {
+                const listaJugadores = (equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0)
+                  ? equipo.confirmadosDelPartido
+                  : (equipo.plantel || []);
+
+                return (
+                  <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-bold text-emerald-400 flex items-center gap-1.5 text-sm">
+                        <span>⚽</span> Goles, Asistencias y Asistencia
+                      </h3>
+                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Silencio = Jugó ✅</span>
+                    </div>
+
+                    {listaJugadores.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-zinc-500 font-bold">
+                        No hay jugadores registrados en el plantel
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {listaJugadores.map((p: any) => {
+                          const estaAusente = ausentesIds.includes(p.id);
+                          const s = statsPartido[p.id] || { goles: 0, asistencias: 0 };
+                          const updateStats = (field: 'goles'|'asistencias', val: number) => {
+                            setStatsPartido(prev => ({...prev, [p.id]: { ...s, [field]: Math.max(0, s[field] + val) }}));
+                          };
+                          return (
+                            <div 
+                              key={p.id} 
+                              className={`border p-3 rounded-xl flex items-center gap-3 transition-colors ${
+                                estaAusente ? 'bg-zinc-900/40 border-rose-900/40 opacity-70' : 'bg-zinc-900 border-zinc-800'
+                              }`}
+                            >
+                              <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 text-lg">{p.emoji || '🏃'}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-sm font-bold block truncate ${estaAusente ? 'line-through text-zinc-400' : 'text-white'}`}>
+                                    {p.apodo}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (estaAusente) {
+                                        setAusentesIds(prev => prev.filter(id => id !== p.id));
+                                      } else {
+                                        setAusentesIds(prev => [...prev, p.id]);
+                                        if (mvpId === p.id) setMvpId(null);
+                                      }
+                                    }}
+                                    title={estaAusente ? 'Marcar como presente' : 'Marcar como ausente / no asistió'}
+                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                      estaAusente
+                                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                    }`}
+                                  >
+                                    {estaAusente ? '❌ Faltó' : '✓ Jugó'}
+                                  </button>
+                                </div>
+                                {estaAusente && (
+                                  <span className="text-[10px] text-rose-400/90 font-medium block mt-0.5">
+                                    Falta sin aviso (-15% Fair Play)
+                                  </span>
+                                )}
+                              </div>
+
+                              {!estaAusente && (
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-[10px] uppercase font-bold text-zinc-500">Goles</span>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <button onClick={() => updateStats('goles', -1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-red-400 font-bold active:scale-90 transition cursor-pointer">-</button>
+                                      <span className="font-black w-3 text-center text-xs text-white">{s.goles}</span>
+                                      <button onClick={() => updateStats('goles', 1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-emerald-400 font-bold active:scale-90 transition cursor-pointer">+</button>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-[10px] uppercase font-bold text-zinc-500">Asist.</span>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <button onClick={() => updateStats('asistencias', -1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-red-400 font-bold active:scale-90 transition cursor-pointer">-</button>
+                                      <span className="font-black w-3 text-center text-xs text-white">{s.asistencias}</span>
+                                      <button onClick={() => updateStats('asistencias', 1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-amber-400 font-bold active:scale-90 transition cursor-pointer">+</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Calificación opcional del Predio */}
+              <div className="bg-zinc-950/70 border border-zinc-800 p-4 rounded-2xl">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
+                    <span>🏟️</span>
+                    <span className="truncate">¿Qué tal las canchas de {equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || 'el predio'}?</span>
+                  </span>
+                  {estrellasPredio > 0 && (
+                    <span className="text-xs font-black text-amber-400 shrink-0 ml-2">{estrellasPredio} de 5 ⭐</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-400 mb-3 font-medium">Opcional: ayuda a otros equipos a saber cómo están las canchas.</p>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((estrella) => (
+                    <button
+                      key={estrella}
+                      type="button"
+                      onClick={() => setEstrellasPredio(estrella === estrellasPredio ? 0 : estrella)}
+                      className={`flex-1 py-2 rounded-xl border text-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
+                        estrellasPredio >= estrella
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                          : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-500 hover:text-zinc-300'
                       }`}
                     >
-                      <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 text-lg">{p.emoji}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-bold block truncate ${estaAusente ? 'line-through text-zinc-400' : 'text-white'}`}>
-                            {p.apodo}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (estaAusente) {
-                                setAusentesIds(prev => prev.filter(id => id !== p.id));
-                              } else {
-                                setAusentesIds(prev => [...prev, p.id]);
-                                if (mvpId === p.id) setMvpId(null);
-                              }
-                            }}
-                            title={estaAusente ? 'Marcar como presente' : 'Marcar como ausente / no asistió'}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                              estaAusente
-                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
-                            }`}
-                          >
-                            {estaAusente ? '❌ Faltó' : '✓ Jugó'}
-                          </button>
-                        </div>
-                        {estaAusente && (
-                          <span className="text-[10px] text-rose-400/90 font-medium block mt-0.5">
-                            Falta sin aviso (-15% Fair Play)
-                          </span>
-                        )}
-                      </div>
-
-                      {!estaAusente && (
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="flex flex-col items-center">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Goles</span>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <button onClick={() => updateStats('goles', -1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-red-400 font-bold active:scale-90 transition cursor-pointer">-</button>
-                              <span className="font-black w-3 text-center text-xs">{s.goles}</span>
-                              <button onClick={() => updateStats('goles', 1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-emerald-400 font-bold active:scale-90 transition cursor-pointer">+</button>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <span className="text-[10px] uppercase font-bold text-zinc-500">Asist.</span>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <button onClick={() => updateStats('asistencias', -1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-red-400 font-bold active:scale-90 transition cursor-pointer">-</button>
-                              <span className="font-black w-3 text-center text-xs">{s.asistencias}</span>
-                              <button onClick={() => updateStats('asistencias', 1)} className="w-6 h-6 bg-zinc-800 hover:bg-zinc-700 rounded flex items-center justify-center text-amber-400 font-bold active:scale-90 transition cursor-pointer">+</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      ★
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Calificación opcional del Predio */}
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
-                  <span>🏟️</span>
-                  <span className="truncate">¿Qué tal las canchas de {equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || 'el predio'}?</span>
+              {/* Calificación opcional de Fair Play del Rival */}
+              <div className="bg-zinc-950/70 border border-zinc-800 p-4 rounded-2xl">
+                <span className="text-sm font-bold text-white block mb-1">
+                  Conducta y Fair Play del equipo rival
                 </span>
-                {estrellasPredio > 0 && (
-                  <span className="text-xs font-black text-amber-400 shrink-0 ml-2">{estrellasPredio} de 5 ⭐</span>
-                )}
-              </div>
-              <p className="text-[11px] text-zinc-400 mb-3 font-medium">Opcional: ayuda a otros equipos a saber cómo están las canchas.</p>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((estrella) => (
+                <p className="text-[11px] text-zinc-400 mb-3 font-medium">Opcional: calificá el respeto y juego limpio del rival.</p>
+                <div className="flex gap-2">
                   <button
-                    key={estrella}
                     type="button"
-                    onClick={() => setEstrellasPredio(estrella === estrellasPredio ? 0 : estrella)}
-                    className={`flex-1 py-2 rounded-xl border text-xl flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
-                      estrellasPredio >= estrella
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                        : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-500 hover:text-zinc-300'
+                    onClick={() => setFairPlayRival(fairPlayRival === 'BUEN_RIVAL' ? null : 'BUEN_RIVAL')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                      fairPlayRival === 'BUEN_RIVAL'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                        : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
                     }`}
                   >
-                    ★
+                    <span>🤝</span>
+                    <span>Buen rival / Juego limpio</span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setFairPlayRival(fairPlayRival === 'CONFLICTIVO' ? null : 'CONFLICTIVO')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                      fairPlayRival === 'CONFLICTIVO'
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
+                        : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>⚠️</span>
+                    <span>Conflictivo / Violento</span>
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Calificación opcional de Fair Play del Rival */}
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-              <span className="text-sm font-bold text-white block mb-1">
-                Conducta y Fair Play del equipo rival
-              </span>
-              <p className="text-[11px] text-zinc-400 mb-3 font-medium">Opcional: calificá el respeto y juego limpio del rival.</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFairPlayRival(fairPlayRival === 'BUEN_RIVAL' ? null : 'BUEN_RIVAL')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
-                    fairPlayRival === 'BUEN_RIVAL'
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                      : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <span>🤝</span>
-                  <span>Buen rival / Juego limpio</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFairPlayRival(fairPlayRival === 'CONFLICTIVO' ? null : 'CONFLICTIVO')}
-                  className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
-                    fairPlayRival === 'CONFLICTIVO'
-                      ? 'bg-rose-500/20 border-rose-500 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
-                      : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <span>⚠️</span>
-                  <span>Conflictivo / Violento</span>
-                </button>
-              </div>
+            
+            <div className="pt-3 shrink-0">
+              <button 
+                onClick={async () => {
+                  if (equipo) {
+                    try {
+                      const tieneRival = !!equipo.convocatoria?.equipoRivalId;
+                      if (tieneRival) {
+                        await proponerResultadoPartido(equipo.id, equipo.convocatoria!.equipoRivalId!, {
+                          capitanNombre: equipo.capitanNombre || sesion.usuario?.nombre || 'Capitán',
+                          golesFavor,
+                          golesContra,
+                          mvpId,
+                          stats: statsPartido,
+                          ausentesIds,
+                          calificacionPredio: estrellasPredio > 0 ? {
+                            predioId: equipo.convocatoria?.predioId || null,
+                            predioNombre: equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || null,
+                            estrellas: estrellasPredio,
+                          } : null,
+                          fairPlayRival,
+                        });
+                        setToastMessage('¡Acta enviada al capitán rival para su confirmación! 🤝');
+                      } else {
+                        await finalizarTercerTiempoYPartido(equipo.id, {
+                          mvpId,
+                          stats: statsPartido,
+                          ausentesIds,
+                          golesFavor,
+                          golesContra,
+                          calificacionPredio: estrellasPredio > 0 ? {
+                            predioId: equipo.convocatoria?.predioId || null,
+                            predioNombre: equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || null,
+                            estrellas: estrellasPredio,
+                          } : null,
+                          fairPlayRival,
+                          equipoRivalId: null,
+                        });
+                        setToastMessage('¡Estadísticas, reputación y goles del 3er tiempo guardados! ⚽');
+                      }
+                    } catch (err) {
+                      console.warn('Error guardando estadísticas de tercer tiempo:', err);
+                    }
+                  }
+                  setTimeout(() => setToastMessage(''), 3500);
+                  setMostrarModalEstadisticas(false);
+                }}
+                className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-black py-3.5 rounded-xl active:scale-95 transition-transform cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm uppercase tracking-wider"
+              >
+                {equipo?.convocatoria?.equipoRivalId ? 'Enviar a Confirmación del Capitán Rival 🤝' : 'Confirmar Carga y Finalizar Partido'}
+              </button>
             </div>
           </div>
-          
-          <button 
-            onClick={async () => {
-              if (equipo) {
-                try {
-                  await finalizarTercerTiempoYPartido(equipo.id, {
-                    mvpId,
-                    stats: statsPartido,
-                    ausentesIds,
-                    golesFavor,
-                    golesContra,
-                    calificacionPredio: estrellasPredio > 0 ? {
-                      predioId: equipo.convocatoria?.predioId || null,
-                      predioNombre: equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || null,
-                      estrellas: estrellasPredio,
-                    } : null,
-                    fairPlayRival,
-                    equipoRivalId: equipo.convocatoria?.equipoRivalId || null,
-                  });
-                } catch (err) {
-                  console.warn('Error guardando estadísticas de tercer tiempo:', err);
-                }
-              }
-              setToastMessage('¡Estadísticas, reputación y goles del 3er tiempo guardados! ⚽');
-              setTimeout(() => setToastMessage(''), 3500);
-              setMostrarModalEstadisticas(false);
-            }}
-            className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black py-4 rounded-xl mt-4 active:scale-95 transition-transform cursor-pointer"
-          >
-            Confirmar Carga y Finalizar Partido
-          </button>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import type { PlayerRole } from './usuario'
 import type { GeoIndex, Timestamp } from './comun'
 
 /**
- * Modulo "AL ANGULO": equipos y roles deportivos.
+ * Equipos y roles deportivos en FULBEANDO.
  *
  * Este es el unico lugar donde vive la forma de un equipo. Los nombres de campo
  * en ingles (`captainId`, `members`) se conservan a proposito: son los que leen
@@ -30,6 +30,25 @@ export interface ReputacionEquipo {
   fairPlayScore: number // 0 a 100%
 }
 
+export interface ResultadoPendientePartido {
+  propuestoPorEquipoId: string
+  propuestoPorCapitanNombre: string
+  golesPropio: number
+  golesRival: number
+  mvpId?: string | null
+  mvpNombre?: string | null
+  stats?: Record<string, { goles: number; asistencias: number }>
+  ausentesIds?: string[]
+  calificacionPredio?: {
+    predioId?: string | null
+    predioNombre?: string | null
+    estrellas: number
+  } | null
+  fairPlayRival?: 'BUEN_RIVAL' | 'CONFLICTIVO' | null
+  estado: 'PENDIENTE' | 'CONFIRMADO' | 'RECHAZADO'
+  creadoEn: number
+}
+
 export interface ConvocatoriaEquipo {
   fecha: string
   hora?: string | null
@@ -49,9 +68,12 @@ export interface ConvocatoriaEquipo {
   }>
   votosMvp?: Record<string, string> // [votanteUid]: candidatoUid
   equipoRivalId?: string | null
+  equipoRivalNombre?: string | null
+  equipoRivalEscudoUrl?: string | null
   alertaRadarEnviada?: boolean
   alertaRadarId?: string | null
   cerrada?: boolean
+  resultadoPendiente?: ResultadoPendientePartido | null
 }
 
 export interface Equipo {

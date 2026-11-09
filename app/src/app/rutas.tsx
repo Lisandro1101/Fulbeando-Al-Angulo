@@ -16,12 +16,13 @@ import {
   Screen9VenueSubscription
 } from '@/modules/ui/Screens';
 import DashboardDueno from '@/modules/predios/pantallas/DashboardDueno';
-import AlAnguloHome from '@/modules/ui/AlAnguloHome';
+import FulbeandoHome from '@/modules/ui/FulbeandoHome';
 import CargaDeSena from '@/modules/turnos/pantallas/CargaDeSena';
 import Ajustes from '@/modules/cuenta/pantallas/Ajustes';
 import PlanPendiente from '@/modules/cuenta/pantallas/PlanPendiente';
 import CartaPublica from '@/modules/cuenta/pantallas/CartaPublica';
 import { AppLayout } from '@/app/AppLayout';
+import { OnboardingWizard } from '@/modules/onboarding/OnboardingWizard';
 // Dashboard del superadmin: el diseno original (sidebar oscuro, KPI grid y
 // Sala de Arbitraje) con los numeros reales de Firestore y las colas de
 // trabajo (solicitudes de dueno y verificacion de predios).
@@ -79,6 +80,12 @@ const ProtectedRoute = ({
     return <Navigate to="/role-selector" replace />;
   }
 
+  // Si navega a /onboarding o /onboarding-player, lo llevamos a /perfil donde inicia el Tour Guiado
+  const esRutaOnboarding = ruta === '/onboarding' || ruta === '/onboarding-player';
+  if (esRutaOnboarding) {
+    return <Navigate to="/perfil" replace />;
+  }
+
   if (ruta === '/plan-pendiente') {
     // Plan ya abonado: no hay nada que esperar, entra al panel.
     if (planDuenoActivo(usuario)) return <Navigate to="/venue-dashboard" replace />;
@@ -109,13 +116,14 @@ const rutasHijas: RouteObject[] = [
     path: '/superadmin',
     element: <ProtectedRoute allowedRoles={['superadmin']}><AdminDashboard /></ProtectedRoute>,
   },
-  { path: '/onboarding-player', element: <ProtectedRoute allowedRoles={['jugador']}><Screen3PlayerOnboarding /></ProtectedRoute> },
+  { path: '/onboarding', element: <ProtectedRoute allowedRoles={['jugador']}><OnboardingWizard /></ProtectedRoute> },
+  { path: '/onboarding-player', element: <Navigate to="/onboarding" replace /> },
   
   // Rutas con Layout Principal (AppLayout tiene el MenuNavegacion y los Modales)
   { 
     element: <AppLayout />, 
     children: [
-      { path: '/', element: <ProtectedRoute><AlAnguloHome /></ProtectedRoute> },
+      { path: '/', element: <ProtectedRoute><FulbeandoHome /></ProtectedRoute> },
       { path: '/radar', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><MapaRadarUnificado /></ProtectedRoute> },
       { path: '/equipo', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen7MyTeam /></ProtectedRoute> },
       { path: '/partidos', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen6LaunchChallenge /></ProtectedRoute> },

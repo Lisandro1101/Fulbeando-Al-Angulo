@@ -101,7 +101,7 @@ export const uploadImageToR2 = async (
         xhr.send(blob);
       });
     } catch (workerErr) {
-      console.warn('[Al Ángulo Uploader] Worker R2 no disponible, intentando Cloud Function / Storage:', workerErr);
+      console.warn('[Fulbeando Uploader] Worker R2 no disponible, intentando Cloud Function / Storage:', workerErr);
     }
   }
 
@@ -150,7 +150,7 @@ export const uploadImageToR2 = async (
     });
 
   } catch (error) {
-    console.error('[Al Ángulo Uploader] Fallo integral de ruteo a R2:', error);
+    console.error('[Fulbeando Uploader] Fallo integral de ruteo a R2:', error);
     return fallbackToFirebase();
   }
 };

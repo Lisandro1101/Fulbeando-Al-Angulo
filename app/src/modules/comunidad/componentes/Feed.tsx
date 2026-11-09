@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Globe, MapPin, UserCheck, Sparkles, Image, MessageSquare, Filter } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useSesion } from '@/modules/auth/useSesion'
 import type { Publicacion } from '@/domain'
 import type { AnuncioSponsor } from '@/domain/publicidad'
@@ -13,6 +13,7 @@ import { PostCard } from './PostCard'
 import { Esqueleto } from '@/modules/ui/overlays'
 import { escucharAnunciosActivos } from '@/modules/publicidad/repositorio'
 import { TarjetaSponsorMuro } from '@/modules/publicidad/componentes/TarjetaSponsorMuro'
+import { AdSenseBanner } from '@/modules/publicidad/componentes/AdSenseBanner'
 
 interface Tab {
   id: FiltroFeed
@@ -48,6 +49,7 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
   const { usuario } = useSesion()
   const [filtro, setFiltro] = useState<FiltroFeed>('comunidad')
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos')
+  const [mostrarFiltroCategorias, setMostrarFiltroCategorias] = useState(false)
   const [posts, setPosts] = useState<Publicacion[]>([])
   const [siguiendo, setSiguiendo] = useState<string[]>([])
   const [cargando, setCargando] = useState(true)
@@ -175,11 +177,11 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-2.5">
       {usuario && <Composer />}
 
-      {/* Pestañas de audiencia: Comunidad / Mi zona / Siguiendo */}
-      <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 shadow-sm">
+      {/* Pestañas de audiencia: Comunidad / Mi zona / Siguiendo + Botón Filtro */}
+      <div className="w-full flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 shadow-sm">
         {TABS.map(({ id, etiqueta, icono: Icono }) => {
           const activo = filtro === id
           return (
@@ -189,41 +191,79 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.96 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer ${
-                activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-200 hover:text-white font-bold'
+              className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-bold py-1.5 sm:py-2 px-1.5 rounded-lg transition-colors cursor-pointer min-w-0 ${
+                activo ? 'bg-emerald-500 text-zinc-950 shadow-md font-black' : 'text-zinc-300 hover:text-white font-bold'
               }`}
             >
-              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-zinc-400'}`} />
-              {etiqueta}
+              <Icono className={`w-3.5 h-3.5 shrink-0 ${activo ? 'text-zinc-950' : 'text-zinc-400'}`} />
+              <span className="truncate">{etiqueta}</span>
             </motion.button>
           )
         })}
+
+        {/* Botón Filtro de Categoría alineado al menú de Comunidad */}
+        <motion.button
+          type="button"
+          onClick={() => setMostrarFiltroCategorias((prev) => !prev)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          aria-label="Filtrar publicaciones"
+          title="Filtrar por formato (Todo, Cartas FUT, Fotos, Avisos)"
+          className={`flex items-center justify-center gap-1 py-1.5 sm:py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 relative ${
+            tipoFiltro !== 'todos'
+              ? 'bg-amber-400 text-zinc-950 font-black shadow-md'
+              : mostrarFiltroCategorias
+              ? 'bg-zinc-800 text-white font-bold'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800/80'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5 shrink-0" />
+          {tipoFiltro !== 'todos' ? (
+            <span className="text-[10px] uppercase font-black tracking-wider max-w-[65px] truncate">
+              {CATEGORIAS_FILTRO.find((c) => c.id === tipoFiltro)?.etiqueta}
+            </span>
+          ) : (
+            <span className="text-[11px] font-bold text-zinc-400 hidden xs:inline sm:inline">Filtro</span>
+          )}
+        </motion.button>
       </div>
 
-      {/* Subfiltros por formato de contenido */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-        {CATEGORIAS_FILTRO.map(({ id, etiqueta, icono: Icono }) => {
-          const activo = tipoFiltro === id
-          return (
-            <motion.button
-              key={id}
-              type="button"
-              onClick={() => setTipoFiltro(id)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-              className={`flex items-center gap-1.5 text-xs py-1.5 px-3.5 rounded-full border transition-colors shrink-0 cursor-pointer ${
-                activo
-                  ? 'bg-emerald-500 border-emerald-400 text-zinc-950 font-black shadow-md shadow-emerald-500/25'
-                  : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/90 text-white hover:text-white font-bold shadow-sm'
-              }`}
-            >
-              <Icono className={`w-3.5 h-3.5 ${activo ? 'text-zinc-950' : 'text-emerald-400'}`} />
-              <span>{etiqueta}</span>
-            </motion.button>
-          )
-        })}
-      </div>
+      {/* Menú desplegable de opciones de filtro */}
+      <AnimatePresence>
+        {mostrarFiltroCategorias && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.16 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-xl shadow-md">
+              {CATEGORIAS_FILTRO.map(({ id, etiqueta, icono: Icono }) => {
+                const activo = tipoFiltro === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setTipoFiltro(id)
+                      setMostrarFiltroCategorias(false)
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1.5 px-2 rounded-lg transition-all cursor-pointer font-bold min-w-0 ${
+                      activo
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                    }`}
+                  >
+                    <Icono className={`w-3 h-3 shrink-0 ${activo ? 'text-zinc-950' : 'text-emerald-400'}`} />
+                    <span className="truncate">{etiqueta}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Indicador de Zona Activa */}
       {filtro === 'zona' && miMunicipio && (
@@ -304,11 +344,21 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
           </div>
         )
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {postsFiltrados.map((pub, idx) => {
             const debeMostrarSponsor = sponsorsFiltrados.length > 0 && (idx + 1) % 4 === 0
             const sponsorIdx = Math.floor(idx / 4) % sponsorsFiltrados.length
             const sponsor = debeMostrarSponsor ? sponsorsFiltrados[sponsorIdx] : null
+
+            // Intercalar AdSense en el feed:
+            // Si no hay sponsor interno en este turno:
+            // - Si no hay sponsors locales registrados en el sistema, mostramos AdSense cada 3 publicaciones
+            // - Si hay sponsors locales, mostramos AdSense cada 6 publicaciones para no saturar
+            const debeMostrarAdSense = !sponsor && (
+              sponsorsFiltrados.length === 0
+                ? (idx + 1) % 3 === 0
+                : (idx + 1) % 6 === 0
+            )
 
             return (
               <React.Fragment key={pub.id}>
@@ -318,11 +368,15 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
                   onAlternarSeguir={miUid ? () => alternar(pub.autorUid) : undefined}
                 />
                 {sponsor && <TarjetaSponsorMuro anuncio={sponsor} />}
+                {debeMostrarAdSense && <AdSenseBanner />}
               </React.Fragment>
             )
           })}
           {postsFiltrados.length > 0 && postsFiltrados.length < 4 && sponsorsFiltrados.length > 0 && sponsorsFiltrados[0] && (
             <TarjetaSponsorMuro anuncio={sponsorsFiltrados[0]} />
+          )}
+          {postsFiltrados.length > 0 && postsFiltrados.length < 3 && sponsorsFiltrados.length === 0 && (
+            <AdSenseBanner />
           )}
         </div>
       )}

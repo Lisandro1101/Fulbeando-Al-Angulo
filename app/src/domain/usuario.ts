@@ -36,13 +36,20 @@ export interface PerfilDeportivo {
   /** Switch de notificaciones del radar Falta 1. */
   notificacionesRadar: boolean
   
-  // --- INTEGRACIÓN AL ÁNGULO ---
+  // --- INTEGRACIÓN FULBEANDO ---
   playerRole: PlayerRole | null
   stats: PlayerStats
   rating: number
   club?: string | null
   edad?: number | null
   teamIds: string[] // Reducción de costos N+1
+  atributos?: {
+    ritmo: number
+    tiro: number
+    pase: number
+    fisico: number
+    defensa: number
+  }
 }
 
 export interface MedallaDeportiva {
@@ -103,6 +110,10 @@ export interface Usuario extends Auditoria {
    * nueva. `planDuenoActivo()` es la unica puerta de entrada a `/venue-*`.
    */
   planDueno?: EstadoPlanDueno | null
+  /** Progreso en el onboarding guiado (1, 2, 3). */
+  onboarding_step?: number
+  /** Indica si completo el onboarding de 3 pasos. */
+  onboarding_completed?: boolean
   estado: EstadoUsuario
 }
 
@@ -176,5 +187,6 @@ export const calcularRutaDestino = (u: Usuario | null | undefined): string => {
   if (planDuenoPendiente(u)) return '/plan-pendiente'
   if (u.rol === 'dueno_predio') return '/venue-dashboard'
   if (u.rol === 'invitado') return '/role-selector'
+  if (u.rol === 'jugador' && u.onboarding_completed !== true) return '/perfil'
   return '/radar'
 }

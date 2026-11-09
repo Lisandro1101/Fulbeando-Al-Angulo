@@ -33,10 +33,11 @@ import {
   type PingTactico,
   type ConvocatoriaEquipo,
   type ModalidadDesafio,
+  type ResultadoPendientePartido,
 } from '@/domain'
 
 /**
- * SERVICIO DE EQUIPOS ("AL ANGULO") sobre el usuario de FULBEANDO.
+ * SERVICIO DE EQUIPOS sobre el usuario de FULBEANDO.
  *
  * Este archivo reemplaza a `teamCreationService.ts` y al antiguo `teamService.ts`
  * (coleccion `users`, `getdb` inexistente, tipos rotos). Ahora hay una sola via
@@ -1207,11 +1208,15 @@ export const responderDesafioEquipo = async (
         fecha: pacto.fechaTentativa,
         predioNombre: pacto.predioNombre || 'A convenir',
         equipoRivalId: pacto.equipoRivalId,
+        equipoRivalNombre: pacto.equipoRivalNombre,
+        equipoRivalEscudoUrl: pacto.equipoRivalEscudoUrl,
       }
       const convRival: Partial<ConvocatoriaEquipo> = {
         fecha: pacto.fechaTentativa,
         predioNombre: pacto.predioNombre || 'A convenir',
         equipoRivalId: pacto.equipoDesafianteId,
+        equipoRivalNombre: pacto.equipoDesafianteNombre,
+        equipoRivalEscudoUrl: pacto.equipoDesafianteEscudoUrl,
       }
       await actualizarConvocatoriaEquipo(pacto.equipoDesafianteId, convDesafiante as any)
       await actualizarConvocatoriaEquipo(pacto.equipoRivalId, convRival as any)
@@ -2092,6 +2097,143 @@ export const finalizarTercerTiempoYPartido = async (
 
   await updateDoc(eqRef, updatesEquipo)
 }
+
+/**
+ * Propone el resultado y estadísticas de un partido entre dos equipos para su confirmación mutua.
+ */
+export const proponerResultadoPartido = async (
+  equipoId: string,
+  rivalEquipoId: string,
+  propuesta: {
+    capitanNombre: string
+    golesFavor: number
+    golesContra: number
+    mvpId?: string | null
+    mvpNombre?: string | null
+    stats?: Record<string, { goles: number; asistencias: number }>
+    ausentesIds?: string[]
+    calificacionPredio?: {
+      predioId?: string | null
+      predioNombre?: string | null
+      estrellas: number
+    } | null
+    fairPlayRival?: 'BUEN_RIVAL' | 'CONFLICTIVO' | null
+  },
+): Promise<void> => {
+  const ahora = Date.now()
+  const resPropio: ResultadoPendientePartido = {
+    propuestoPorEquipoId: equipoId,
+    propuestoPorCapitanNombre: propuesta.capitanNombre,
+    golesPropio: propuesta.golesFavor,
+    golesRival: propuesta.golesContra,
+    mvpId: propuesta.mvpId || null,
+    mvpNombre: propuesta.mvpNombre || null,
+    stats: propuesta.stats || {},
+    ausentesIds: propuesta.ausentesIds || [],
+    calificacionPredio: propuesta.calificacionPredio || null,
+    fairPlayRival: propuesta.fairPlayRival || null,
+    estado: 'PENDIENTE',
+    creadoEn: ahora,
+  }
+
+  // Para el rival, sus goles a favor son golesContra de la propuesta
+  const resRival: ResultadoPendientePartido = {
+    propuestoPorEquipoId: equipoId,
+    propuestoPorCapitanNombre: propuesta.capitanNombre,
+    golesPropio: propuesta.golesContra,
+    golesRival: propuesta.golesFavor,
+    mvpId: propuesta.mvpId || null,
+    mvpNombre: propuesta.mvpNombre || null,
+    stats: {},
+    ausentesIds: [],
+    calificacionPredio: propuesta.calificacionPredio || null,
+    fairPlayRival: null,
+    estado: 'PENDIENTE',
+    creadoEn: ahora,
+  }
+
+  try {
+    await updateDoc(doc(db, COLECCIONES.equipos, equipoId), {
+      'convocatoria.resultadoPendiente': resPropio,
+    })
+    await updateDoc(doc(db, COLECCIONES.equipos, rivalEquipoId), {
+      'convocatoria.resultadoPendiente': resRival,
+    })
+  } catch (err) {
+    console.warn('Error proponiendo resultado mutuo:', err)
+    throw err
+  }
+}
+
+/**
+ * Confirma el resultado propuesto por el capitán rival y oficializa el partido para ambos clubes.
+ */
+export const confirmarResultadoMutuo = async (
+  equipoId: string,
+  rivalEquipoId: string,
+  datosConfirmante?: {
+    fairPlayRival?: 'BUEN_RIVAL' | 'CONFLICTIVO' | null
+    estrellasPredio?: number
+    ausentesIds?: string[]
+    stats?: Record<string, { goles: number; asistencias: number }>
+  },
+): Promise<void> => {
+  const eqSnap = await getDoc(doc(db, COLECCIONES.equipos, equipoId))
+  if (!eqSnap.exists()) return
+  const eqData = eqSnap.data()
+  const resPendiente = eqData.convocatoria?.resultadoPendiente as ResultadoPendientePartido | undefined
+  if (!resPendiente) return
+
+  const golesConfirmante = resPendiente.golesPropio
+  const golesRival = resPendiente.golesRival
+
+  // 1. Finalizar partido para el equipo confirmante
+  await finalizarTercerTiempoYPartido(equipoId, {
+    mvpId: resPendiente.mvpId ?? null,
+    stats: datosConfirmante?.stats || {},
+    ausentesIds: datosConfirmante?.ausentesIds || [],
+    golesFavor: golesConfirmante,
+    golesContra: golesRival,
+    calificacionPredio: datosConfirmante?.estrellasPredio
+      ? {
+          predioId: eqData.convocatoria?.predioId || null,
+          predioNombre: eqData.convocatoria?.predioNombre || eqData.convocatoria?.predio || null,
+          estrellas: datosConfirmante.estrellasPredio,
+        }
+      : resPendiente.calificacionPredio,
+    fairPlayRival: datosConfirmante?.fairPlayRival || null,
+    equipoRivalId: rivalEquipoId,
+  })
+
+  // 2. Marcar en la convocatoria del equipo rival que el resultado fue confirmado
+  try {
+    await updateDoc(doc(db, COLECCIONES.equipos, rivalEquipoId), {
+      'convocatoria.resultadoPendiente.estado': 'CONFIRMADO',
+    })
+  } catch (err) {
+    console.warn('Error notificando confirmación a convocatoria rival:', err)
+  }
+}
+
+/**
+ * Rechaza o cancela la propuesta de resultado de un partido.
+ */
+export const rechazarResultadoPropuesto = async (
+  equipoId: string,
+  rivalEquipoId: string,
+): Promise<void> => {
+  try {
+    await updateDoc(doc(db, COLECCIONES.equipos, equipoId), {
+      'convocatoria.resultadoPendiente': null,
+    })
+    await updateDoc(doc(db, COLECCIONES.equipos, rivalEquipoId), {
+      'convocatoria.resultadoPendiente': null,
+    })
+  } catch (err) {
+    console.warn('Error rechazando resultado propuesto:', err)
+  }
+}
+
 
 /**
  * Consulta todas las estadísticas de un jugador a través de partidos jugados.

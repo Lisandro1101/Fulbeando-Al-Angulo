@@ -25,5 +25,5 @@ export interface GeoIndex {
 }
 
 export type Posicion = 'arquero' | 'defensor' | 'medio' | 'delantero'
-export type PiernaHabil = 'diestro' | 'zurdo'
+export type PiernaHabil = 'diestro' | 'zurdo' | 'ambidiestro'
 export type NivelAutopercibido = 1 | 2 | 3 | 4 | 5

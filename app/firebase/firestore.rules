@@ -75,7 +75,7 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------ //
-    // Helpers de Equipos ("AL ANGULO")                                   //
+    // Helpers de Equipos                                                 //
     // ------------------------------------------------------------------ //
 
     function getTeam(teamId) {
@@ -606,6 +606,13 @@ match /comprobantes/{turnoId} {
       allow read: if true;
       allow create, delete: if isSignedIn();
       allow update: if isSignedIn();
+    }
+
+    // Reportes de errores, sugerencias y feedback de usuarios
+    match /feedbacks/{feedbackId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.usuarioUid == request.auth.uid;
+      allow read, update, delete: if isSuperadmin();
     }
 
     match /follows/{followId} {

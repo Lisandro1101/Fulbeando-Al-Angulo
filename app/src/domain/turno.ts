@@ -39,7 +39,7 @@ export interface Turno extends Auditoria {
   /**
    * PUENTE ENTRE MODULOS: id numerico en la coleccion legacy `matches`.
    *
-   * Cuando el turno existe para que se juegue un partido de AL ANGULO, este campo
+   * Cuando el turno existe para que se juegue un partido en FULBEANDO, este campo
    * lo referencia. Es opcional porque la mayoria de los turnos son reservas
    * sueltas, sin partido. Ojo: los ids de `matches` son numericos, a diferencia
    * de los ids string del resto del modelo.

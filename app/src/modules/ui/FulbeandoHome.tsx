@@ -9,12 +9,12 @@ import type { Desafio, Equipo } from '@/domain';
 import { nombreCompleto } from '@/domain';
 import { notificarAceptacionDesafio } from '@/modules/teams/teamService';
 import { Feed } from '@/modules/comunidad/componentes/Feed';
-import { Users, Search, Calendar, Shield, Swords, ArrowRight, MessageSquare, PlusCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Users, Search, Calendar, Shield, Swords, ArrowRight, MessageSquare, PlusCircle, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type TabHome = 'muro' | 'partidos' | 'equipos';
 
-export default function AlAnguloHome() {
+export default function FulbeandoHome() {
   const { cargando: cargandoSesion, usuario } = useSesion();
   const navigate = useNavigate();
 
@@ -23,6 +23,7 @@ export default function AlAnguloHome() {
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [cargandoDatos, setCargandoDatos] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [mostrarBuscador, setMostrarBuscador] = useState(false);
   const [filtroModalidad, setFiltroModalidad] = useState<string>('todas');
   
   useEffect(() => {
@@ -126,62 +127,40 @@ export default function AlAnguloHome() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 350, damping: 26 }}
-        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 pb-28"
+        className="flex-1 overflow-y-auto px-3 py-2 sm:px-4 sm:py-3 md:p-6 space-y-2.5 pb-24"
       >
-        
-        {/* HEADER BÚSQUEDA Y PESTAÑAS PRINCIPALES */}
-        <div className="sticky top-0 z-20 bg-[#F8FAFC]/90 backdrop-blur-md pt-2 pb-3 border-b border-slate-200/80 space-y-3">
-          {/* Input de Búsqueda */}
-          <div className="flex items-center gap-3 bg-white border border-slate-200/90 rounded-xl px-4 py-2.5 focus-within:border-emerald-500/50 shadow-sm transition">
-            <Search className="w-5 h-5 text-slate-400 shrink-0" />
-            <input 
-              aria-label="Buscador de comunidad"
-              type="text" 
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder={placeholderBusqueda()} 
-              className="bg-transparent border-none outline-none w-full text-slate-800 placeholder-slate-400 text-sm"
-            />
-            {busqueda && (
-              <button 
-                onClick={() => setBusqueda('')}
-                className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
-              >
-                Limpiar
-              </button>
-            )}
-          </div>
-
-          {/* Pestañas Principales: Muro / Partidos & Desafíos / Equipos */}
-          <div className="flex bg-slate-200/80 border border-slate-300/80 rounded-xl p-1 gap-1 shadow-inner">
+        {/* NAVEGACIÓN DE PESTAÑAS Y BUSCADOR (No sticky: desaparece al scrollear hacia abajo como en Facebook) */}
+        <div className="space-y-2">
+          {/* Fila del Menú con Botón Lupa Integrado */}
+          <div className="w-full flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1 shadow-inner">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('muro')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer min-w-0 ${
                 tabActiva === 'muro'
                   ? 'bg-emerald-600 text-white shadow-md font-black'
-                  : 'text-slate-700 hover:text-slate-950 font-bold'
+                  : 'text-zinc-300 hover:text-white font-bold'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Muro Social</span>
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Muro<span className="hidden sm:inline"> Social</span></span>
             </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('partidos')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer min-w-0 ${
                 tabActiva === 'partidos'
                   ? 'bg-amber-500 text-zinc-950 shadow-md font-black'
-                  : 'text-slate-700 hover:text-slate-950 font-bold'
+                  : 'text-zinc-300 hover:text-white font-bold'
               }`}
             >
-              <Swords className="w-3.5 h-3.5" />
-              <span>Partidos</span>
+              <Swords className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Partidos</span>
               {partidos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'partidos' ? 'bg-canvas/ text-zinc-950' : 'bg-slate-300 text-amber-900 border border-amber-500/30 font-bold'}`}>
+                <span className={`text-[10px] px-1 py-0.2 rounded-full font-black shrink-0 ${tabActiva === 'partidos' ? 'bg-black/20 text-zinc-950' : 'bg-zinc-800 text-amber-400 border border-amber-500/30 font-bold'}`}>
                   {partidos.length}
                 </span>
               )}
@@ -191,21 +170,83 @@ export default function AlAnguloHome() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => setTabActiva('equipos')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer min-w-0 ${
                 tabActiva === 'equipos'
                   ? 'bg-emerald-600 text-white shadow-md font-black'
-                  : 'text-slate-700 hover:text-slate-950 font-bold'
+                  : 'text-zinc-300 hover:text-white font-bold'
               }`}
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Equipos</span>
+              <Shield className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Equipos</span>
               {equipos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'equipos' ? 'bg-canvas/ text-zinc-950' : 'bg-slate-300 text-emerald-900 border border-emerald-500/30 font-bold'}`}>
+                <span className={`text-[10px] px-1 py-0.2 rounded-full font-black shrink-0 ${tabActiva === 'equipos' ? 'bg-black/20 text-zinc-950' : 'bg-zinc-800 text-emerald-400 border border-emerald-500/30 font-bold'}`}>
                   {equipos.length}
                 </span>
               )}
             </motion.button>
+
+            {/* Botón Lupa integrado dentro del menú */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setMostrarBuscador((prev) => !prev)}
+              aria-label="Buscar en la comunidad"
+              title="Buscar"
+              className={`w-9 h-8 sm:w-10 sm:h-9 rounded-lg transition-all cursor-pointer shrink-0 flex items-center justify-center relative ${
+                mostrarBuscador || busqueda
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/80'
+              }`}
+            >
+              <Search className="w-4 h-4" />
+              {busqueda && !mostrarBuscador && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-zinc-900" />
+              )}
+            </motion.button>
           </div>
+
+          {/* Input de Búsqueda Desplegable */}
+          <AnimatePresence>
+            {mostrarBuscador && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -6 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="flex items-center gap-2.5 bg-zinc-900 border border-emerald-500/40 rounded-xl px-3.5 py-2 shadow-sm focus-within:border-emerald-400">
+                  <Search className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <input 
+                    autoFocus
+                    aria-label="Buscador de comunidad"
+                    type="text" 
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder={placeholderBusqueda()} 
+                    className="bg-transparent border-none outline-none w-full text-white placeholder-zinc-500 text-xs sm:text-sm"
+                  />
+                  {busqueda && (
+                    <button 
+                      type="button"
+                      onClick={() => setBusqueda('')}
+                      className="text-[11px] text-zinc-400 hover:text-white font-bold cursor-pointer shrink-0 px-1"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMostrarBuscador(false)}
+                    aria-label="Cerrar búsqueda"
+                    className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}

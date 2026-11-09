@@ -183,7 +183,7 @@ export const AdminDashboard = () => {
       {/* Sidebar B2B */}
       <aside className="w-full md:w-64 bg-gradient-to-b from-[#361982] via-[#281165] to-[#1c0a48] border-r border-[#4c24b2]/40 p-6 flex flex-col shadow-2xl">
         <h1 className="text-2xl font-black italic tracking-tighter text-white mb-8">
-          AL ÁNGULO <span className="text-emerald-400 text-sm font-bold tracking-normal not-italic ml-1">ADMIN</span>
+          FULBEANDO <span className="text-emerald-400 text-sm font-bold tracking-normal not-italic ml-1">ADMIN</span>
         </h1>
         <nav className="flex-1 space-y-2 text-sm font-medium">
           <a href="#vision-general" className="flex items-center text-emerald-300 font-bold bg-emerald-500/15 px-4 py-2.5 rounded-xl border border-emerald-500/30 shadow-sm shadow-emerald-500/10">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ShieldAlert, ChevronDown } from 'lucide-react'
 import { Pantalla, Tarjeta } from '@/modules/ui/pantalla'
 import { BotonIngreso } from '@/modules/auth/BotonIngreso'
 import { useSesion } from '@/modules/auth/useSesion'
@@ -55,6 +56,60 @@ function NotificacionesCard() {
         </div>
     </Tarjeta>
     </>
+  )
+}
+
+function AvisoLegalCard() {
+  const [abierto, setAbierto] = useState(false)
+
+  return (
+    <Tarjeta
+      titulo="Términos y Aviso Legal"
+      descripcion="Condiciones sobre transacciones, reservas y rol de Fulbeando."
+    >
+      <div className="space-y-3">
+        <div className="rounded-xl border border-amber-300/80 bg-amber-50/70 p-3.5 text-xs text-amber-950 flex items-start gap-2.5">
+          <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-black text-amber-900">
+              Deslinde de Responsabilidad Financiera y Transaccional
+            </p>
+            <p className="leading-relaxed">
+              Fulbeando es una plataforma digital de intermediación comunitaria y enlace informativo entre deportistas y complejos deportivos. <strong>Fulbeando no es una pasarela de pago, intermediario financiero ni procesador de cobros.</strong>
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setAbierto(!abierto)}
+          className="w-full flex items-center justify-between text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/70 p-3 rounded-xl transition cursor-pointer"
+        >
+          <span>{abierto ? 'Ocultar términos completos' : 'Ver términos y condiciones completos'}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${abierto ? 'rotate-180' : ''}`} />
+        </button>
+
+        {abierto && (
+          <div className="text-xs text-slate-600 space-y-2.5 pt-2 border-t border-slate-200 leading-relaxed">
+            <p>
+              Todos los acuerdos comerciales, señas, transferencias bancarias y saldos se celebran <strong>directa y exclusivamente entre el usuario y el predio deportivo correspondiente</strong>.
+            </p>
+            <p className="font-semibold text-slate-800">
+              Fulbeando no custodia dinero ni se responsabiliza por:
+            </p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-600">
+              <li>(a) Transferencias erróneas, demoradas o fallidas.</li>
+              <li>(b) Cancelaciones, reprogramaciones o reintegros de señas o alquileres.</li>
+              <li>(c) La veracidad, autenticidad o validez de los comprobantes adjuntados por los usuarios.</li>
+              <li>(d) La exactitud de los datos bancarios (CBU, Alias o titular) cargados por los complejos deportivos.</li>
+            </ul>
+            <p className="pt-1 text-[11px] text-slate-500 font-medium">
+              Cada parte asume plena responsabilidad por la buena fe, veracidad y verificación de sus operaciones económicas y datos suministrados en la plataforma.
+            </p>
+          </div>
+        )}
+      </div>
+    </Tarjeta>
   )
 }
 
@@ -198,6 +253,9 @@ export default function Ajustes() {
               <EditorPredioCard duenoUid={usuario.uid} />
             </Tarjeta>
           )}
+
+          {/* Aviso Legal y Deslinde de Responsabilidad Financiera */}
+          <AvisoLegalCard />
         </div>
 
         {/* 6rem: el menu inferior es `fixed` y tapa los ultimos pixeles del

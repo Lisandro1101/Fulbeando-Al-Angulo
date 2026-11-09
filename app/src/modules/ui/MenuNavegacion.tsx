@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Map as MapIcon, Home, Calendar, User, Building, Shield, Settings, Bell, MessageSquare } from 'lucide-react';
+import { Map as MapIcon, Home, Calendar, User, Building, Shield, Settings, Bell, MessageSquare, HelpCircle } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 
 export interface MenuNavegacionProps {
   onAbrirNotificaciones?: () => void;
   onAbrirChats?: () => void;
+  onAbrirFeedback?: () => void;
   notificacionesNoLeidas?: number;
   chatsNoLeidos?: number;
 }
@@ -13,6 +14,7 @@ export interface MenuNavegacionProps {
 export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
   onAbrirNotificaciones,
   onAbrirChats,
+  onAbrirFeedback,
   notificacionesNoLeidas = 0,
   chatsNoLeidos = 0,
 }) => {
@@ -40,7 +42,7 @@ export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
       <nav className="pointer-events-auto bg-gradient-to-r from-[#361982]/95 via-[#281165]/95 to-[#1c0a48]/95 md:bg-transparent backdrop-blur-xl md:backdrop-blur-none border-t md:border-t-0 border-[#4c24b2]/40 px-2 sm:px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pt-2 md:pb-6 flex justify-around md:flex-col md:justify-start md:items-start md:gap-1.5 md:h-full items-center shadow-2xl md:shadow-none">
         {/* LOGO EN DESKTOP */}
         <div className="hidden md:flex items-center justify-center mb-1 w-full px-3 text-center">
-          <img src="/logo-anterior.svg" alt="Al Ángulo" className="w-full h-auto max-h-24 object-contain object-center drop-shadow-xl" />
+          <img src="/logo-fulbeand-completo.svg?v=20261109" alt="FULBEAND" className="w-full h-auto max-h-24 object-contain object-center drop-shadow-xl" />
         </div>
 
         <NavLink 
@@ -99,8 +101,8 @@ export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
           </>
         )}
 
-        {/* Accesos a Notificaciones y Mensajes en Desktop (PC) */}
-        {(onAbrirNotificaciones || onAbrirChats) && (
+        {/* Accesos a Notificaciones, Mensajes y Sugerencias en Desktop (PC) */}
+        {(onAbrirNotificaciones || onAbrirChats || onAbrirFeedback) && (
           <div className="hidden md:flex flex-col w-full gap-1 pt-3 mt-2 border-t border-[#4c24b2]/40">
             {onAbrirNotificaciones && (
               <button
@@ -145,6 +147,18 @@ export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
                     {chatsNoLeidos}
                   </span>
                 )}
+              </button>
+            )}
+
+            {onAbrirFeedback && (
+              <button
+                type="button"
+                onClick={onAbrirFeedback}
+                title="Centro de Ayuda y Preguntas Frecuentes"
+                className="flex items-center gap-3 transition-all w-full px-4 py-2.5 rounded-2xl cursor-pointer text-indigo-200/80 hover:text-white hover:bg-white/10 font-medium text-left group"
+              >
+                <HelpCircle className="w-5 h-5 shrink-0 text-indigo-300 group-hover:scale-110 transition-transform" />
+                <span className="text-sm font-bold flex-1">Centro de Ayuda</span>
               </button>
             )}
           </div>

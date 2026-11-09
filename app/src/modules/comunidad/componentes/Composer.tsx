@@ -407,6 +407,10 @@ export const Composer = () => {
                 {publicando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span>{publicando ? 'Publicando...' : 'Publicar'}</span>
               </button>
+
+              <p className="text-[10px] text-zinc-500 text-center leading-tight pt-1">
+                ⚽ Recordá las normas comunitarias: terminantemente prohibida la violencia, contenido sexual o ilegal.
+              </p>
             </div>
           </DrawerContent>
         </Drawer>

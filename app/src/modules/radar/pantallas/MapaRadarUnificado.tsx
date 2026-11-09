@@ -825,7 +825,7 @@ export const MapaRadarUnificado: React.FC = () => {
         return;
       }
 
-      const mensaje = `Hola ${cancha.nombre}, te consulto desde la app Al Ángulo por el alquiler de canchas.`;
+      const mensaje = `Hola ${cancha.nombre}, te consulto desde la app Fulbeando por el alquiler de canchas.`;
       const url = `https://wa.me/${telFormateado}?text=${encodeURIComponent(mensaje)}`;
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {

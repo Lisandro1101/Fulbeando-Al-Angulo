@@ -1,7 +1,7 @@
 import type { GeoIndex, Posicion } from './comun'
 
 /**
- * Modulo "AL ANGULO": desafios entre equipos.
+ * Desafios entre equipos en FULBEANDO.
  *
  * Comparte con el modulo FULBEANDO el mismo indice geoespacial (`GeoIndex`) y el
  * mismo vocabulario de modalidad, de modo que el mapa unificado consulta canchas,
