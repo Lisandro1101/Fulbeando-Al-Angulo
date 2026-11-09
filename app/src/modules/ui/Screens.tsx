@@ -25,7 +25,6 @@ import { useDatosCarta } from '@/modules/cuenta/useDatosCarta';
 import { TarjetaJugador, obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
 import { generarImagenCarta, descargarBlob } from '@/modules/comunidad/tarjetaImagen';
 import { Toast, useConfirmar, CargandoFulbeando } from '@/modules/ui/overlays';
-import { BannerSponsorTercerTiempo } from '@/modules/publicidad/componentes/BannerSponsorTercerTiempo';
 
 // ==========================================
 // PANTALLA 1: Login / Registro Unificado
@@ -2847,8 +2846,6 @@ export const Screen7MyTeam = () => {
                   </p>
                 </div>
 
-                {/* Banner de Sponsor Oficial / Promo de Tercer Tiempo */}
-                <BannerSponsorTercerTiempo />
 
                 {/* Planilla Oficial o Validación Mutua entre Capitanes */}
                 {equipo.convocatoria?.resultadoPendiente ? (

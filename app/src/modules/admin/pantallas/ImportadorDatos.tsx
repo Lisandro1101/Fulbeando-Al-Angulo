@@ -55,27 +55,6 @@ export const ImportadorDatos = () => {
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cargarPredeterminado = async () => {
-    setOcupado(true)
-    setError(null)
-    setResumen(null)
-    try {
-      const resp = await fetch('/datos-prueba.xlsx')
-      if (!resp.ok) throw new Error('No se pudo descargar el archivo de datos de prueba predeterminado.')
-      const buf = await resp.arrayBuffer()
-      const parseadas = await parsearBuffer(buf)
-      setHojas(parseadas)
-      setNombreArchivo('datos-prueba.xlsx (incluido)')
-    } catch (err) {
-      console.error('No pude cargar el Excel predeterminado:', err)
-      setError(err instanceof Error ? err.message : 'No pude cargar el archivo predeterminado.')
-      setHojas(null)
-      setNombreArchivo(null)
-    } finally {
-      setOcupado(false)
-    }
-  }
-
   const elegir = async (evento: React.ChangeEvent<HTMLInputElement>) => {
     const archivo = evento.target.files?.[0]
     if (!archivo) return
@@ -127,13 +106,12 @@ export const ImportadorDatos = () => {
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-xl font-bold flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5 text-neon-green" />
-          Importador de datos de prueba
+          Importador de Predios y Canchas (Excel)
         </h3>
       </div>
       <p className="text-sm text-gray-400 mb-4">
-        Subí <span className="font-mono text-gray-300">scripts/datos-prueba/datos-prueba.xlsx</span>{' '}
-        (generalo con <span className="font-mono text-gray-300">npm run datos:generar</span>). La carga
-        es idempotente: reimportar no duplica.
+        Subí un archivo Excel (<span className="font-mono text-gray-300">.xlsx</span>) con las solapas de predios,
+        canchas y franjas para cargarlos o actualizarlos en la base de datos. La carga es idempotente: reimportar no duplica.
       </p>
 
       <input
@@ -148,31 +126,13 @@ export const ImportadorDatos = () => {
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={() => void cargarPredeterminado()}
+          onClick={() => inputRef.current?.click()}
           disabled={ocupado}
           className="border border-neon-green/40 bg-neon-green/10 px-4 py-2 text-sm font-semibold text-neon-green transition-colors hover:bg-neon-green hover:text-black disabled:opacity-50"
         >
-          <FileSpreadsheet className="mr-2 inline h-4 w-4" />
-          Cargar datos-prueba.xlsx incluido
-        </button>
-
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={ocupado}
-          className="border border-pitch-700 px-4 py-2 text-sm font-semibold text-gray-300 transition-colors hover:bg-pitch-800 hover:text-white disabled:opacity-50"
-        >
           <Upload className="mr-2 inline h-4 w-4" />
-          Elegir otro archivo Excel
+          Seleccionar archivo Excel (.xlsx)
         </button>
-
-        <a
-          href="/datos-prueba.xlsx"
-          download="datos-prueba.xlsx"
-          className="text-xs text-gray-400 underline hover:text-white"
-        >
-          Descargar copia (.xlsx)
-        </a>
 
         {nombreArchivo && (
           <span className="font-mono text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800 px-2 py-1 rounded">

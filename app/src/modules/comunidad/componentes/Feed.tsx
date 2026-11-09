@@ -13,7 +13,6 @@ import { PostCard } from './PostCard'
 import { Esqueleto } from '@/modules/ui/overlays'
 import { escucharAnunciosActivos } from '@/modules/publicidad/repositorio'
 import { TarjetaSponsorMuro } from '@/modules/publicidad/componentes/TarjetaSponsorMuro'
-import { AdSenseBanner } from '@/modules/publicidad/componentes/AdSenseBanner'
 
 interface Tab {
   id: FiltroFeed
@@ -346,19 +345,9 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
       ) : (
         <div className="space-y-3">
           {postsFiltrados.map((pub, idx) => {
-            const debeMostrarSponsor = sponsorsFiltrados.length > 0 && (idx + 1) % 4 === 0
-            const sponsorIdx = Math.floor(idx / 4) % sponsorsFiltrados.length
+            const debeMostrarSponsor = sponsorsFiltrados.length > 0 && (idx + 1) % 5 === 0
+            const sponsorIdx = Math.floor(idx / 5) % sponsorsFiltrados.length
             const sponsor = debeMostrarSponsor ? sponsorsFiltrados[sponsorIdx] : null
-
-            // Intercalar AdSense en el feed:
-            // Si no hay sponsor interno en este turno:
-            // - Si no hay sponsors locales registrados en el sistema, mostramos AdSense cada 3 publicaciones
-            // - Si hay sponsors locales, mostramos AdSense cada 6 publicaciones para no saturar
-            const debeMostrarAdSense = !sponsor && (
-              sponsorsFiltrados.length === 0
-                ? (idx + 1) % 3 === 0
-                : (idx + 1) % 6 === 0
-            )
 
             return (
               <React.Fragment key={pub.id}>
@@ -368,16 +357,9 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
                   onAlternarSeguir={miUid ? () => alternar(pub.autorUid) : undefined}
                 />
                 {sponsor && <TarjetaSponsorMuro anuncio={sponsor} />}
-                {debeMostrarAdSense && <AdSenseBanner />}
               </React.Fragment>
             )
           })}
-          {postsFiltrados.length > 0 && postsFiltrados.length < 4 && sponsorsFiltrados.length > 0 && sponsorsFiltrados[0] && (
-            <TarjetaSponsorMuro anuncio={sponsorsFiltrados[0]} />
-          )}
-          {postsFiltrados.length > 0 && postsFiltrados.length < 3 && sponsorsFiltrados.length === 0 && (
-            <AdSenseBanner />
-          )}
         </div>
       )}
     </section>
