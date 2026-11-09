@@ -31,6 +31,8 @@ export interface PerfilDeportivo {
   nivel: NivelAutopercibido | null
   /** Switch "Disponible para jugar hoy" (Pantalla de Ajustes). */
   disponibleHoy: boolean
+  /** Horario desde el cual está disponible si disponibleHoy es true (ej. "20:00") */
+  disponibleDesdeHora?: string | null
   /** Switch de notificaciones del radar Falta 1. */
   notificacionesRadar: boolean
   
@@ -43,11 +45,20 @@ export interface PerfilDeportivo {
   teamIds: string[] // Reducción de costos N+1
 }
 
+export interface MedallaDeportiva {
+  id: string
+  titulo: string
+  descripcion: string
+  icono: string
+  rareza: 'comun' | 'rara' | 'epica' | 'legendaria'
+}
+
 export const PERFIL_DEPORTIVO_VACIO: PerfilDeportivo = {
   posicion: null,
   piernaHabil: null,
   nivel: null,
   disponibleHoy: false,
+  disponibleDesdeHora: null,
   notificacionesRadar: true,
   playerRole: null,
   stats: { goals: 0, assists: 0, matchesPlayed: 0, mvpCount: 0, fairPlayIndex: 100 },

@@ -28,8 +28,8 @@ const COL = {
     jugador: 'usuarios',
 };
 /** Mismo tope por coleccion que las consultas directas del cliente. */
-const LIMITES = { cancha: 50, equipo: 30, desafio: 20, jugador: 30 };
-const MAX_PINES = 120;
+const LIMITES = { cancha: 50, equipo: 30, desafio: 20, jugador: 600 };
+const MAX_PINES = 1000;
 const RADIO_MAX_KM = 5000;
 /** TTL de la cache por instancia (Fase 3). Corto: los datos del radar cambian poco. */
 const CACHE_TTL_MS = 45000;
@@ -64,7 +64,7 @@ function aPin(tipo, id, raw, punto, radioKm) {
                 draws: typeof rawStats.draws === 'number' ? rawStats.draws : 0,
                 losses: typeof rawStats.losses === 'number' ? rawStats.losses : 0,
             } : undefined;
-            return Object.assign(Object.assign({}, base), { t: 'equipo', nombre: str(raw.name), modalidad: str(raw.modalidadBase), cantidadJugadores: members.length, escudoUrl: strOrNull(raw.shieldUrl), fairPlayScore,
+            return Object.assign(Object.assign({}, base), { t: 'equipo', nombre: str(raw.name), modalidad: str(raw.modalidadBase), cantidadJugadores: members.length, escudoUrl: strOrNull(raw.shieldUrl), captainId: str(raw.captainId) || undefined, fairPlayScore,
                 stats });
         }
         case 'desafio': {
@@ -82,7 +82,9 @@ function aPin(tipo, id, raw, punto, radioKm) {
             const mediaFifa = rawRating <= 10 && rawRating > 0 ? Math.round(rawRating * 10) : Math.round(rawRating);
             const rawFp = num(stats.fairPlayIndex, 100);
             const fairPlay = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
-            return Object.assign(Object.assign({}, base), { t: 'jugador', uid: id, nombre: str(raw.nombre), apellido: str(raw.apellido), playerRole: strOrNull(perfil.playerRole), media: mediaFifa, fairPlay: Math.round(fairPlay) });
+            const email = str(raw.email);
+            const username = strOrNull(raw.username) || (email ? email.split('@')[0] : '') || str(raw.nombre);
+            return Object.assign(Object.assign({}, base), { t: 'jugador', uid: id, nombre: str(raw.nombre), apellido: str(raw.apellido), username, playerRole: strOrNull(perfil.playerRole), media: mediaFifa, fairPlay: Math.round(fairPlay) });
         }
     }
 }

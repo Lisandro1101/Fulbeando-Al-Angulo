@@ -31,9 +31,9 @@ const COL: Record<Tipo, string> = {
 }
 
 /** Mismo tope por coleccion que las consultas directas del cliente. */
-const LIMITES: Record<Tipo, number> = { cancha: 50, equipo: 30, desafio: 20, jugador: 30 }
+const LIMITES: Record<Tipo, number> = { cancha: 50, equipo: 30, desafio: 20, jugador: 600 }
 
-const MAX_PINES = 120
+const MAX_PINES = 1000
 const RADIO_MAX_KM = 5000
 /** TTL de la cache por instancia (Fase 3). Corto: los datos del radar cambian poco. */
 const CACHE_TTL_MS = 45_000
@@ -66,6 +66,7 @@ interface PinEquipo extends PinBase {
   modalidad: string
   cantidadJugadores: number
   escudoUrl: string | null
+  captainId?: string
   fairPlayScore?: number
   stats?: { wins: number; draws: number; losses: number }
 }
@@ -87,6 +88,7 @@ interface PinJugador extends PinBase {
   uid: string
   nombre: string
   apellido: string
+  username?: string
   playerRole: string | null
   media: number
   fairPlay: number
@@ -176,12 +178,15 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
       const mediaFifa = rawRating <= 10 && rawRating > 0 ? Math.round(rawRating * 10) : Math.round(rawRating)
       const rawFp = num(stats.fairPlayIndex, 100)
       const fairPlay = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp))
+      const email = str(raw.email)
+      const username = strOrNull(raw.username) || (email ? email.split('@')[0] : '') || str(raw.nombre)
       return {
         ...base,
         t: 'jugador',
         uid: id,
         nombre: str(raw.nombre),
         apellido: str(raw.apellido),
+        username,
         playerRole: strOrNull(perfil.playerRole),
         media: mediaFifa,
         fairPlay: Math.round(fairPlay),

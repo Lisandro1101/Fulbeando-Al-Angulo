@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import tailwindcssAnimate from 'tailwindcss-animate'
 
 /**
  * Paleta Fusionada "Fulbeando x Al Ángulo".
@@ -12,7 +13,7 @@ export default {
       colors: {
         // Paleta base para la app con variantes
         canvas: {
-          DEFAULT: '#F8FAFC', // Fondo base light/degradé de la app
+          DEFAULT: '#0B0F19', // Fondo base oficial "Noche de Sintético"
           raised: '#111827',  // Card y panel oscuro
           sunken: '#070B12',  // Fondo profundo
           light: '#FFFFFF',
@@ -23,14 +24,14 @@ export default {
           900: '#0B0F19', // Fondo app (Ultra oscuro)
           800: '#141B2D', // Tarjetas y paneles
           700: '#1F2937', // Bordes y divisores
-          // Acentos verdes para fútbol
-          DEFAULT: '#16A34A', 
-          muted: '#15803D',
+          // Acentos verdes para fútbol unificados (#22C55E)
+          DEFAULT: '#22C55E', 
+          muted: '#16A34A',
           faint: '#DCFCE7',
         },
         // Acentos "FUT" enérgicos de Al Ángulo
         neon: {
-          green: '#16A34A', // Éxito, confirmación, status 'open'
+          green: '#22C55E', // Éxito, confirmación, status 'open' (#22C55E)
           orange: '#EA580C', // Alertas, CTAs principales
           gold: '#CA8A04', // MVP, Premium, Fichas estelares
         },
@@ -52,7 +53,39 @@ export default {
         freemium: {
           banner: '#F1F5F9'
         },
-        border: '#E2E8F0' // Bordes y divisores claros
+        border: 'hsl(var(--border, 217.2 32.6% 22%))',
+        input: 'hsl(var(--input, 217.2 32.6% 22%))',
+        ring: 'hsl(var(--ring, 142.1 76.2% 36.3%))',
+        background: 'hsl(var(--background, 222.2 84% 4.9%))',
+        foreground: 'hsl(var(--foreground, 210 40% 98%))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary, 142.1 76.2% 36.3%))',
+          foreground: 'hsl(var(--primary-foreground, 355.7 100% 97.3%))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary, 217.2 32.6% 17.5%))',
+          foreground: 'hsl(var(--secondary-foreground, 210 40% 98%))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive, 0 62.8% 30.6%))',
+          foreground: 'hsl(var(--destructive-foreground, 210 40% 98%))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted, 217.2 32.6% 17.5%))',
+          foreground: 'hsl(var(--muted-foreground, 215 20.2% 65.1%))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent, 217.2 32.6% 17.5%))',
+          foreground: 'hsl(var(--accent-foreground, 210 40% 98%))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover, 222.2 84% 8%))',
+          foreground: 'hsl(var(--popover-foreground, 210 40% 98%))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card, 222.2 84% 8%))',
+          foreground: 'hsl(var(--card-foreground, 210 40% 98%))',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
@@ -65,6 +98,9 @@ export default {
       },
       borderRadius: {
         card: '1rem',
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
       },
       boxShadow: {
         glow: '0 0 0 1px rgb(34 197 94 / 0.25), 0 8px 30px -12px rgb(34 197 94 / 0.45)',
@@ -98,5 +134,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 } satisfies Config

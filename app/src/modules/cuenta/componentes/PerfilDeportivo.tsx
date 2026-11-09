@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Crosshair, Loader2, MapPin } from 'lucide-react'
+import { Camera, Clock, Crosshair, Loader2, MapPin, Trash2, Upload } from 'lucide-react'
 import type { NivelAutopercibido, PerfilDeportivo, PiernaHabil, Posicion, Usuario } from '@/domain'
 import { PERFIL_DEPORTIVO_VACIO } from '@/domain'
 import { actualizarPerfilDeportivo, actualizarZonaYMunicipio, guardarGeo } from '@/modules/usuarios/repositorio'
 import { DIVISION_GEOGRAFICA, calcularGeoZona, inferirMunicipio } from '@/core/geo/zonas'
+import { calcularMedallasJugador, MedalleroDeportivo } from '../medallero'
 
 const POSICIONES: readonly Posicion[] = ['arquero', 'defensor', 'medio', 'delantero']
 const NIEVELE: readonly NivelAutopercibido[] = [1, 2, 3, 4, 5]
@@ -125,6 +126,35 @@ export function PerfilDeportivoCard({
         onToggle={(v) => void actualizar({ disponibleHoy: v })}
       />
 
+      {perfil.disponibleHoy && (
+        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3.5 space-y-2">
+          <label htmlFor="perfil-hora-disponible" className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+            <Clock className="w-3.5 h-3.5 text-emerald-600" />
+            ¿A partir de qué hora podés jugar hoy?
+          </label>
+          <select
+            id="perfil-hora-disponible"
+            className="field bg-white"
+            value={perfil.disponibleDesdeHora ?? ''}
+            onChange={(e) => void actualizar({ disponibleDesdeHora: e.target.value || null })}
+          >
+            <option value="">Cualquier horario del día</option>
+            <option value="12:00">A partir de las 12:00 hs (Mediodía)</option>
+            <option value="14:00">A partir de las 14:00 hs</option>
+            <option value="16:00">A partir de las 16:00 hs</option>
+            <option value="18:00">A partir de las 18:00 hs</option>
+            <option value="19:00">A partir de las 19:00 hs</option>
+            <option value="20:00">A partir de las 20:00 hs</option>
+            <option value="21:00">A partir de las 21:00 hs</option>
+            <option value="22:00">A partir de las 22:00 hs</option>
+            <option value="23:00">A partir de las 23:00 hs</option>
+          </select>
+          <p className="text-[11px] text-slate-500 font-medium">
+            Los organizadores y capitanes verán tu horario disponible al buscarte en el Radar.
+          </p>
+        </div>
+      )}
+
       <Interruptor
         id="perfil-notificaciones"
         activo={perfil.notificacionesRadar}
@@ -132,6 +162,16 @@ export function PerfilDeportivoCard({
         descripcion="Avisos de turnos que necesitan jugador."
         onToggle={(v) => void actualizar({ notificacionesRadar: v })}
       />
+
+      <div className="pt-2 border-t border-slate-200">
+        <MedalleroDeportivo
+          medallas={calcularMedallasJugador(
+            perfil,
+            perfil.stats?.fairPlayIndex ?? 100,
+            perfil.rating <= 10 ? Math.round(perfil.rating * 10) : Math.round(perfil.rating)
+          )}
+        />
+      </div>
 
       {guardando && (
         <p className="flex items-center gap-2 text-xs text-slate-500 font-medium">
@@ -312,11 +352,12 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
         </p>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-bold text-slate-700">Foto de Perfil</label>
+        <label className="mb-1 block text-xs font-bold text-slate-700">Foto de Perfil Personalizada</label>
         <div className="flex items-center gap-4 bg-slate-100/80 p-4 rounded-2xl border border-slate-300 shadow-sm">
           <div 
-            className="w-16 h-16 rounded-full overflow-hidden bg-white flex items-center justify-center text-3xl border-2 border-emerald-500/40 cursor-pointer hover:border-emerald-500 transition-colors relative group shadow-sm"
+            className="w-16 h-16 rounded-full overflow-hidden bg-white flex items-center justify-center text-3xl border-2 border-emerald-500/40 cursor-pointer hover:border-emerald-500 transition-colors relative group shadow-sm shrink-0"
             onClick={() => document.getElementById('avatar-upload')?.click()}
+            title="Cambiar foto de perfil"
           >
             {emojiFoto?.startsWith('http') ? (
                <img src={emojiFoto} alt="Foto de perfil" className="w-full h-full object-cover" />
@@ -324,11 +365,36 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
                <span className="text-sm font-bold text-slate-400">Foto</span>
             )}
             <div className="absolute inset-0 bg-slate-900/60 hidden group-hover:flex items-center justify-center text-white backdrop-blur-xs">
-              <span className="text-[11px] font-black uppercase tracking-wider">Subir</span>
+              <Camera className="w-5 h-5 text-emerald-400" />
             </div>
           </div>
-          <div className="flex-1">
-            <p className="text-xs text-slate-600 font-medium mb-1">Toca el círculo para subir una foto de perfil</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-700 font-bold mb-1 truncate">
+              {emojiFoto?.startsWith('http') ? 'Foto personalizada cargada' : 'Sin foto cargada'}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => document.getElementById('avatar-upload')?.click()}
+                disabled={guardando}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {emojiFoto?.startsWith('http') ? 'Cambiar foto' : 'Subir foto'}
+              </button>
+              {emojiFoto?.startsWith('http') && (
+                <button
+                  type="button"
+                  onClick={() => setEmojiFoto('')}
+                  disabled={guardando}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-rose-100 text-slate-700 hover:text-rose-700 text-xs font-bold transition active:scale-95 cursor-pointer disabled:opacity-50"
+                  title="Eliminar foto"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Quitar
+                </button>
+              )}
+            </div>
           </div>
           <input 
             id="avatar-upload"
@@ -343,10 +409,10 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
                  setError(null);
                  const { optimizeAvatarImage } = await import('@/imageCompressor');
                  const { uploadImageToR2 } = await import('@/uploader');
-                  const optimized = await optimizeAvatarImage(file, { maxSize: 300, quality: 0.8 });
-                  // `avatars/{uid}`: storage.rules solo deja escribir en el
-                  // espacio propio del usuario que sube.
-                  const result = await uploadImageToR2(optimized, file.name, `avatars/${usuario.uid}`, () => {});
+                 const optimized = await optimizeAvatarImage(file, { maxSize: 300, quality: 0.8 });
+                 // `avatars/{uid}`: storage.rules solo deja escribir en el
+                 // espacio propio del usuario que sube.
+                 const result = await uploadImageToR2(optimized, file.name, `avatars/${usuario.uid}`, () => {});
                  setEmojiFoto(result.publicUrl);
               } catch(err) {
                  setError('Error al subir la imagen');

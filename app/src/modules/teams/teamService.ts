@@ -31,7 +31,7 @@ import {
   type Usuario,
   type PropuestaPactoPartido,
   type PingTactico,
-  type EstadoPacto,
+  type ConvocatoriaEquipo,
   type ModalidadDesafio,
 } from '@/domain'
 
@@ -524,17 +524,24 @@ export const obtenerEquipoPorId = async (equipoId: string): Promise<Equipo | nul
  * rango acotado (<= 20 docs) el costo es despreciable y asi no hace falta un
  * campo `nombreLower` desnormalizado ni un indice compuesto.
  */
+export interface JugadorBusqueda extends MiembroEquipo {
+  username: string
+  geo?: { lat: number; lng: number } | null
+  posicion?: string
+  media?: number
+}
+
 export const buscarJugadores = async (
   termino: string,
   limite = 10,
   excluirUid?: string,
-): Promise<Array<MiembroEquipo & { username: string }>> => {
-  const prefijo = termino.trim()
-  if (prefijo.length < 1) return []
+): Promise<Array<JugadorBusqueda>> => {
+  const sinArroba = termino.trim().replace(/^@+/, '')
+  if (sinArroba.length < 1) return []
 
-  const q = prefijo.toLowerCase()
-  const qCap = prefijo.charAt(0).toUpperCase() + prefijo.slice(1).toLowerCase()
-  const qUpper = prefijo.toUpperCase()
+  const q = sinArroba.toLowerCase()
+  const qCap = sinArroba.charAt(0).toUpperCase() + sinArroba.slice(1).toLowerCase()
+  const qUpper = sinArroba.toUpperCase()
 
   const colRef = collection(db, COLECCIONES.usuarios)
 
@@ -546,7 +553,8 @@ export const buscarJugadores = async (
     getDocs(query(colRef, where('nombre', '>=', qUpper), where('nombre', '<=', `${qUpper}\uf8ff`), limit(limite * 2))),
     getDocs(query(colRef, where('apellido', '>=', qCap), where('apellido', '<=', `${qCap}\uf8ff`), limit(limite * 2))),
     getDocs(query(colRef, where('apellido', '>=', q), where('apellido', '<=', `${q}\uf8ff`), limit(limite * 2))),
-    getDocs(query(colRef, where('rol', '==', 'jugador'), limit(150))),
+    getDocs(query(colRef, where('email', '>=', q), where('email', '<=', `${q}\uf8ff`), limit(limite * 2))),
+    getDocs(query(colRef, where('rol', '==', 'jugador'), limit(200))),
   ]
 
   const resultados = await Promise.allSettled(promesas)
@@ -576,11 +584,13 @@ export const buscarJugadores = async (
       const nombreCompleto = `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim().toLowerCase()
       const displayName = `${data.displayName ?? ''}`.trim().toLowerCase()
       const email = `${data.email ?? ''}`.toLowerCase()
+      const username = email.split('@')[0] || ''
 
       return (
         nombreCompleto.includes(q) ||
         displayName.includes(q) ||
-        email.includes(q)
+        email.includes(q) ||
+        username.includes(q)
       )
     })
     .slice(0, limite)
@@ -598,6 +608,9 @@ export const buscarJugadores = async (
         username: `${data.email ?? ''}`.split('@')[0] || d.id,
         role: 'PLAYER' as RolEquipo,
         avatarUrl: data.fotoUrl ?? null,
+        geo: data.geo ?? null,
+        posicion: data.perfilDeportivo?.playerRole ?? data.perfilDeportivo?.posicion ?? 'Cualquiera',
+        media: data.perfilDeportivo?.rating ?? 75,
       }
     })
 }
@@ -1821,6 +1834,8 @@ export interface FinalizarPartidoInput {
   mvpId: string | null
   stats: Record<string, { goles: number; asistencias: number }>
   ausentesIds?: string[]
+  golesFavor?: number
+  golesContra?: number
   calificacionPredio?: {
     predioId?: string | null
     predioNombre?: string | null
@@ -1852,6 +1867,8 @@ export const finalizarTercerTiempoYPartido = async (
       fecha: conv?.fecha || new Date().toISOString(),
       mvpId: partidoData.mvpId,
       stats: partidoData.stats,
+      golesFavor: partidoData.golesFavor ?? null,
+      golesContra: partidoData.golesContra ?? null,
       finalizadoEn: Date.now(),
       predioNombre: conv?.predioNombre || conv?.predio || null,
       calificacionPredio: partidoData.calificacionPredio?.estrellas ?? null,
@@ -2008,6 +2025,8 @@ export const finalizarTercerTiempoYPartido = async (
     mvpId: partidoData.mvpId,
     mvpNombre,
     mvpEmoji,
+    golesFavor: typeof partidoData.golesFavor === 'number' ? partidoData.golesFavor : null,
+    golesContra: typeof partidoData.golesContra === 'number' ? partidoData.golesContra : null,
     stats: partidoData.stats,
     finalizadoEn: Date.now(),
   }
@@ -2033,13 +2052,45 @@ export const finalizarTercerTiempoYPartido = async (
     }
   }
 
-  await updateDoc(eqRef, {
+  // Actualización automática de estadísticas de equipo (victorias, empates, derrotas)
+  const updatesEquipo: Record<string, any> = {
     members: miembrosPermanentes,
     convocatoria: null,
     ultimoPartido,
     estadisticasJugadores: statsJugadoresActuales,
     historialPartidos: nuevoHistorial,
-  })
+  }
+
+  if (typeof partidoData.golesFavor === 'number' && typeof partidoData.golesContra === 'number') {
+    const gf = partidoData.golesFavor
+    const gc = partidoData.golesContra
+    if (gf > gc) {
+      updatesEquipo['stats.wins'] = increment(1)
+    } else if (gf === gc) {
+      updatesEquipo['stats.draws'] = increment(1)
+    } else {
+      updatesEquipo['stats.losses'] = increment(1)
+    }
+
+    // Actualizar también al rival si existía un equipo rival registrado
+    if (partidoData.equipoRivalId) {
+      try {
+        const rivalUpdate: Record<string, any> = {}
+        if (gf > gc) {
+          rivalUpdate['stats.losses'] = increment(1)
+        } else if (gf === gc) {
+          rivalUpdate['stats.draws'] = increment(1)
+        } else {
+          rivalUpdate['stats.wins'] = increment(1)
+        }
+        await updateDoc(doc(db, COLECCIONES.equipos, partidoData.equipoRivalId), rivalUpdate)
+      } catch (err) {
+        console.warn('Error al actualizar stats de rival:', err)
+      }
+    }
+  }
+
+  await updateDoc(eqRef, updatesEquipo)
 }
 
 /**

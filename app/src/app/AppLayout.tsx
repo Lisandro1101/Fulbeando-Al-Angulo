@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
-import { X, MessageSquare, Bell } from 'lucide-react';
+import { X, MessageSquare, Bell, Settings } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 import {
   escucharDesafiosUsuario,
@@ -20,8 +20,8 @@ import { BannersPersistentes } from '@/modules/ui/BannersPersistentes';
 const FlotanteModal = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 md:p-8 animate-fade-in">
-      <div role="dialog" aria-modal="true" aria-label="Ventana modal" className="relative w-full max-w-xl h-full md:h-auto md:max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl bg-[#0B0F19] border border-zinc-800 animate-slide-up flex flex-col">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 md:p-8 animate-in fade-in duration-200">
+      <div role="dialog" aria-modal="true" aria-label="Ventana modal" className="relative w-full max-w-xl h-full md:h-auto md:max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl bg-canvas border border-zinc-800 animate-slide-up flex flex-col">
         <button 
           onClick={() => navigate(-1)}
           aria-label="Cerrar modal"
@@ -41,6 +41,7 @@ import { AlertaInvitacionPush } from '@/modules/teams/components/AlertaInvitacio
 
 export const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const sesion = useSesion();
   const state = location.state as { backgroundLocation?: Location };
 
@@ -175,7 +176,7 @@ export const AppLayout = () => {
               >
                 <Bell className="w-5 h-5 text-amber-400" />
                 {notificacionesNoLeidasCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-amber-400/30">
                     {notificacionesNoLeidasCount > 9 ? '9+' : notificacionesNoLeidasCount}
                   </span>
                 )}
@@ -189,11 +190,23 @@ export const AppLayout = () => {
               >
                 <MessageSquare className="w-5 h-5 text-emerald-400" />
                 {noLeidosCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-emerald-400/30">
                     {noLeidosCount > 9 ? '9+' : noLeidosCount}
                   </span>
                 )}
               </button>
+
+              {/* Botón de Configuración si está en la pantalla Perfil */}
+              {location.pathname === '/perfil' && (
+                <button
+                  onClick={() => navigate('/ajustes')}
+                  aria-label="Configuración del jugador"
+                  title="Configuración del jugador"
+                  className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md"
+                >
+                  <Settings className="w-5 h-5 text-purple-300" />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -211,7 +224,7 @@ export const AppLayout = () => {
           >
             <Bell className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
             {notificacionesNoLeidasCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-amber-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-amber-400/30">
                 {notificacionesNoLeidasCount > 9 ? '9+' : notificacionesNoLeidasCount}
               </span>
             )}
@@ -226,11 +239,23 @@ export const AppLayout = () => {
           >
             <MessageSquare className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
             {noLeidosCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-lg border border-[#361982] animate-bounce">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-emerald-500 text-zinc-950 text-[11px] font-black rounded-full flex items-center justify-center shadow-md border border-[#361982] ring-1 ring-emerald-400/30">
                 {noLeidosCount > 9 ? '9+' : noLeidosCount}
               </span>
             )}
           </button>
+
+          {/* Botón de Configuración si está en la pantalla Perfil */}
+          {location.pathname === '/perfil' && (
+            <button
+              onClick={() => navigate('/ajustes')}
+              aria-label="Configuración del jugador"
+              title="Configuración del jugador"
+              className="relative p-2.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition text-white border border-white/15 cursor-pointer shadow-md group"
+            >
+              <Settings className="w-5 h-5 text-purple-300 group-hover:rotate-45 transition-transform" />
+            </button>
+          )}
         </div>
       )}
 

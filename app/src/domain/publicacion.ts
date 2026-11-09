@@ -22,14 +22,15 @@ export interface TarjetaSnapshot {
 }
 
 /** Reacciones variadas estilo red social. */
-export type TipoReaccion = 'like' | 'gol' | 'mvp' | 'risa' | 'fuego'
+export type TipoReaccion = 'like' | 'gol' | 'mvp' | 'risa' | 'fuego' | 'aplausos'
 
 export const REACCIONES: ReadonlyArray<{ tipo: TipoReaccion; emoji: string; etiqueta: string }> = [
   { tipo: 'like', emoji: '👍', etiqueta: 'Me gusta' },
+  { tipo: 'aplausos', emoji: '👏', etiqueta: 'Aplausos' },
+  { tipo: 'fuego', emoji: '🔥', etiqueta: 'Fuego' },
   { tipo: 'gol', emoji: '⚽', etiqueta: 'Golazo' },
   { tipo: 'mvp', emoji: '⭐', etiqueta: 'MVP' },
   { tipo: 'risa', emoji: '😂', etiqueta: 'Jaja' },
-  { tipo: 'fuego', emoji: '🔥', etiqueta: 'Fuego' },
 ]
 
 /** Una foto del post. En el MVP solo hay imagenes (sin video). */

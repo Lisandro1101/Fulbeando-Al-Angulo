@@ -3,18 +3,12 @@ import {
   X,
   Bell,
   Shield,
-  Clock,
   Check,
   Trophy,
-  UserPlus,
   Swords,
-  Radio,
-  CheckCheck,
   MessageSquare,
-  AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import {
   responderInvitacion,
   responderDesafioEquipo,
@@ -23,6 +17,14 @@ import {
   type InvitacionEquipo,
 } from '@/modules/teams/teamService';
 import { confirmarSuplente, rechazarSuplente } from '@/modules/alertas/repositorio';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerClose,
+} from '@/components/ui/drawer';
 
 interface PanelNotificacionesProps {
   abierto: boolean;
@@ -39,7 +41,6 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   notificaciones,
   onAbrirChatDesafio,
 }) => {
-  const navigate = useNavigate();
   const [filtro, setFiltro] = useState<'todas' | 'pendientes' | 'equipos' | 'partidos'>('todas');
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -129,7 +130,13 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   const handleAceptarSuplente = async (notif: InvitacionEquipo) => {
     setProcesandoId(notif.id);
     try {
-      await confirmarSuplente(notif.id, usuarioUid);
+      const alertaId = notif.alertaId || notif.equipoId || notif.id;
+      const suplenteUid = notif.remitenteUid;
+      if (alertaId && suplenteUid) {
+        await confirmarSuplente(alertaId, suplenteUid).catch((e) =>
+          console.warn('Alerta ya confirmada o completada:', e),
+        );
+      }
       await responderInvitacion(notif.id, 'aceptada');
       setFeedback('¡Suplente confirmado para el partido!');
       setTimeout(() => setFeedback(null), 3500);
@@ -143,7 +150,11 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   const handleRechazarSuplente = async (notif: InvitacionEquipo) => {
     setProcesandoId(notif.id);
     try {
-      await rechazarSuplente(notif.id, usuarioUid);
+      const alertaId = notif.alertaId || notif.equipoId || notif.id;
+      const suplenteUid = notif.remitenteUid;
+      if (alertaId && suplenteUid) {
+        await rechazarSuplente(alertaId, suplenteUid).catch(console.warn);
+      }
       await responderInvitacion(notif.id, 'rechazada');
     } catch (err) {
       console.error(err);
@@ -153,17 +164,23 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#0B0F19] border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.25)] text-left my-auto flex flex-col max-h-[88vh] overflow-hidden">
+    <Drawer open={abierto} onOpenChange={(open) => !open && onCerrar()}>
+      <DrawerContent className="p-5 sm:p-6 pb-8 min-h-[580px] max-h-[92vh] md:max-w-lg md:mx-auto">
+        <DrawerHeader className="sr-only">
+          <DrawerTitle>Notificaciones</DrawerTitle>
+          <DrawerDescription>Invitaciones a equipos, pactos y avisos de partido</DrawerDescription>
+        </DrawerHeader>
         
         {/* Botón Cerrar */}
-        <button
-          onClick={onCerrar}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10"
-          aria-label="Cerrar panel de notificaciones"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <DrawerClose asChild>
+          <button
+            onClick={onCerrar}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10"
+            aria-label="Cerrar panel de notificaciones"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </DrawerClose>
 
         {/* Encabezado */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 pr-10">
@@ -193,7 +210,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
 
         {/* Feedback Toast */}
         {feedback && (
-          <div className="bg-emerald-500 text-zinc-950 font-black text-xs px-3.5 py-2 rounded-xl mt-3 flex items-center justify-between animate-bounce">
+          <div className="bg-emerald-500 text-zinc-950 font-black text-xs px-3.5 py-2 rounded-xl mt-3 flex items-center justify-between shadow-md animate-slide-up">
             <span>{feedback}</span>
           </div>
         )}
@@ -427,8 +444,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
             })
           )}
         </div>
-
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 };

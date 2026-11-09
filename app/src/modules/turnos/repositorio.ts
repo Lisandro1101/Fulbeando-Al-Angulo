@@ -3,13 +3,15 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore'
-import type { Comprobante, EstadoTurno, Franja, Predio, Turno } from '@/domain'
+import type { Comprobante, EstadoTurno, Franja, Predio, Turno, TarifasDiferenciadas } from '@/domain'
 import {
   MINUTOS_A_MS,
   MINUTOS_BLOQUEO_TEMPORAL,
@@ -20,6 +22,7 @@ import {
   puedeSolicitarTurno,
   puedeValidarTurno,
   calcularMontoSena,
+  calcularPrecioHoraCancha,
   precioDeFranja,
   turnoId,
 } from '@/domain'
@@ -28,6 +31,7 @@ import { db } from '@/core/firebase'
 import { aMillis, auditoriaInicial, auditoriaUpdate, ts, type Escritura } from '@/core/firestore'
 import { aGeoIndex } from '@/core/geo'
 import type { Actor } from '@/domain/turno.reglas'
+import { esFeriado } from '@/core/tiempo'
 
 const col = () => collection(db, COLECCIONES.turnos)
 export const ref = (id: string) => doc(db, COLECCIONES.turnos, id)
@@ -121,6 +125,142 @@ export const listarTurnosEnRango = async (
 }
 
 /* ------------------------------------------------------------------ */
+/* Suscripciones en tiempo real (onSnapshot)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Escucha en tiempo real el estado de un turno puntual.
+ * Ideal para la pantalla del jugador esperando aprobación de la seña.
+ */
+export const suscribirTurno = (
+  id: string,
+  callback: (turno: Turno | null) => void,
+  onError?: (err: Error) => void,
+): (() => void) => {
+  return onSnapshot(
+    ref(id),
+    (snap) => {
+      callback(snap.exists() ? (snap.data() as Turno) : null)
+    },
+    (err) => {
+      console.error(`Error en suscripción de turno ${id}:`, err)
+      onError?.(err)
+    },
+  )
+}
+
+/**
+ * Escucha en tiempo real los turnos del día para un predio.
+ * La grilla del dueño se actualiza inmediatamente sin tocar "Actualizar".
+ */
+export const suscribirTurnosDelDia = (
+  predioId: string,
+  fecha: string,
+  callback: (turnos: Turno[]) => void,
+  onError?: (err: Error) => void,
+): (() => void) => {
+  const q = query(col(), where('predioId', '==', predioId), where('fecha', '==', fecha))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const turnos = snap.docs.map((d) => d.data() as Turno).filter((t) => t.deletedAt === null)
+      callback(turnos)
+    },
+    (err) => {
+      console.error(`Error en suscripción de turnos del día (${predioId}, ${fecha}):`, err)
+      onError?.(err)
+    },
+  )
+}
+
+/**
+ * Escucha en tiempo real las solicitudes que esperan validación del dueño.
+ * En cuanto el jugador envía la seña, aparece en la cola del dueño al instante.
+ */
+export const suscribirTurnosPendientesDeValidacion = (
+  predioId: string,
+  callback: (pendientes: Turno[]) => void,
+  onError?: (err: Error) => void,
+): (() => void) => {
+  const q = query(
+    col(),
+    where('predioId', '==', predioId),
+    where('estado', '==', 'bloqueado_temporal'),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => d.data() as Turno)
+        .filter((t) => t.deletedAt === null)
+        .sort((a, b) => `${a.fecha}${a.horaInicio}`.localeCompare(`${b.fecha}${b.horaInicio}`))
+      callback(list)
+    },
+    (err) => {
+      console.error(`Error en suscripción de turnos pendientes (${predioId}):`, err)
+      onError?.(err)
+    },
+  )
+}
+
+/**
+ * Escucha en tiempo real los turnos de un organizador (Mis Reservas).
+ */
+export const suscribirTurnosDelOrganizador = (
+  organizadorUid: string,
+  desdeFecha: string,
+  callback: (turnos: Turno[]) => void,
+  onError?: (err: Error) => void,
+): (() => void) => {
+  const q = query(
+    col(),
+    where('organizadorUid', '==', organizadorUid),
+    where('fecha', '>=', desdeFecha),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => d.data() as Turno).filter((t) => t.deletedAt === null)
+      callback(list)
+    },
+    (err) => {
+      console.error(`Error en suscripción de turnos del organizador (${organizadorUid}):`, err)
+      onError?.(err)
+    },
+  )
+}
+
+/**
+ * Escucha en tiempo real los turnos de una semana para un predio (selector de franja).
+ */
+export const suscribirTurnosEnRango = (
+  predioId: string,
+  desde: string,
+  hasta: string,
+  callback: (turnos: Turno[]) => void,
+  onError?: (err: Error) => void,
+): (() => void) => {
+  const q = query(
+    col(),
+    where('predioId', '==', predioId),
+    where('fecha', '>=', desde),
+    where('fecha', '<=', hasta),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => d.data() as Turno).filter((t) => t.deletedAt === null)
+      callback(list)
+    },
+    (err) => {
+      console.error(`Error en suscripción de turnos en rango (${predioId}):`, err)
+      onError?.(err)
+    },
+  )
+}
+
+
+/* ------------------------------------------------------------------ */
 /* Alta de grilla (carga del dueno de predio)                         */
 /* ------------------------------------------------------------------ */
 
@@ -145,7 +285,7 @@ export const MAX_TURNOS_POR_GRILLA = 450
  * duplica turnos ni pisa reservas existentes: solo crea lo que falta.
  */
 export const generarGrillaDelDia = async (
-  canchas: Array<{ id: string; precioHora: number }>,
+  canchas: Array<{ id: string; precioHora: number; tarifas?: TarifasDiferenciadas }>,
   fecha: string,
   franjas: readonly Franja[],
   predio: Pick<Predio, 'id' | 'geo' | 'cobro'>,
@@ -191,8 +331,8 @@ export const generarGrillaDelDia = async (
       horaFin: slot.horaFin,
       estado: 'disponible',
       origen: 'carga_manual_dueno',
-      precioTotal: precioDeFranja(cancha.precioHora, slot),
-      montoSena: calcularMontoSena(predio.cobro, precioDeFranja(cancha.precioHora, slot)),
+      precioTotal: precioDeFranja(calcularPrecioHoraCancha(cancha, fecha, slot.horaInicio), slot),
+      montoSena: calcularMontoSena(predio.cobro, precioDeFranja(calcularPrecioHoraCancha(cancha, fecha, slot.horaInicio), slot)),
       organizadorUid: null,
       organizadorNombre: null,
       organizadorTelefono: null,
@@ -210,23 +350,48 @@ export const generarGrillaDelDia = async (
   return faltantes.length
 }
 
+export interface OpcionesGrillaMasiva {
+  excluirFeriados?: boolean
+  onProgreso?: (creados: number, totalEstimado: number) => void
+}
+
 /**
  * Genera la grilla para múltiples fechas. Agrupa en lotes para no superar
  * el límite de 500 operaciones de Firestore.
+ * Optimizado con una sola lectura en rango (evita N roundtrips en rangos largos de meses).
  */
 export const generarGrillaMasiva = async (
-  canchas: Array<{ id: string; precioHora: number }>,
+  canchas: Array<{ id: string; precioHora: number; tarifas?: TarifasDiferenciadas }>,
   fechas: string[],
   franjas: readonly Franja[],
   predio: Pick<Predio, 'id' | 'geo' | 'cobro'>,
+  opciones?: OpcionesGrillaMasiva,
 ): Promise<number> => {
   const problema = errorEnFranjas(franjas)
   if (problema) throw new TransaccionInvalidaError(problema)
   if (canchas.length === 0) throw new TransaccionInvalidaError('El predio no tiene canchas activas.')
   if (fechas.length === 0) return 0
 
+  const fechasValidas = opciones?.excluirFeriados
+    ? fechas.filter((f) => !esFeriado(f))
+    : fechas
+
+  if (fechasValidas.length === 0) return 0
+
   const geo = aGeoIndex({ lat: predio.geo.lat, lng: predio.geo.lng })
   let totalCreados = 0
+
+  // Consulta por rango en una sola query optimizada
+  const fechasOrdenadas = [...fechasValidas].sort()
+  const fechaMin = fechasOrdenadas[0]!
+  const fechaMax = fechasOrdenadas[fechasOrdenadas.length - 1]!
+
+  const turnosExistentes = await listarTurnosEnRango(predio.id, fechaMin, fechaMax)
+  const existentes = new Set(
+    turnosExistentes.map((t) => `${t.fecha}~${t.canchaId}~${t.horaInicio}`),
+  )
+
+  const totalEstimado = fechasValidas.length * canchas.length * franjas.length
 
   let batch = writeBatch(db)
   let operacionesEnBatch = 0
@@ -238,13 +403,10 @@ export const generarGrillaMasiva = async (
     }
   }
 
-  for (const fecha of fechas) {
-    const existentes = new Set(
-      (await listarTurnosDelDia(predio.id, fecha)).map((t) => `${t.canchaId}~${t.horaInicio}`),
-    )
+  for (const fecha of fechasValidas) {
     const faltantes = canchas.flatMap((cancha) =>
       franjas
-        .filter((f) => !existentes.has(`${cancha.id}~${f.horaInicio}`))
+        .filter((f) => !existentes.has(`${fecha}~${cancha.id}~${f.horaInicio}`))
         .map((slot) => ({ cancha, slot })),
     )
 
@@ -264,8 +426,8 @@ export const generarGrillaMasiva = async (
         horaFin: slot.horaFin,
         estado: 'disponible',
         origen: 'carga_manual_dueno',
-        precioTotal: precioDeFranja(cancha.precioHora, slot),
-        montoSena: calcularMontoSena(predio.cobro, precioDeFranja(cancha.precioHora, slot)),
+        precioTotal: precioDeFranja(calcularPrecioHoraCancha(cancha, fecha, slot.horaInicio), slot),
+        montoSena: calcularMontoSena(predio.cobro, precioDeFranja(calcularPrecioHoraCancha(cancha, fecha, slot.horaInicio), slot)),
         organizadorUid: null,
         organizadorNombre: null,
         organizadorTelefono: null,
@@ -273,22 +435,102 @@ export const generarGrillaMasiva = async (
         motivoRechazo: null,
         bloqueadoHasta: null,
         expiracionNotificada: false,
-canceladoPor: null,
-    geo,
-    partidoId: null,
-    ...auditoriaInicial(),
+        canceladoPor: null,
+        geo,
+        partidoId: null,
+        ...auditoriaInicial(),
       } satisfies Escritura<Turno>)
-      
+
       operacionesEnBatch++
       totalCreados++
       if (operacionesEnBatch >= MAX_TURNOS_POR_GRILLA) {
         await procesarBatch()
+        opciones?.onProgreso?.(totalCreados, totalEstimado)
       }
     }
   }
-  
+
   await procesarBatch()
+  opciones?.onProgreso?.(totalCreados, totalCreados)
   return totalCreados
+}
+
+/**
+ * Bloquea masivamente todos los turnos disponibles de una fecha para un predio (ej. feriado o cierre extraordinario).
+ * Preserva turnos ya reservados o con comprobante pendiente.
+ */
+export const bloquearTurnosDeFecha = async (
+  predioId: string,
+  fecha: string,
+  motivo = 'feriado',
+): Promise<number> => {
+  const turnos = await listarTurnosDelDia(predioId, fecha)
+  const disponibles = turnos.filter((t) => t.estado === 'disponible')
+  if (disponibles.length === 0) return 0
+
+  let batch = writeBatch(db)
+  let operaciones = 0
+  let totalBloqueados = 0
+
+  for (const t of disponibles) {
+    batch.update(ref(t.id), {
+      estado: 'cancelado',
+      origen: 'bloqueo_manual_dueno',
+      canceladoPor: 'dueno',
+      motivoRechazo: motivo,
+      ...auditoriaUpdate(),
+    })
+    operaciones++
+    totalBloqueados++
+    if (operaciones >= MAX_TURNOS_POR_GRILLA) {
+      await batch.commit()
+      batch = writeBatch(db)
+      operaciones = 0
+    }
+  }
+  if (operaciones > 0) {
+    await batch.commit()
+  }
+  return totalBloqueados
+}
+
+/**
+ * Reactiva los turnos que fueron bloqueados manualmente por el dueño en una fecha dada.
+ */
+export const desbloquearTurnosDeFecha = async (
+  predioId: string,
+  fecha: string,
+): Promise<number> => {
+  const turnos = await listarTurnosDelDia(predioId, fecha)
+  const bloqueados = turnos.filter(
+    (t) => t.estado === 'cancelado' && t.origen === 'bloqueo_manual_dueno' && t.canceladoPor === 'dueno',
+  )
+  if (bloqueados.length === 0) return 0
+
+  let batch = writeBatch(db)
+  let operaciones = 0
+  let totalDesbloqueados = 0
+
+  for (const t of bloqueados) {
+    batch.update(ref(t.id), {
+      estado: 'disponible',
+      origen: 'carga_manual_dueno',
+      canceladoPor: null,
+      motivoRechazo: null,
+      ...auditoriaUpdate(),
+    })
+    operaciones++
+    totalDesbloqueados++
+    if (operaciones >= MAX_TURNOS_POR_GRILLA) {
+      await batch.commit()
+      batch = writeBatch(db)
+      operaciones = 0
+    }
+  }
+  if (operaciones > 0) {
+    await batch.commit()
+  }
+  return totalDesbloqueados
 }
 
 
@@ -542,7 +784,7 @@ export const contarTurnosPorEstado = async (estado: EstadoTurno): Promise<number
  */
 export const habilitarTurnoIndividual = async (
   predio: Pick<Predio, 'id' | 'geo' | 'cobro'>,
-  cancha: { id: string; precioHora: number },
+  cancha: { id: string; precioHora: number; tarifas?: TarifasDiferenciadas },
   fecha: string,
   horaInicio: string,
   horaFin?: string,
@@ -561,7 +803,8 @@ export const habilitarTurnoIndividual = async (
     horaInicio,
   })
 
-  const turnoData: Turno = {
+  const ahora = ts(new Date())
+  const turnoData: Escritura<Turno> = {
     id,
     predioId: predio.id,
     canchaId: cancha.id,
@@ -570,8 +813,8 @@ export const habilitarTurnoIndividual = async (
     horaFin: fin,
     estado: 'disponible',
     origen: 'carga_manual_dueno',
-    precioTotal: cancha.precioHora,
-    montoSena: calcularMontoSena(predio.cobro, cancha.precioHora),
+    precioTotal: calcularPrecioHoraCancha(cancha, fecha, horaInicio),
+    montoSena: calcularMontoSena(predio.cobro, calcularPrecioHoraCancha(cancha, fecha, horaInicio)),
     organizadorUid: null,
     organizadorNombre: null,
     organizadorTelefono: null,
@@ -582,12 +825,16 @@ export const habilitarTurnoIndividual = async (
     canceladoPor: null,
     geo,
     partidoId: null,
-    deletedAt: null,
     ...auditoriaInicial(),
   }
 
   await setDoc(ref(id), turnoData)
-  return turnoData
+  return {
+    ...turnoData,
+    createdAt: ahora,
+    updatedAt: ahora,
+    deletedAt: null,
+  } as Turno
 }
 
 /**

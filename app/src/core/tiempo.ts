@@ -85,3 +85,5 @@ export function formatearCuentaRegresiva(msRestantes: number): string {
   const seg = total % 60
   return `${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`
 }
+
+export * from './tiempo/feriados'

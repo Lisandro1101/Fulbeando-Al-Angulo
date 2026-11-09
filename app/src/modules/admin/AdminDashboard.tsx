@@ -186,7 +186,7 @@ export const AdminDashboard = () => {
           AL ÁNGULO <span className="text-emerald-400 text-sm font-bold tracking-normal not-italic ml-1">ADMIN</span>
         </h1>
         <nav className="flex-1 space-y-2 text-sm font-medium">
-          <a href="#vision-general" className="flex items-center text-emerald-300 font-bold bg-white/10 px-4 py-3 rounded-xl border-l-4 border-emerald-400 shadow-sm shadow-emerald-400/20">
+          <a href="#vision-general" className="flex items-center text-emerald-300 font-bold bg-emerald-500/15 px-4 py-2.5 rounded-xl border border-emerald-500/30 shadow-sm shadow-emerald-500/10">
             📊 Visión General
           </a>
           <a href="#sponsors" className="flex items-center text-indigo-200 hover:text-white hover:bg-white/5 px-4 py-2.5 rounded-xl transition-colors">
@@ -237,39 +237,47 @@ export const AdminDashboard = () => {
           id="vision-general"
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10"
         >
-          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-neon-green"></div>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">
-              Usuarios Totales
-            </p>
+          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-2xl shadow-lg relative overflow-hidden transition-all hover:border-pitch-600">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">
+                Usuarios Totales
+              </p>
+              <span className="w-2 h-2 rounded-full bg-neon-green shadow-[0_0_8px_rgba(22,163,74,0.6)]"></span>
+            </div>
             <p className="text-3xl font-black">{n(metricas?.usuarios)}</p>
             <p className="text-xs text-neon-green mt-2">
               +{n(metricas?.usuariosSemana)} esta semana
             </p>
           </div>
 
-          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">
-              Partidos Jugados
-            </p>
+          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-2xl shadow-lg relative overflow-hidden transition-all hover:border-pitch-600">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">
+                Partidos Jugados
+              </p>
+              <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+            </div>
             <p className="text-3xl font-black">{n(metricas?.partidos)}</p>
           </div>
 
-          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">
-              Reportes abiertos
-            </p>
+          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-2xl shadow-lg relative overflow-hidden transition-all hover:border-pitch-600">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">
+                Reportes abiertos
+              </p>
+              <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span>
+            </div>
             <p className="text-3xl font-black">{reportes.length}</p>
             <p className="text-xs text-red-500 mt-2">Accion requerida urgente</p>
           </div>
 
-          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">
-              Predios verificados
-            </p>
+          <div className="bg-pitch-900 border border-pitch-700 p-5 rounded-2xl shadow-lg relative overflow-hidden transition-all hover:border-pitch-600">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">
+                Predios verificados
+              </p>
+              <span className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.6)]"></span>
+            </div>
             <p className="text-3xl font-black">{n(metricas?.prediosOk)}</p>
             <p className="text-xs text-purple-400 mt-2">{predios.length} sin verificar</p>
           </div>

@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import { construirHojas } from './datos-prueba/data'
 
 const SALIDA = resolve(process.cwd(), 'scripts/datos-prueba/datos-prueba.xlsx')
+const SALIDA_PUBLIC = resolve(process.cwd(), 'app/public/datos-prueba.xlsx')
 
 function main(): void {
   const hojas = construirHojas()
@@ -30,8 +31,13 @@ function main(): void {
   mkdirSync(dirname(SALIDA), { recursive: true })
   XLSX.writeFile(wb, SALIDA)
 
+  mkdirSync(dirname(SALIDA_PUBLIC), { recursive: true })
+  XLSX.writeFile(wb, SALIDA_PUBLIC)
+
   const totalFilas = hojas.reduce((acc, h) => acc + h.filas.length, 0)
-  console.log(`✅ Excel generado: ${SALIDA}`)
+  console.log(`✅ Excel generado en:`)
+  console.log(`   - ${SALIDA}`)
+  console.log(`   - ${SALIDA_PUBLIC}`)
   console.log(`   ${hojas.length} hojas · ${totalFilas} filas en total`)
   for (const h of hojas) console.log(`     - ${h.nombre.padEnd(16)} ${h.filas.length} filas`)
 }

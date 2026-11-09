@@ -121,6 +121,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
           })
         }
       } catch (error) {
+        console.error('[useSesion alCambiar error]', error)
         if (montado) {
           setEstado({
             ...INICIAL,
@@ -140,6 +141,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
         desuscribir?.()
       }
     } catch (error) {
+      console.error('[useSesion observarSesion error]', error)
       setEstado({ ...INICIAL, cargando: false, error: mensajeDe(error, 'Error al iniciar sesion.') })
       return undefined
     }
@@ -157,5 +159,10 @@ export function useSesion(): EstadoSesion {
   return useContext(SesionContext)
 }
 
-const mensajeDe = (error: unknown, porDefecto: string): string =>
-  error instanceof Error ? error.message : porDefecto
+const mensajeDe = (error: unknown, porDefecto: string): string => {
+  if (error instanceof Error) {
+    const code = (error as any).code ? `[${(error as any).code}] ` : ''
+    return `${code}${error.message || porDefecto}`
+  }
+  return typeof error === 'string' ? error : porDefecto
+}

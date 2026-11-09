@@ -11,7 +11,6 @@ import {
   XCircle,
   Loader2,
   X,
-  MessageCircle,
 } from 'lucide-react'
 import type { AnuncioSponsor, UbicacionAnuncio } from '@/domain/publicidad'
 import { normalizarUrlImagen, normalizarEnlaceDestino } from '@/domain/publicidad'
@@ -172,7 +171,7 @@ export const GestionSponsors: React.FC = () => {
             <div
               key={a.id}
               className={`border rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
-                a.activo ? 'bg-[#05080E] border-pitch-700' : 'bg-zinc-950/40 border-zinc-800 opacity-60'
+                a.activo ? 'bg-[#05080E] border-pitch-700' : 'bg-canvas/ border-zinc-800 opacity-60'
               }`}
             >
               <div>
@@ -289,7 +288,7 @@ export const GestionSponsors: React.FC = () => {
                     value={nombreSponsor}
                     onChange={(e) => setNombreSponsor(e.target.value)}
                     placeholder="Ej: Cervecería La Cancha, Botines Pro..."
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
+                    className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
                   />
                 </div>
 
@@ -301,7 +300,7 @@ export const GestionSponsors: React.FC = () => {
                     value={titulo}
                     onChange={(e) => setTitulo(e.target.value)}
                     placeholder="Ej: 20% OFF en tu mesa post-partido 🍻"
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
+                    className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
                   />
                 </div>
 
@@ -312,7 +311,7 @@ export const GestionSponsors: React.FC = () => {
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     placeholder="Explicá la oferta o beneficio para los jugadores..."
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none resize-none"
+                    className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none resize-none"
                   />
                 </div>
 
@@ -322,7 +321,7 @@ export const GestionSponsors: React.FC = () => {
                     <select
                       value={ubicacion}
                       onChange={(e) => setUbicacion(e.target.value as UbicacionAnuncio)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
                     >
                       <option value="muro">Muro Social (Comunidad)</option>
                       <option value="tercer_tiempo">Tercer Tiempo (Mi Equipo)</option>
@@ -338,7 +337,7 @@ export const GestionSponsors: React.FC = () => {
                       value={etiquetaBadge}
                       onChange={(e) => setEtiquetaBadge(e.target.value)}
                       placeholder="Ej: Sponsor Oficial"
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
                     />
                   </div>
                 </div>
@@ -349,7 +348,7 @@ export const GestionSponsors: React.FC = () => {
                     <select
                       value={zona}
                       onChange={(e) => setZona(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
                     >
                       <option value="todas">🌍 Todas las Zonas (Alcance Global)</option>
                       <optgroup label="CABA">
@@ -388,7 +387,7 @@ export const GestionSponsors: React.FC = () => {
                       placeholder="Opcional: ingresá otra zona..."
                       value={zona === 'todas' ? '' : zona}
                       onChange={(e) => setZona(e.target.value.trim() ? e.target.value : 'todas')}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
                     />
                   </div>
                 </div>
@@ -406,7 +405,7 @@ export const GestionSponsors: React.FC = () => {
                       setPreviewError(false)
                     }}
                     placeholder="https://drive.google.com/file/d/... o https://..."
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
+                    className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
                   />
                   <p className="text-[11px] text-gray-400 mt-1">
                     Pegá un enlace directo (.png, .jpg) o el link de compartir de Google Drive (debe estar en <em>"Cualquier persona con el enlace"</em>).
@@ -435,7 +434,7 @@ export const GestionSponsors: React.FC = () => {
                           onLoad={() => setPreviewError(false)}
                         />
                         {previewError && (
-                          <div className="absolute inset-0 bg-zinc-950/90 p-3 flex flex-col items-center justify-center text-center">
+                          <div className="absolute inset-0 bg-canvas/ p-3 flex flex-col items-center justify-center text-center">
                             <p className="text-xs text-rose-400 font-semibold mb-1">⚠️ No se pudo cargar la imagen</p>
                             <p className="text-[11px] text-gray-400 leading-tight">
                               Si es de Google Drive, asegurate de que en "Compartir" esté configurado como <strong>"Cualquier persona con el enlace (Lector)"</strong>.
@@ -456,7 +455,7 @@ export const GestionSponsors: React.FC = () => {
                       value={enlaceDestino}
                       onChange={(e) => setEnlaceDestino(e.target.value)}
                       placeholder="wa.me/54911... o https://..."
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-amber-400 outline-none"
                     />
                     {enlaceDestino.trim() && (
                       <p className="text-[11px] text-zinc-400 mt-1 truncate">
@@ -475,7 +474,7 @@ export const GestionSponsors: React.FC = () => {
                       value={textoBoton}
                       onChange={(e) => setTextoBoton(e.target.value)}
                       placeholder="Ej: Pedir por WhatsApp"
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
+                      className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-amber-400 outline-none"
                     />
                   </div>
                 </div>

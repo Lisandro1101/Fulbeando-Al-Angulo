@@ -1,5 +1,5 @@
 import { collection, doc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore'
-import type { Cancha, TipoCancha } from '@/domain'
+import type { Cancha, TipoCancha, TipoSuperficie, TarifasDiferenciadas } from '@/domain'
 import { COLECCIONES } from '@/core/config'
 import { db } from '@/core/firebase'
 import { ts } from '@/core/firestore'
@@ -14,6 +14,10 @@ export interface AltaCancha {
   tipo: TipoCancha
   techada: boolean
   precioHora: number
+  fotos?: string[]
+  iluminacion?: boolean
+  tipoSuperficie?: TipoSuperficie
+  tarifas?: TarifasDiferenciadas
 }
 
 export const crearCancha = async (predioId: string, alta: AltaCancha): Promise<string> => {
@@ -23,6 +27,10 @@ export const crearCancha = async (predioId: string, alta: AltaCancha): Promise<s
     id: refNueva.id,
     predioId,
     ...alta,
+    fotos: alta.fotos ?? [],
+    iluminacion: alta.iluminacion ?? false,
+    tipoSuperficie: alta.tipoSuperficie ?? 'sintetico',
+    tarifas: alta.tarifas ?? {},
     activa: true,
     createdAt: marca,
     updatedAt: marca,
@@ -61,12 +69,16 @@ const refrescarResumen = async (predioId: string): Promise<void> => {
   const canchas = await listarCanchas(predioId)
   await sincronizarResumenCanchas(
     predioId,
-    canchas.map(({ id, nombre, tipo, techada, precioHora }) => ({
+    canchas.map(({ id, nombre, tipo, techada, precioHora, fotos, iluminacion, tipoSuperficie, tarifas }) => ({
       id,
       nombre,
       tipo,
       techada,
       precioHora,
+      ...(fotos && fotos.length > 0 ? { fotos } : {}),
+      ...(iluminacion !== undefined ? { iluminacion } : {}),
+      ...(tipoSuperficie ? { tipoSuperficie } : {}),
+      ...(tarifas ? { tarifas } : {}),
     })),
   )
 }

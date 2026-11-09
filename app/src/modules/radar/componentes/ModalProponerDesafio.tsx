@@ -12,10 +12,7 @@ import {
   Check,
   MessageSquareQuote,
   CheckCheck,
-  RefreshCw,
-  Trophy,
-  ArrowRight,
-  Flame,
+  Calendar,
 } from 'lucide-react';
 import type { ModalidadDesafio, PingTactico, PropuestaPactoPartido } from '@/domain';
 import { collection, doc } from 'firebase/firestore';
@@ -43,7 +40,7 @@ interface ModalProponerDesafioProps {
     modalidad?: string;
     escudoUrl?: string | null;
     captainId?: string;
-    divisionInfo?: { nombre: string; color: string; badge: string };
+    divisionInfo?: { nombre: string; color?: string; badge?: string };
   };
   usuarioActual: {
     uid: string;
@@ -54,15 +51,22 @@ interface ModalProponerDesafioProps {
   onDesafioEnviado?: (mensaje: string) => void;
 }
 
-// Chips de Horarios
-const CHIPS_HORARIOS = [
-  'Hoy 20:00 hs',
-  'Mañana 21:00 hs',
-  'Este Viernes 20:30 hs',
-  'Este Sábado 18:00 hs',
-  'Este Domingo 19:00 hs',
-  'Lunes que viene 21 hs',
-];
+// Helper para formatear fecha y horario propuesto en lenguaje natural
+export function formatearFechaHoraDesafio(fechaStr: string, horaStr: string): string {
+  if (!fechaStr || !horaStr) return 'Fecha y horario a coordinar';
+  try {
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const dateObj = new Date(y!, m! - 1, d!);
+    const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const diaNombre = dias[dateObj.getDay()] || '';
+    const hoyStr = new Date().toISOString().split('T')[0];
+    const mananaStr = new Date(Date.now() + 24 * 3600 * 1000).toISOString().split('T')[0];
+    const prefijo = fechaStr === hoyStr ? 'Hoy' : fechaStr === mananaStr ? 'Mañana' : `${diaNombre} ${d}/${m}`;
+    return `${prefijo} a las ${horaStr} hs`;
+  } catch {
+    return `${fechaStr} ${horaStr} hs`;
+  }
+}
 
 // Chips Tácticos y Folklore
 const CHIPS_TACTICOS = [
@@ -103,21 +107,23 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
   // Desafío activo encontrado o recién creado
   const [desafioActivo, setDesafioActivo] = useState<InvitacionEquipo | null>(desafioInicial || null);
 
-  // Estados para creación inicial por chips (si no hay desafío previo)
+  // Estados para creación inicial con horario personalizado
   const [modalidad, setModalidad] = useState<ModalidadDesafio>('F5');
-  const [horarioSeleccionado, setHorarioSeleccionado] = useState(CHIPS_HORARIOS[2]);
-  const [horarioPersonalizado, setHorarioPersonalizado] = useState('');
-  const [usarPersonalizado, setUsarPersonalizado] = useState(false);
+  const [fechaDesafio, setFechaDesafio] = useState(() => {
+    const manana = new Date(Date.now() + 24 * 3600 * 1000);
+    return manana.toISOString().split('T')[0]!;
+  });
+  const [horaDesafio, setHoraDesafio] = useState('20:30');
   const [canchaOpcion, setCanchaOpcion] = useState<'con_cancha' | 'busca_cancha' | 'rival_propone'>('busca_cancha');
   const [predioNombre, setPredioNombre] = useState('');
-  const [pingSeleccionado, setPingSeleccionado] = useState<string>(CHIPS_TACTICOS[0]);
+  const [pingSeleccionado, setPingSeleccionado] = useState<string>(CHIPS_TACTICOS[0] || "");
   const [pingLibre, setPingLibre] = useState('');
 
   // Estados de mensajería en el chat en vivo
   const [categoriaChipChat, setCategoriaChipChat] = useState<'tacticos' | 'horarios' | 'cancha'>('tacticos');
   const [textoMensajeChat, setTextoMensajeChat] = useState('');
   const [enviandoMensaje, setEnviandoMensaje] = useState(false);
-  const [procesandoPacto, setProcesandoPacto] = useState(false);
+    const [procesandoPacto, setProcesandoPacto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toastExito, setToastExito] = useState<string | null>(null);
 
@@ -140,7 +146,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
           setMisEquipos(eqs);
           if (eqs.length > 0) {
             const cap = eqs.find((e) => e.captainId === usuarioActual.uid) || eqs[0];
-            setEquipoSeleccionadoId(cap.id);
+            if (cap) setEquipoSeleccionadoId(cap.id);
           }
         })
         .finally(() => setCargandoInicial(false));
@@ -167,9 +173,12 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
         }
         if (eqs.length > 0) {
           const cap = eqs.find((e) => e.captainId === usuarioActual.uid) || eqs[0];
-          setEquipoSeleccionadoId(cap.id);
-          if (cap.formato && ['F5', 'F7', 'F8', 'F11'].includes(cap.formato)) {
-            setModalidad(cap.formato as ModalidadDesafio);
+          if (cap) {
+            setEquipoSeleccionadoId(cap.id);
+            const mod = cap?.formato || cap?.modalidadBase;
+            if (mod && ['F5', 'F7', 'F8', 'F11'].includes(mod)) {
+              setModalidad(mod as ModalidadDesafio);
+            }
           }
         }
         if (desafioExistente) {
@@ -248,11 +257,17 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
       return;
     }
 
-    const fechaFinal = usarPersonalizado ? horarioPersonalizado.trim() : horarioSeleccionado;
+    const fechaFinal = formatearFechaHoraDesafio(fechaDesafio, horaDesafio);
     if (!fechaFinal) {
       setError('Por favor indicá un día y horario tentativo.');
       return;
     }
+
+    let fechaUnixFinal = Date.now() + 24 * 3600 * 1000;
+    try {
+      const parsed = new Date(`${fechaDesafio}T${horaDesafio}:00`).getTime();
+      if (!isNaN(parsed)) fechaUnixFinal = parsed;
+    } catch {}
 
     const pingFinal = pingLibre.trim() || pingSeleccionado;
 
@@ -264,7 +279,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
       id: invId,
       modalidad,
       fechaTentativa: fechaFinal,
-      fechaUnix: Date.now() + 24 * 3600 * 1000,
+      fechaUnix: fechaUnixFinal,
       canchaOpcion,
       predioNombre: canchaOpcion === 'con_cancha' ? (predioNombre.trim() || null) : null,
       pingsTacticos: [
@@ -382,12 +397,15 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
     setTextoMensajeChat('');
     setError(null);
+    setEnviandoMensaje(true);
 
     try {
       await agregarPingTacticoDesafio(desafioActivo.id, pingNuevo, Object.keys(cambios).length > 0 ? cambios : undefined);
     } catch (err: any) {
       console.error('Error enviando mensaje en el chat:', err);
       setError(err?.message || 'No se pudo sincronizar el mensaje.');
+    } finally {
+      setEnviandoMensaje(false);
     }
   };
 
@@ -438,8 +456,8 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
   const estaRechazado = pacto?.estado === 'rechazado';
 
   return (
-    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#0B0F19] border border-amber-500/40 rounded-3xl p-4 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.25)] text-left my-auto flex flex-col max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg bg-canvas border border-amber-500/40 rounded-3xl p-4 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.25)] text-left my-auto flex flex-col max-h-[92vh] overflow-hidden">
         
         {/* Botón Cerrar */}
         <button
@@ -492,7 +510,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
 
         {/* Notificación Toast flotante */}
         {toastExito && (
-          <div className="bg-emerald-500 text-zinc-950 font-black text-xs px-4 py-2.5 rounded-xl mt-3 flex items-center justify-between shadow-lg animate-bounce">
+          <div className="bg-emerald-500 text-zinc-950 font-black text-xs px-4 py-2.5 rounded-xl mt-3 flex items-center justify-between shadow-lg animate-slide-up">
             <span>{toastExito}</span>
             <button
               onClick={() => {
@@ -559,7 +577,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
         {desafioActivo && pacto ? (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Barra Táctica con Términos Actuales del Desafío */}
-            <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800/90 rounded-xl px-3 py-2 text-xs mb-2.5 gap-2 flex-wrap">
+            <div className="flex items-center justify-between bg-canvas border border-zinc-800/90 rounded-xl px-3 py-2 text-xs mb-2.5 gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 font-bold text-zinc-200">
                 <span className="bg-amber-500 text-zinc-950 font-black px-1.5 py-0.5 rounded text-[10px]">
                   {pacto.modalidad}
@@ -568,7 +586,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
                 <span className="truncate">{pacto.fechaTentativa}</span>
               </div>
               <div className="flex items-center gap-1 text-zinc-300 text-[11px] truncate">
-                <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <MapPin className="w-3.5 h-3.5 text-pitch shrink-0" />
                 <span className="truncate">
                   {pacto.canchaOpcion === 'con_cancha'
                     ? pacto.predioNombre || 'Cancha reservada'
@@ -582,7 +600,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
             {/* Feed de Mensajes / Pings Tácticos */}
             <div
               ref={scrollRef}
-              className="flex-1 overflow-y-auto space-y-2.5 p-2 bg-zinc-950/60 border border-zinc-800/60 rounded-2xl min-h-[140px] max-h-[220px]"
+              className="flex-1 overflow-y-auto space-y-2.5 p-2 bg-canvas/60 border border-zinc-800/60 rounded-2xl min-h-[140px] max-h-[220px]"
             >
               {pings.length === 0 ? (
                 <div className="text-center py-6 text-zinc-500 text-xs">
@@ -595,7 +613,7 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
                   return (
                     <div
                       key={idx}
-                      className={`flex flex-col ${esMio ? 'items-end' : 'items-start'} animate-fade-in`}
+                      className={`flex flex-col ${esMio ? 'items-end' : 'items-start'} animate-in fade-in duration-200`}
                     >
                       <span className="text-[10px] text-zinc-400 font-bold px-1 mb-0.5">
                         {esMio ? 'Vos' : p.emisorNombre || p.equipoNombre}
@@ -692,7 +710,8 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
                     placeholder="Escribí un ping o tocá un chip..."
                     value={textoMensajeChat}
                     onChange={(e) => setTextoMensajeChat(e.target.value)}
-                    className="flex-1 bg-zinc-950 border border-zinc-700/90 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-500 font-medium"
+                    aria-label="Mensaje del desafío"
+                    className="flex-1 bg-canvas border border-zinc-700/90 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-500 font-medium"
                   />
                   <button
                     type="submit"
@@ -816,47 +835,91 @@ export const ModalProponerDesafio: React.FC<ModalProponerDesafioProps> = ({
                   </div>
                 </div>
 
-                {/* Día y Horario Sugerido (Chips) */}
-                <div>
-                  <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between mb-1.5">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" /> Día y Horario sugerido
+                {/* Día y Horario del Desafío (Selector Personalizado) */}
+                <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      Horario Propuesto del Desafío
+                    </label>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      Personalizado
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setUsarPersonalizado(!usarPersonalizado)}
-                      className="text-amber-400 hover:underline text-[10px] font-bold cursor-pointer"
-                    >
-                      {usarPersonalizado ? 'Ver sugerencias rápidas' : 'Personalizar'}
-                    </button>
-                  </label>
+                  </div>
 
-                  {!usarPersonalizado ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {CHIPS_HORARIOS.map((chip) => (
+                  {/* Atajos Rápidos de Fechas */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: 'Hoy', getFecha: () => new Date().toISOString().split('T')[0]! },
+                      { label: 'Mañana', getFecha: () => new Date(Date.now() + 86400000).toISOString().split('T')[0]! },
+                      {
+                        label: 'Viernes',
+                        getFecha: () => {
+                          const d = new Date();
+                          const diff = (5 - d.getDay() + 7) % 7 || 7;
+                          d.setDate(d.getDate() + diff);
+                          return d.toISOString().split('T')[0]!;
+                        },
+                      },
+                      {
+                        label: 'Sábado',
+                        getFecha: () => {
+                          const d = new Date();
+                          const diff = (6 - d.getDay() + 7) % 7 || 7;
+                          d.setDate(d.getDate() + diff);
+                          return d.toISOString().split('T')[0]!;
+                        },
+                      },
+                    ].map((btn) => {
+                      const f = btn.getFecha();
+                      const activa = fechaDesafio === f;
+                      return (
                         <button
-                          key={chip}
+                          key={btn.label}
                           type="button"
-                          onClick={() => setHorarioSeleccionado(chip)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 border cursor-pointer ${
-                            horarioSeleccionado === chip
+                          onClick={() => setFechaDesafio(f)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 border cursor-pointer ${
+                            activa
                               ? 'bg-amber-500/25 border-amber-500 text-amber-300 shadow-sm'
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                              : 'bg-canvas border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                           }`}
                         >
-                          {chip}
+                          {btn.label}
                         </button>
-                      ))}
+                      );
+                    })}
+                  </div>
+
+                  {/* Campos de Fecha y Hora Exacta */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <span className="text-[10px] font-bold text-zinc-400 block mb-1">Día del partido</span>
+                      <input
+                        type="date"
+                        aria-label="Día del partido"
+                        min={new Date().toISOString().split('T')[0]}
+                        value={fechaDesafio}
+                        onChange={(e) => setFechaDesafio(e.target.value)}
+                        className="w-full bg-canvas border border-zinc-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none cursor-pointer"
+                      />
                     </div>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Ej: Sábado a las 20:30 hs"
-                      value={horarioPersonalizado}
-                      onChange={(e) => setHorarioPersonalizado(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 placeholder:text-zinc-600"
-                    />
-                  )}
+                    <div>
+                      <span className="text-[10px] font-bold text-zinc-400 block mb-1">Hora exacta</span>
+                      <input
+                        type="time"
+                        aria-label="Hora exacta del partido"
+                        value={horaDesafio}
+                        onChange={(e) => setHoraDesafio(e.target.value)}
+                        className="w-full bg-canvas border border-zinc-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Vista Previa Confirmada */}
+                  <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-xs text-amber-300 font-bold">
+                    <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Propuesta: {formatearFechaHoraDesafio(fechaDesafio, horaDesafio)}</span>
+                  </div>
                 </div>
 
                 {/* Cancha / Predio (Chips) */}

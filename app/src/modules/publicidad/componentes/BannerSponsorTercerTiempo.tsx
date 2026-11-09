@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Beer, Sparkles, ExternalLink, MessageCircle, MapPin } from 'lucide-react'
 import type { AnuncioSponsor } from '@/domain/publicidad'
 import { normalizarUrlImagen, normalizarEnlaceDestino } from '@/domain/publicidad'

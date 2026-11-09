@@ -6,6 +6,7 @@ import { obtenerUsuario } from '@/modules/usuarios/repositorio'
 import { CargandoFulbeando } from '@/modules/ui/overlays'
 import { useDatosCarta } from '../useDatosCarta'
 import { TarjetaJugador } from '../componentes/TarjetaJugador'
+import { calcularMedallasJugador, MedalleroDeportivo } from '../medallero'
 
 /**
  * Carta publica de otro jugador, alcanzable por el link que se comparte
@@ -57,7 +58,7 @@ export default function CartaPublica() {
 
   return (
     <div className="h-full flex flex-col bg-transparent font-sans text-slate-800 overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-24 md:pb-8 flex flex-col items-center">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-28 md:pb-8 flex flex-col items-center">
         <button
           onClick={() => navigate(-1)}
           className="self-start flex items-center gap-2 text-slate-600 hover:text-slate-900 active:scale-95 transition-transform cursor-pointer"
@@ -76,6 +77,16 @@ export default function CartaPublica() {
           <>
             <div className="flex-1 flex flex-col items-center justify-center w-full min-h-min my-2 sm:my-4 scale-[0.85] sm:scale-100 origin-center transition-transform">
               <TarjetaJugador datos={datos} />
+            </div>
+
+            <div className="w-full max-w-xs sm:max-w-sm mb-4">
+              <MedalleroDeportivo
+                medallas={calcularMedallasJugador(
+                  usuario.perfilDeportivo,
+                  usuario.perfilDeportivo?.stats?.fairPlayIndex ?? 100,
+                  datos.media
+                )}
+              />
             </div>
 
             <div className="w-full max-w-xs sm:max-w-sm mt-2 sm:mt-4 space-y-3 shrink-0">

@@ -5,12 +5,30 @@ import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { useSesion } from '@/modules/auth/useSesion';
 import { obtenerEstadoNotificaciones, requestNotificationPermission } from '@/modules/notifications/pushService';
 
+const esEntornoPrueba = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return (
+    import.meta.env.DEV ||
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.') ||
+    host.startsWith('172.') ||
+    host.endsWith('.local')
+  );
+};
+
 /**
  * Banners flotantes y permanentes para:
  * 1. Instalar la aplicación (PWA) -> Flotante, permanente hasta que se instale.
  * 2. Permiso de notificaciones push -> Flotante, permanente hasta que se conceda el permiso.
  */
 export const BannersPersistentes: React.FC = () => {
+  if (esEntornoPrueba()) {
+    return null;
+  }
+
   const { debeInstalar, isIOS, promptInstall, isInstalled } = useInstallPrompt();
   const { usuario } = useSesion();
 
@@ -72,7 +90,7 @@ export const BannersPersistentes: React.FC = () => {
 
   // ¿Debe mostrarse el cartel de instalación? (Desactivado momentáneamente)
   // const mostrarCartelInstalar = debeInstalar && !isInstalled;
-  const mostrarCartelInstalar = false;
+  const mostrarCartelInstalar = debeInstalar && !isInstalled;
 
   // ¿Debe mostrarse el cartel de notificaciones?
   const mostrarCartelNotificaciones = notifPerm !== 'unsupported' && notifPerm !== 'granted';
@@ -88,7 +106,7 @@ export const BannersPersistentes: React.FC = () => {
         {/* =========================================================
             CARTEL FLOTANTE PERMANENTE: INSTALAR APLICACIÓN (DESACTIVADO MOMENTÁNEAMENTE)
             ========================================================= */}
-        {/* {mostrarCartelInstalar && (
+        {mostrarCartelInstalar && (
           <motion.div
             key="banner-instalar"
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -175,7 +193,7 @@ export const BannersPersistentes: React.FC = () => {
               </>
             )}
           </motion.div>
-        )} */}
+        )}
 
         {/* =========================================================
             CARTEL FLOTANTE PERMANENTE: PERMISO DE NOTIFICACIONES
@@ -291,7 +309,7 @@ export const BannersPersistentes: React.FC = () => {
       {/* =========================================================
           MODAL: INSTRUCCIONES DE INSTALACIÓN EN IPHONE (iOS) (DESACTIVADO MOMENTÁNEAMENTE)
           ========================================================= */}
-      {/* {mostrarModalIOS && (
+      {mostrarModalIOS && (
         <div className="fixed inset-0 z-[300] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 pointer-events-auto">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -345,12 +363,12 @@ export const BannersPersistentes: React.FC = () => {
             </button>
           </motion.div>
         </div>
-      )} */}
+      )}
 
       {/* =========================================================
           MODAL: INSTRUCCIONES MANUALES DE INSTALACIÓN EN ANDROID / PC (DESACTIVADO MOMENTÁNEAMENTE)
           ========================================================= */}
-      {/* {mostrarModalManualAndroid && (
+      {mostrarModalManualAndroid && (
         <div className="fixed inset-0 z-[300] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 pointer-events-auto">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -404,7 +422,7 @@ export const BannersPersistentes: React.FC = () => {
             </button>
           </motion.div>
         </div>
-      )} */}
+      )}
 
       {/* =========================================================
           MODAL: AYUDA SI LAS NOTIFICACIONES ESTÁN BLOQUEADAS

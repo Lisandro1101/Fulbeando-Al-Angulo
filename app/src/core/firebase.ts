@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { initializeFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
@@ -28,7 +28,11 @@ const app = initializeApp(firebaseConfig);
 
 // Inicializar servicios como instancias consistentes
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// experimentalForceLongPolling es indispensable para que navegadores móviles (iOS Safari / Android Chrome)
+// puedan comunicarse con el emulador local sobre HTTP sin que el socket gRPC/WebChannel se resetee.
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 export const rtdb = getDatabase(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
@@ -40,7 +44,12 @@ export const messaging = typeof window !== 'undefined' && 'serviceWorker' in nav
 // Conectar a la suite de emuladores solo cuando VITE_USE_EMULATORS lo pide.
 // Con la flag en false se habla con el proyecto real, en dev y en build alike.
 if (env.useEmulators) {
-  const emulatorHost = "127.0.0.1";
+  // Resuelve dinámicamente el host: si se accede desde un teléfono en la red local (ej: 192.168.1.60),
+  // se conecta a los emuladores en esa IP en lugar de 127.0.0.1 (que en el celular apuntaría a sí mismo).
+  const emulatorHost =
+    typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : '127.0.0.1';
 
   // Guard para evitar reconexiones múltiples en HMR de Vite
   if (!(globalThis as any)._firebaseEmulatorsConnected) {

@@ -172,7 +172,7 @@ export const listarCandidatosRadar = async (
         where('estado', '==', 'activo'),
         where('perfilDeportivo.disponibleHoy', '==', true),
         where('perfilDeportivo.notificacionesRadar', '==', true),
-        limit(50)
+        limit(600)
       )
     : query(
         col(),
@@ -180,7 +180,7 @@ export const listarCandidatosRadar = async (
         where('estado', '==', 'activo'),
         where('perfilDeportivo.disponibleHoy', '==', true),
         where('perfilDeportivo.notificacionesRadar', '==', true),
-        limit(30)
+        limit(600)
       )
 
   const snap = await getDocs(q)

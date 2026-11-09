@@ -318,6 +318,7 @@ export const PostCard = ({ publicacion: pub, siguiendo, onAlternarSeguir }: Prop
             mvp: 'bg-amber-500/20 border-amber-500 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.3)]',
             like: 'bg-sky-500/20 border-sky-500 text-sky-400 shadow-[0_0_12px_rgba(14,165,233,0.3)]',
             risa: 'bg-yellow-500/20 border-yellow-500 text-yellow-400 shadow-[0_0_12px_rgba(234,179,8,0.3)]',
+            aplausos: 'bg-teal-500/20 border-teal-500 text-teal-400 shadow-[0_0_12px_rgba(20,184,166,0.3)]',
           }
 
           return (

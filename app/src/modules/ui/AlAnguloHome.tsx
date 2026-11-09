@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSesion } from '@/modules/auth/useSesion';
+import { toast } from '@/components/ui/sonner';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '@/core/firebase';
 import { COLECCIONES } from '@/core/config';
@@ -8,9 +9,8 @@ import type { Desafio, Equipo } from '@/domain';
 import { nombreCompleto } from '@/domain';
 import { notificarAceptacionDesafio } from '@/modules/teams/teamService';
 import { Feed } from '@/modules/comunidad/componentes/Feed';
-import { Toast } from '@/modules/ui/overlays';
-import { Users, Search, Calendar, Shield, Swords, ArrowRight, MessageSquare, MapPin, PlusCircle, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Users, Search, Calendar, Shield, Swords, ArrowRight, MessageSquare, PlusCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 type TabHome = 'muro' | 'partidos' | 'equipos';
 
@@ -24,8 +24,7 @@ export default function AlAnguloHome() {
   const [cargandoDatos, setCargandoDatos] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [filtroModalidad, setFiltroModalidad] = useState<string>('todas');
-  const [toastMensaje, setToastMensaje] = useState<string | null>(null);
-
+  
   useEffect(() => {
     let cancelado = false;
 
@@ -123,7 +122,6 @@ export default function AlAnguloHome() {
 
   return (
     <div className="flex flex-col h-full bg-transparent font-sans text-slate-800 overflow-hidden relative">
-      <Toast mensaje={toastMensaje} />
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -183,7 +181,7 @@ export default function AlAnguloHome() {
               <Swords className="w-3.5 h-3.5" />
               <span>Partidos</span>
               {partidos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'partidos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-slate-300 text-amber-900 border border-amber-500/30 font-bold'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'partidos' ? 'bg-canvas/ text-zinc-950' : 'bg-slate-300 text-amber-900 border border-amber-500/30 font-bold'}`}>
                   {partidos.length}
                 </span>
               )}
@@ -202,7 +200,7 @@ export default function AlAnguloHome() {
               <Shield className="w-3.5 h-3.5" />
               <span>Equipos</span>
               {equipos.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'equipos' ? 'bg-zinc-950/20 text-zinc-950' : 'bg-slate-300 text-emerald-900 border border-emerald-500/30 font-bold'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${tabActiva === 'equipos' ? 'bg-canvas/ text-zinc-950' : 'bg-slate-300 text-emerald-900 border border-emerald-500/30 font-bold'}`}>
                   {equipos.length}
                 </span>
               )}
@@ -333,8 +331,7 @@ export default function AlAnguloHome() {
                             return;
                           }
                           if (p.creatorId === usuario.uid) {
-                            setToastMensaje('Este partido fue publicado por vos');
-                            setTimeout(() => setToastMensaje(null), 3000);
+                            toast.info('Este partido fue publicado por vos');
                             return;
                           }
                           try {
@@ -349,12 +346,10 @@ export default function AlAnguloHome() {
                                 descripcion: p.descripcion,
                               }
                             );
-                            setToastMensaje(`¡Te anotaste! Se le envió un aviso al organizador de ${p.equipoNombre} ⚽`);
-                            setTimeout(() => setToastMensaje(null), 4000);
+                            toast.success(`¡Te anotaste! Se le envió un aviso al organizador de ${p.equipoNombre} ⚽`);
                           } catch (err) {
                             console.error('Error al anotarse al partido:', err);
-                            setToastMensaje('No se pudo enviar la solicitud.');
-                            setTimeout(() => setToastMensaje(null), 3000);
+                            toast.error('No se pudo enviar la solicitud.');
                           }
                         }}
                         className="text-xs bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2 px-3.5 rounded-lg transition cursor-pointer shadow-md"

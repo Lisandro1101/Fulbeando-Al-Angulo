@@ -3,7 +3,7 @@ import { CalendarDays, Sparkles } from 'lucide-react'
 import type { CanchaResumen, Predio, Turno } from '@/domain'
 import { bloqueoVencio, calcularMontoSena } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'
-import { listarTurnosEnRango } from '@/modules/turnos/repositorio'
+import { suscribirTurnosEnRango } from '@/modules/turnos/repositorio'
 
 /** Ventana de reserva que se ofrece: hoy mas 7 dias. */
 export const DIAS_DE_RESERVA = 7
@@ -39,19 +39,28 @@ export function useGrillaSemana(predioId: string | null): {
     const desde = aFechaISO()
     const hasta = sumarDias(desde, DIAS_DE_RESERVA - 1)
 
-    listarTurnosEnRango(predioId, desde, hasta)
-      .then((lista) => {
-        if (vigente) setTurnos(lista)
-      })
-      .catch(() => {
-        if (vigente) setError('No pudimos cargar los turnos de este predio.')
-      })
-      .finally(() => {
-        if (vigente) setCargando(false)
-      })
+    const desuscribir = suscribirTurnosEnRango(
+      predioId,
+      desde,
+      hasta,
+      (lista) => {
+        if (vigente) {
+          setTurnos(lista)
+          setCargando(false)
+          setError(null)
+        }
+      },
+      () => {
+        if (vigente) {
+          setError('No pudimos cargar los turnos de este predio.')
+          setCargando(false)
+        }
+      },
+    )
 
     return () => {
       vigente = false
+      desuscribir()
     }
   }, [predioId])
 

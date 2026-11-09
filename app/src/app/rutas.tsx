@@ -194,7 +194,6 @@ export const rutas: RouteObject[] = [
 
 export const router = createBrowserRouter(rutas, {
   future: {
-    v7_startTransition: true,
     v7_relativeSplatPath: true,
   },
 });

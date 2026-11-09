@@ -30,7 +30,7 @@ export const MenuNavegacion: React.FC<MenuNavegacionProps> = ({
   const item = (activo: boolean) =>
     `flex md:flex-row flex-col items-center md:items-center gap-1 md:gap-3 transition-all w-full md:px-4 md:py-3 md:rounded-2xl cursor-pointer ${
       activo
-        ? 'text-emerald-300 font-black md:bg-gradient-to-r md:from-emerald-400/20 md:via-emerald-400/10 md:to-transparent md:border-l-4 md:border-emerald-400 shadow-sm shadow-emerald-400/20'
+        ? 'text-emerald-300 font-black md:bg-emerald-500/15 md:border md:border-emerald-500/30 md:shadow-[0_0_12px_rgba(16,185,129,0.15)]'
         : 'text-indigo-200/80 hover:text-white md:hover:bg-white/10 font-medium'
     }`;
 

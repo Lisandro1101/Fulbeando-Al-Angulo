@@ -3,16 +3,19 @@ import {
   X,
   MessageSquare,
   Shield,
-  Clock,
-  MapPin,
   ChevronRight,
-  Swords,
-  Trophy,
-  ArrowRight,
   Radio,
 } from 'lucide-react';
 import type { InvitacionEquipo } from '@/modules/teams/teamService';
 import { useNavigate } from 'react-router-dom';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerClose,
+} from '@/components/ui/drawer';
 
 interface BandejaChatsDesafioProps {
   abierto: boolean;
@@ -49,17 +52,23 @@ export const BandejaChatsDesafio: React.FC<BandejaChatsDesafioProps> = ({
   }, [desafios, filtro]);
 
   return (
-    <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#0B0F19] border border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-[0_0_50px_rgba(245,158,11,0.25)] text-left my-auto flex flex-col max-h-[88vh] overflow-hidden">
+    <Drawer open={abierto} onOpenChange={(open) => !open && onCerrar()}>
+      <DrawerContent className="p-5 sm:p-6 pb-8 min-h-[580px] max-h-[92vh] md:max-w-lg md:mx-auto">
+        <DrawerHeader className="sr-only">
+          <DrawerTitle>Chats de Desafíos</DrawerTitle>
+          <DrawerDescription>Acuerdos tácticos y partidos entre capitanes</DrawerDescription>
+        </DrawerHeader>
         
         {/* Botón Cerrar */}
-        <button
-          onClick={onCerrar}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10"
-          aria-label="Cerrar bandeja de chats"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <DrawerClose asChild>
+          <button
+            onClick={onCerrar}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700/80 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer z-10"
+            aria-label="Cerrar bandeja de chats"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </DrawerClose>
 
         {/* Encabezado */}
         <div className="flex items-center gap-3 pb-3 border-b border-zinc-800 pr-10">
@@ -222,8 +231,7 @@ export const BandejaChatsDesafio: React.FC<BandejaChatsDesafioProps> = ({
             })
           )}
         </div>
-
-      </div>
-    </div>
+      </DrawerContent>
+    </Drawer>
   );
 };

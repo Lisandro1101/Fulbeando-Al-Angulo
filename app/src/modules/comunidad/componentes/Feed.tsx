@@ -321,7 +321,7 @@ export const Feed = ({ busqueda = '' }: FeedProps) => {
               </React.Fragment>
             )
           })}
-          {postsFiltrados.length > 0 && postsFiltrados.length < 4 && sponsorsFiltrados.length > 0 && (
+          {postsFiltrados.length > 0 && postsFiltrados.length < 4 && sponsorsFiltrados.length > 0 && sponsorsFiltrados[0] && (
             <TarjetaSponsorMuro anuncio={sponsorsFiltrados[0]} />
           )}
         </div>

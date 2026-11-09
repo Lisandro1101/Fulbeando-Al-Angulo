@@ -104,7 +104,7 @@ export default function Ajustes() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-transparent">
-      <Pantalla titulo="Ajustes" subtitulo="Configura tu cuenta deportiva y de predio.">
+      <Pantalla>
         <div className="mb-4 flex gap-2">
           {esDueno ? (
             <>

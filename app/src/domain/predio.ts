@@ -1,5 +1,5 @@
 import type { Auditoria, GeoIndex } from './comun'
-import type { TipoCancha } from './cancha'
+import type { TipoCancha, TipoSuperficie, TarifasDiferenciadas } from './cancha'
 import type { Franja } from './turno'
 
 export type EstadoPredio = 'activo' | 'inactivo'
@@ -47,6 +47,10 @@ export interface CanchaResumen {
   tipo: TipoCancha
   techada: boolean
   precioHora: number
+  fotos?: string[]
+  iluminacion?: boolean
+  tipoSuperficie?: TipoSuperficie
+  tarifas?: TarifasDiferenciadas
 }
 
 export interface ReputacionPredio {

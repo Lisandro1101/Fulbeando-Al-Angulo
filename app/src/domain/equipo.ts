@@ -57,10 +57,13 @@ export interface ConvocatoriaEquipo {
 export interface Equipo {
   id: string
   name: string
+  nombre?: string
   shieldUrl?: string | null
+  escudoUrl?: string | null
   captainId: string
   /** Modalidad base del equipo. Reusa el vocabulario de canchas del modulo FULBEANDO. */
   modalidadBase: string
+  formato?: string
   genero?: 'Masculino' | 'Femenino' | 'Mixto'
   members: MiembroEquipo[]
   stats: {
@@ -158,6 +161,8 @@ export interface DivisionEquipoInfo {
   nombreCorto: string // "1ra División", "Cat A", etc.
   badgeClass: string // Clases Tailwind para el badge
   icono: string // "🏆", "🥇", "🥈", "⚔️", "🥉"
+  colorHex?: string
+  tier?: string
   puntos: number // Puntos acumulados en liga
   mediaEquipo: number // Media general del plantel (50-99)
   insigniaFairPlay: {

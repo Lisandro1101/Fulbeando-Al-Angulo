@@ -68,7 +68,7 @@ export const AlertaInvitacionPush: React.FC = () => {
       // En actualizaciones posteriores, verificar si hay una nueva notificación entrante dirigida al usuario
       for (const inv of lista) {
         // No notificar al propio usuario por sus propias acciones
-        if (inv.remitenteUid === sesion.user.uid) continue;
+        if (inv.remitenteUid === sesion.user?.uid) continue;
 
         const ultimoPing = inv.pactoPartido?.pingsTacticos?.slice(-1)[0];
         const ultimoPingTime = ultimoPing?.fecha || 0;
@@ -76,7 +76,7 @@ export const AlertaInvitacionPush: React.FC = () => {
 
         // Si ya notificamos esta versión o el último mensaje fue del propio usuario, omitir
         if (notificadosRef.current.has(claveNotif)) continue;
-        if (ultimoPing && ultimoPing.emisorUid === sesion.user.uid) {
+        if (ultimoPing && ultimoPing.emisorUid === sesion.user?.uid) {
           notificadosRef.current.add(claveNotif);
           continue;
         }
@@ -259,7 +259,7 @@ export const AlertaInvitacionPush: React.FC = () => {
 
       {/* Alerta Push Modal Interactivo */}
       <div
-        className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+        className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
         onClick={(e) => {
           if (e.target === e.currentTarget) handleCerrar();
         }}
@@ -318,7 +318,7 @@ export const AlertaInvitacionPush: React.FC = () => {
           </h3>
 
           {tipo === 'desafio_equipo' && pacto ? (
-            <div className="mb-5 text-left bg-zinc-950/70 border border-zinc-800 rounded-2xl p-3.5 space-y-2 text-xs">
+            <div className="mb-5 text-left bg-canvas/70 border border-zinc-800 rounded-2xl p-3.5 space-y-2 text-xs">
               <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                 <span className="font-black text-amber-400">{pacto.modalidad}</span>
                 {pacto.equipoDesafianteDivision && (
@@ -344,7 +344,7 @@ export const AlertaInvitacionPush: React.FC = () => {
               {pacto.pingsTacticos && pacto.pingsTacticos.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-zinc-800/80 flex items-start gap-1.5 text-zinc-400 italic">
                   <MessageSquareQuote className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                  <span className="line-clamp-2">"{pacto.pingsTacticos[pacto.pingsTacticos.length - 1].texto}"</span>
+                  <span className="line-clamp-2">"{pacto.pingsTacticos[pacto.pingsTacticos.length - 1]?.texto}"</span>
                 </div>
               )}
             </div>
@@ -376,7 +376,7 @@ export const AlertaInvitacionPush: React.FC = () => {
 
           {/* Subpanel de Contraoferta rápida */}
           {tipo === 'desafio_equipo' && modoContraoferta ? (
-            <div className="mb-4 bg-zinc-950/80 border border-amber-500/40 rounded-2xl p-3 text-left animate-fade-in">
+            <div className="mb-4 bg-canvas/80 border border-amber-500/40 rounded-2xl p-3 text-left animate-in fade-in duration-200">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-2">
                 Seleccioná una contraoferta rápida:
               </span>

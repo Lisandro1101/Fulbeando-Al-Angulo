@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { crearPublicacion } from '@/modules/comunidad/repositorio';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, Download, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2, Clock, Trophy } from 'lucide-react';
-import { MenuNavegacion } from '@/modules/ui/MenuNavegacion';
+import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2, Clock, Trophy } from 'lucide-react';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
 import { useSesion } from '@/modules/auth/useSesion';
-import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { toast } from '@/components/ui/sonner';
 import { MONTO_SENA_DEFAULT, COLECCIONES } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -15,7 +15,7 @@ import { db } from '@/core/firebase';
 import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador, calcularDivisionEquipo, calcularRutaDestino } from '@/domain';
 import { DIVISION_GEOGRAFICA, calcularGeoZona } from '@/core/geo/zonas';
 import { aGeoIndex } from '@/core/geo';
-import { listarTurnosDelOrganizador } from '@/modules/turnos/repositorio';
+import { listarTurnosDelOrganizador, suscribirTurnosDelOrganizador } from '@/modules/turnos/repositorio';
 import { obtenerPredio } from '@/modules/predios/repositorio';
 import { aFechaISO } from '@/core/tiempo';
 import { optimizeAvatarImage } from '@/imageCompressor';
@@ -543,7 +543,7 @@ export const Screen3PlayerOnboarding = () => {
                   placeholder={`Buscar barrio en ${municipioSeleccionado}...`} 
                   value={localidadQuery}
                   onChange={(e) => setLocalidadQuery(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-500 mb-3"
+                  className="w-full bg-canvas border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-emerald-500 mb-3"
                 />
                 <div className="max-h-52 overflow-y-auto space-y-1">
                   {localidadesFiltradas.length > 0 ? (
@@ -606,15 +606,13 @@ export const Screen3PlayerOnboarding = () => {
 // PANTALLA 4: Vista Carta (Welcome)
 // ==========================================
 export const Screen4WelcomeCard = () => {
-  const navigate = useNavigate();
   const sesion = useSesion();
   const { datos, snapshot } = useDatosCarta(sesion.usuario);
   const cartaRef = React.useRef<HTMLDivElement>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [publicando, setPublicando] = useState(false);
   
-  const { isInstallable, promptInstall } = useInstallPrompt();
-
+  
   const mostrarAviso = (mensaje: string) => {
     setAviso(mensaje);
     setTimeout(() => setAviso(null), 3500);
@@ -684,35 +682,8 @@ export const Screen4WelcomeCard = () => {
   return (
     <div className="h-full flex flex-col bg-transparent font-sans text-slate-800 overflow-hidden relative">
       <Toast mensaje={aviso} />
-      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
-        
-        <div className="absolute top-6 right-6 flex gap-2 z-10">
-          {/* Botón de instalar app en celular (desactivado momentáneamente)
-          {isInstallable && (
-            <motion.button 
-              onClick={() => {
-                promptInstall();
-                if(sesion.usuario) requestNotificationPermission(sesion.usuario.uid).catch(e => console.log('Auto-prompt blocked on install', e));
-              }} 
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-              className="flex items-center gap-1 bg-emerald-500 text-zinc-950 px-3 py-2 rounded-full font-bold text-xs cursor-pointer shadow-sm"
-            >
-              <Download className="w-4 h-4" /> Instalar
-            </motion.button>
-          )} */}
-          <motion.button 
-            onClick={() => navigate('/ajustes')} 
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.92 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-            className="text-slate-600 hover:text-slate-900 bg-white/80 border border-slate-200 p-2 rounded-full shadow-sm cursor-pointer"
-          >
-            <Settings className="w-5 h-5" />
-          </motion.button>
-        </div>
 
+      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-28 flex flex-col items-center">
         <motion.div 
           initial={{ opacity: 0, scale: 0.92, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -796,6 +767,7 @@ export const Screen5Reservas = () => {
 
   const avisoCompartir = (msg: string) => {
     setToastCompartir(msg);
+    toast.success(msg);
     setTimeout(() => setToastCompartir(null), 3500);
   };
 
@@ -822,7 +794,7 @@ export const Screen5Reservas = () => {
           }
         })
       );
-      setPrediosNombres(mapa);
+      setPrediosNombres((prev) => ({ ...prev, ...mapa }));
     } catch (err) {
       console.error('Error al cargar turnos del organizador:', err);
     } finally {
@@ -831,8 +803,41 @@ export const Screen5Reservas = () => {
   }, [usuario?.uid]);
 
   React.useEffect(() => {
-    cargarReservas();
-  }, [cargarReservas]);
+    if (!usuario?.uid) {
+      setCargando(false);
+      return;
+    }
+    const hoy = aFechaISO();
+
+    const desuscribir = suscribirTurnosDelOrganizador(
+      usuario.uid,
+      hoy,
+      async (res) => {
+        setTurnos(res);
+        setCargando(false);
+
+        const ids = [...new Set(res.map((t) => t.predioId))];
+        const mapa: Record<string, string> = {};
+        await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const p = await obtenerPredio(id);
+              if (p?.nombre) mapa[id] = p.nombre;
+            } catch (e) {
+              console.error('Error al obtener predio:', id, e);
+            }
+          })
+        );
+        setPrediosNombres((prev) => ({ ...prev, ...mapa }));
+      },
+      (err) => {
+        console.error('Error al escuchar turnos del organizador en tiempo real:', err);
+        setCargando(false);
+      }
+    );
+
+    return () => desuscribir();
+  }, [usuario?.uid]);
 
   const handleAbrirCompartir = async (t: Turno) => {
     setTurnoCompartir(t);
@@ -1045,7 +1050,7 @@ export const Screen5Reservas = () => {
 
       {/* Modal Compartir Reserva con el Equipo */}
       {turnoCompartir && (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div role="dialog" aria-modal="true" aria-label="Compartir reserva con el equipo" className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl animate-slide-up">
             <button
               onClick={() => setTurnoCompartir(null)}
@@ -1065,7 +1070,7 @@ export const Screen5Reservas = () => {
             </p>
 
             {/* Tarjeta resumen de la reserva */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2">
+            <div className="bg-canvas border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-zinc-400">Predio</span>
                 <span className="text-sm font-bold text-white">
@@ -1094,7 +1099,7 @@ export const Screen5Reservas = () => {
 
             {/* Opción 1: Abrir Convocatoria en la app */}
             {equiposCapitan.length > 0 && (
-              <div className="mb-4 p-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl">
+              <div className="mb-4 p-4 bg-canvas/ border border-zinc-800 rounded-2xl">
                 <label className="text-[11px] font-black uppercase text-amber-500 block mb-2">
                   Publicar en la pantalla de equipo
                 </label>
@@ -1182,7 +1187,18 @@ export const Screen6LaunchChallenge = () => {
   const [cargandoEquipos, setCargandoEquipos] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState('');
+  const [toastMessage, setToastMessageRaw] = useState('');
+  const setToastMessage = (msg: string) => {
+    setToastMessageRaw(msg);
+    if (!msg) return;
+    if (msg.includes('Error') || msg.includes('No se pudo') || msg.includes('cerrada') || msg.includes('cancelad')) {
+      toast.error(msg);
+    } else if (msg.includes('¡') || msg.includes('éxito') || msg.includes('confirmad') || msg.includes('guardad') || msg.includes('creada')) {
+      toast.success(msg);
+    } else {
+      toast.info(msg);
+    }
+  };
 
   const limpiarFormulario = () => {
     setModalidad('');
@@ -1199,7 +1215,7 @@ export const Screen6LaunchChallenge = () => {
         setMisEquipos(eqs);
         if (eqs.length > 0) {
           const cap = eqs.find((e: any) => e.captainId === sesion.user?.uid) || eqs[0];
-          setEquipoSeleccionadoId(cap.id);
+          if (cap) setEquipoSeleccionadoId(cap.id);
         }
       })
       .catch((err) => console.warn('Error cargando equipos en Screen6LaunchChallenge:', err))
@@ -1352,7 +1368,7 @@ export const Screen6LaunchChallenge = () => {
 
   return (
     <div className="h-full flex flex-col bg-transparent font-sans text-slate-800 overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
+      <div className="flex-1 overflow-y-auto p-6 pb-28 md:pb-6">
         <Toast mensaje={toastMessage} />
 
       {!mostrarFormulario ? (
@@ -1608,19 +1624,32 @@ export const Screen7MyTeam = () => {
   const [ausentesIds, setAusentesIds] = useState<string[]>([]);
   const [estrellasPredio, setEstrellasPredio] = useState<number>(0);
   const [fairPlayRival, setFairPlayRival] = useState<'BUEN_RIVAL' | 'CONFLICTIVO' | null>(null);
+  const [golesFavor, setGolesFavor] = useState<number>(0);
+  const [golesContra, setGolesContra] = useState<number>(0);
   const [convFecha, setConvFecha] = useState('Jueves 21:00hs');
   const [inviteUsername, setInviteUsername] = useState('');
-  const [toastMessage, setToastMessage] = useState('');
+  const [toastMessage, setToastMessageRaw] = useState('');
+  const setToastMessage = (msg: string) => {
+    setToastMessageRaw(msg);
+    if (!msg) return;
+    if (msg.includes('Error') || msg.includes('No se pudo') || msg.includes('cerrada') || msg.includes('cancelad')) {
+      toast.error(msg);
+    } else if (msg.includes('¡') || msg.includes('éxito') || msg.includes('confirmad') || msg.includes('guardad') || msg.includes('creada')) {
+      toast.success(msg);
+    } else {
+      toast.info(msg);
+    }
+  };
   const [subPestanaPlantel, setSubPestanaPlantel] = useState<'confirmados' | 'todos'>('confirmados');
   const [etapaPartido, setEtapaPartido] = useState<'convocatoria' | 'post_partido'>('convocatoria');
 
   // Busqueda de jugadores REAL (Firestore). Antes había un `mockUsuarios`
   // inventado: "Enviar Notificación" no escribía nada en ninguna parte.
   const [usuariosBuscados, setUsuariosBuscados] = useState<
-    Array<{ uid: string; username: string; apodo: string; emoji: string }>
+    Array<{ uid: string; username: string; apodo: string; emoji: string; posicion?: string; media?: number }>
   >([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<
-    { uid: string; username: string; apodo: string; emoji: string } | null
+    { uid: string; username: string; apodo: string; emoji: string; posicion?: string; media?: number } | null
   >(null);
   const [buscando, setBuscando] = useState(false);
   const [enviandoInvitacion, setEnviandoInvitacion] = useState(false);
@@ -1998,14 +2027,14 @@ export const Screen7MyTeam = () => {
   /** Busca jugadores reales. El contador evita que respuestas viejas pisen a las nuevas. */
   const buscarInvitados = (valor: string) => {
     const token = ++busquedaRef.current;
-    const termino = valor.trim();
-    if (termino.length < 1) {
+    const limpio = valor.trim().replace(/^@+/, '');
+    if (limpio.length < 1) {
       setUsuariosBuscados([]);
       setBuscando(false);
       return;
     }
     setBuscando(true);
-    buscarJugadores(termino, 10, sesion.user?.uid)
+    buscarJugadores(valor, 10, sesion.user?.uid)
       .then((r) => {
         if (token !== busquedaRef.current) return;
         // El mismo que busca no puede aparecer en el listado, ni miembros que ya estén en el equipo
@@ -2014,7 +2043,14 @@ export const Screen7MyTeam = () => {
 
         const disponibles = r.filter((m) => !miembrosActuales.has(m.uid));
         setUsuariosBuscados(
-          disponibles.map((m) => ({ uid: m.uid, username: m.username, apodo: m.name, emoji: m.avatarUrl || '⚽' })),
+          disponibles.map((m) => ({
+            uid: m.uid,
+            username: m.username,
+            apodo: m.name,
+            emoji: m.avatarUrl || '⚽',
+            posicion: m.posicion,
+            media: m.media,
+          })),
         );
       })
       .catch((err) => {
@@ -2114,6 +2150,8 @@ export const Screen7MyTeam = () => {
     setAusentesIds([]);
     setEstrellasPredio(0);
     setFairPlayRival(null);
+    setGolesFavor(0);
+    setGolesContra(0);
 
     // Pre-seleccionar automáticamente al más votado por la cancha si hubo votos
     const conteo: Record<string, number> = {};
@@ -2300,7 +2338,7 @@ export const Screen7MyTeam = () => {
           onChange={(e) => setNuevoNombre(e.target.value)}
           maxLength={60}
           placeholder="Los Pibes de Lomas"
-          className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+          className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
         />
 
         <label className="text-xs font-bold text-zinc-500 uppercase">Formato de juego</label>
@@ -2376,7 +2414,7 @@ export const Screen7MyTeam = () => {
 
   return (
     <div className="h-full flex flex-col bg-transparent font-sans text-white overflow-hidden relative">
-      <div className="flex-1 overflow-y-auto pb-24 md:pb-8">
+      <div className="flex-1 overflow-y-auto pb-28 md:pb-8">
         {/* Toast Notification */}
         <Toast mensaje={toastMessage} />
 
@@ -2508,7 +2546,7 @@ export const Screen7MyTeam = () => {
                 <Users className="w-4 h-4" />
                 <span>1. Convocatoria</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  etapaPartido === 'convocatoria' ? 'bg-zinc-950/25 text-zinc-950' : 'bg-zinc-800 text-amber-400'
+                  etapaPartido === 'convocatoria' ? 'bg-canvas/ text-zinc-950' : 'bg-zinc-800 text-amber-400'
                 }`}>
                   {equipo.convocatoria.confirmados?.length || 0}
                 </span>
@@ -2607,7 +2645,7 @@ export const Screen7MyTeam = () => {
                 )}
 
                 {/* Contadores de Confirmados y Bajas */}
-                <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800 mb-3.5">
+                <div className="flex justify-between items-center bg-canvas p-3 rounded-xl border border-zinc-800 mb-3.5">
                   <div className="text-center flex-1">
                     <div className="text-2xl font-black text-emerald-400">{equipo.convocatoria.confirmados?.length || 0}</div>
                     <div className="text-[11px] uppercase font-bold text-zinc-400">Confirmados</div>
@@ -2752,7 +2790,7 @@ export const Screen7MyTeam = () => {
                     </motion.button>
                   </div>
                 ) : (
-                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center gap-2">
+                  <div className="bg-canvas/ border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>El capitán {equipo.capitanNombre} es el encargado de cargar la planilla oficial tras el partido.</span>
                   </div>
@@ -2760,7 +2798,7 @@ export const Screen7MyTeam = () => {
 
                 {/* Votación democrática de la Figura (MVP) por compañeros y rivales */}
                 {equipo.confirmadosDelPartido && equipo.confirmadosDelPartido.length > 0 && (
-                  <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800/80">
+                  <div className="bg-canvas p-3.5 rounded-xl border border-zinc-800/80">
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm">⭐</span>
@@ -2812,7 +2850,7 @@ export const Screen7MyTeam = () => {
                               yoLoVote
                                 ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
                                 : esMiPropioUsuario
-                                ? 'bg-zinc-950/40 border-zinc-800/40 opacity-50 cursor-not-allowed'
+                                ? 'bg-canvas/ border-zinc-800/40 opacity-50 cursor-not-allowed'
                                 : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/80 cursor-pointer'
                             }`}
                           >
@@ -2866,6 +2904,27 @@ export const Screen7MyTeam = () => {
                   </p>
                 )}
 
+                {/* Resultado Final del Partido */}
+                {typeof equipo.ultimoPartido.golesFavor === 'number' && typeof equipo.ultimoPartido.golesContra === 'number' && (
+                  <div className="bg-canvas border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between mb-3 shadow-inner">
+                    <span className="text-xs font-bold text-zinc-400">Resultado Oficial</span>
+                    <span className={`text-xs sm:text-sm font-black px-3 py-1 rounded-lg border flex items-center gap-1.5 ${
+                      equipo.ultimoPartido.golesFavor > equipo.ultimoPartido.golesContra
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : equipo.ultimoPartido.golesFavor === equipo.ultimoPartido.golesContra
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}>
+                      <span>
+                        {equipo.ultimoPartido.golesFavor > equipo.ultimoPartido.golesContra ? 'Ganamos 🏆' : equipo.ultimoPartido.golesFavor === equipo.ultimoPartido.golesContra ? 'Empate 🤝' : 'Derrota 📉'}
+                      </span>
+                      <span>
+                        {equipo.ultimoPartido.golesFavor} - {equipo.ultimoPartido.golesContra}
+                      </span>
+                    </span>
+                  </div>
+                )}
+
                 {/* MVP Destacado */}
                 {equipo.ultimoPartido.mvpNombre && (
                   <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center gap-3 mb-3">
@@ -2885,7 +2944,7 @@ export const Screen7MyTeam = () => {
 
                 {/* Resumen de Goles y Asistencias cargadas */}
                 {equipo.ultimoPartido.stats && Object.keys(equipo.ultimoPartido.stats).length > 0 && (
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800/80">
+                  <div className="bg-canvas p-3 rounded-xl border border-zinc-800/80">
                     <span className="text-[11px] uppercase font-black text-zinc-500 tracking-wider block mb-2">
                       Goles y Asistencias Registrados
                     </span>
@@ -3119,7 +3178,7 @@ export const Screen7MyTeam = () => {
 
       {/* Modal Configuración */}
       {mostrarConfig && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in duration-200">
           <div role="dialog" aria-modal="true" aria-label="Configurar equipo" className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm relative shadow-2xl max-h-[90vh] overflow-y-auto">
              <button
                type="button"
@@ -3149,7 +3208,7 @@ export const Screen7MyTeam = () => {
 
              <label className="text-xs font-bold text-zinc-500 uppercase">Escudo</label>
              <p className="text-[11px] text-zinc-600 mb-2">Tocá la foto del equipo en el encabezado para subir una imagen.</p>
-             <div className="flex justify-between mt-2 mb-8 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
+             <div className="flex justify-between mt-2 mb-8 bg-canvas p-2 rounded-xl border border-zinc-800">
                {['🛡️', '⚔️', '🦅', '🦁', '⭐'].map(emoji => (
                  <button key={emoji} onClick={() => setEscudoSel(emoji)} className={`w-12 h-12 text-2xl rounded-lg transition-transform ${escudoSel === emoji ? 'bg-amber-500 scale-110' : 'bg-transparent'}`}>{emoji}</button>
                ))}
@@ -3202,11 +3261,11 @@ export const Screen7MyTeam = () => {
 
              <div className="relative flex py-2 items-center mb-6">
                <div className="flex-grow border-t border-zinc-800"></div>
-               <span className="shrink-0 px-4 text-zinc-600 text-xs font-bold uppercase">o buscar por nombre</span>
+               <span className="shrink-0 px-4 text-zinc-600 text-xs font-bold uppercase">o buscar por @usuario o nombre</span>
                <div className="flex-grow border-t border-zinc-800"></div>
              </div>
 
-             <div className={`flex items-center w-full bg-zinc-950 border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
+             <div className={`flex items-center w-full bg-canvas border rounded-xl mb-2 transition-colors overflow-hidden ${usuarioSeleccionado ? 'border-emerald-500' : 'border-zinc-800 focus-within:border-amber-500'}`}>
                <Search className="w-4 h-4 ml-4 text-zinc-500 shrink-0" />
                 <input 
                   aria-label="Buscar jugador por usuario"
@@ -3219,7 +3278,7 @@ export const Screen7MyTeam = () => {
                     buscarInvitados(val);
                   }}
                   className="w-full bg-transparent p-4 text-white font-bold outline-none placeholder:text-zinc-600"
-                  placeholder="buscar por nombre o apellido"
+                  placeholder="Buscar por @usuario o nombre..."
                 />
                 {buscando && <Loader2 className="w-4 h-4 mr-3 text-amber-500 animate-spin shrink-0" />}
                 {usuarioSeleccionado && <span className="pr-4 text-emerald-500">✓</span>}
@@ -3227,7 +3286,7 @@ export const Screen7MyTeam = () => {
 
              {/* Resultados de Búsqueda */}
              {!usuarioSeleccionado && usuariosBuscados.length > 0 && (
-               <div className="bg-zinc-950 border border-zinc-800 rounded-xl mb-4 max-h-40 overflow-y-auto">
+               <div className="bg-canvas border border-zinc-800 rounded-xl mb-4 max-h-52 overflow-y-auto">
                   {usuariosBuscados.map(u => (
                     <div 
                       key={u.uid}
@@ -3236,29 +3295,41 @@ export const Screen7MyTeam = () => {
                         setInviteUsername(u.apodo);
                         setUsuariosBuscados([]);
                       }}
-                     className="flex items-center gap-3 p-3 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors last:border-0"
-                   >
-                     <div className="w-8 h-8 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center text-sm">
-                        {u.emoji?.startsWith('http') ? (
-                          <img src={u.emoji} alt={u.apodo} className="w-full h-full object-cover" />
-                        ) : (
-                          u.emoji
-                        )}
-                     </div>
-                     <div>
-                       <div className="text-sm font-bold text-white">{u.apodo}</div>
-                       <div className="text-xs text-zinc-500 font-medium">@{u.username}</div>
-                     </div>
-                   </div>
-                 ))}
+                      className="flex items-center justify-between p-3 border-b border-zinc-800/50 hover:bg-zinc-800/80 cursor-pointer transition-colors last:border-0"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center text-sm shrink-0 border border-zinc-700/50">
+                           {u.emoji?.startsWith('http') ? (
+                             <img src={u.emoji} alt={u.apodo} className="w-full h-full object-cover" />
+                           ) : (
+                             u.emoji
+                           )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-white truncate">{u.apodo}</div>
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-emerald-400 font-mono font-semibold">@{u.username}</span>
+                            {u.posicion && (
+                              <span className="text-zinc-500 text-[11px]">• {u.posicion}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {u.media !== undefined && (
+                        <div className="shrink-0 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-black">
+                          {u.media} OVR
+                        </div>
+                      )}
+                    </div>
+                  ))}
                </div>
              )}
-              {!usuarioSeleccionado && inviteUsername.trim().length >= 1 && usuariosBuscados.length === 0 && !buscando && (
-                <div className="text-xs text-red-400 font-bold mb-4 px-2">No encontramos a ningún jugador con ese nombre</div>
+              {!usuarioSeleccionado && inviteUsername.trim().replace(/^@+/, '').length >= 1 && usuariosBuscados.length === 0 && !buscando && (
+                <div className="text-xs text-red-400 font-bold mb-4 px-2">No encontramos a ningún jugador con ese @usuario o nombre</div>
               )}
               {usuarioSeleccionado && (
                 <div className="text-xs text-emerald-400 font-bold mb-4 px-2">
-                  Invitando a {usuarioSeleccionado.apodo}. Al enviar, le saldrá un alerta push para unirse.
+                  Invitando a <span className="text-white font-extrabold">{usuarioSeleccionado.apodo}</span> (<span className="font-mono text-emerald-300">@{usuarioSeleccionado.username}</span>). Al enviar, le saldrá un alerta push para unirse.
                 </div>
               )}
 
@@ -3294,7 +3365,7 @@ export const Screen7MyTeam = () => {
                 type="text" 
                 value={convFecha}
                 onChange={(e) => setConvFecha(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+                className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
              />
 
              <button 
@@ -3311,13 +3382,86 @@ export const Screen7MyTeam = () => {
       {modalCrearEquipo}
       {/* Modal Cargar Estadísticas */}
       {mostrarModalEstadisticas && equipo && (
-        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-zinc-950/95 backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-fade-in">
+        <div role="dialog" aria-modal="true" aria-label="3er tiempo" className="fixed inset-0 z-[200] bg-canvas/ backdrop-blur-sm p-4 flex flex-col pt-12 pb-4 animate-in fade-in duration-200">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-black italic text-emerald-500">3er TIEMPO</h2>
             <button onClick={() => setMostrarModalEstadisticas(false)} aria-label="Cerrar" className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
           </div>
           
           <div className="flex-1 overflow-y-auto space-y-6">
+            {/* Carga del Resultado Final (Goles del Encuentro) */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-lg text-center">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  ⚽ Resultado Final del Encuentro
+                </span>
+                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                  golesFavor > golesContra
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : golesFavor === golesContra
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                }`}>
+                  {golesFavor > golesContra ? 'Victoria 🏆' : golesFavor === golesContra ? 'Empate 🤝' : 'Derrota 📉'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 py-2">
+                {/* Mi Equipo */}
+                <div className="flex flex-col items-center flex-1">
+                  <span className="text-xs font-bold text-white truncate max-w-[120px] mb-1">
+                    {equipo.nombre}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGolesFavor((prev) => Math.max(0, prev - 1))}
+                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="text-3xl font-black text-emerald-400 w-10 text-center">{golesFavor}</span>
+                    <button
+                      type="button"
+                      onClick={() => setGolesFavor((prev) => prev + 1)}
+                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <span className="text-xl font-black text-zinc-600 px-1">VS</span>
+
+                {/* Rival */}
+                <div className="flex flex-col items-center flex-1">
+                  <span className="text-xs font-bold text-zinc-300 truncate max-w-[120px] mb-1">
+                    {equipo.convocatoria?.equipoRivalNombre || 'Rival'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGolesContra((prev) => Math.max(0, prev - 1))}
+                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="text-3xl font-black text-rose-400 w-10 text-center">{golesContra}</span>
+                    <button
+                      type="button"
+                      onClick={() => setGolesContra((prev) => prev + 1)}
+                      className="w-8 h-8 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-lg flex items-center justify-center active:scale-90 transition cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-400 mt-2">
+                El marcador final actualizará automáticamente las victorias, empates y derrotas del equipo.
+              </p>
+            </div>
+
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-amber-500">Elegir MVP del Partido ⭐</h3>
@@ -3403,7 +3547,7 @@ export const Screen7MyTeam = () => {
                     <div 
                       key={p.id} 
                       className={`border p-3 rounded-xl flex items-center gap-3 transition-colors ${
-                        estaAusente ? 'bg-zinc-950/70 border-rose-900/40 opacity-70' : 'bg-zinc-900 border-zinc-800'
+                        estaAusente ? 'bg-canvas/ border-rose-900/40 opacity-70' : 'bg-zinc-900 border-zinc-800'
                       }`}
                     >
                       <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 text-lg">{p.emoji}</div>
@@ -3538,6 +3682,8 @@ export const Screen7MyTeam = () => {
                     mvpId,
                     stats: statsPartido,
                     ausentesIds,
+                    golesFavor,
+                    golesContra,
                     calificacionPredio: estrellasPredio > 0 ? {
                       predioId: equipo.convocatoria?.predioId || null,
                       predioNombre: equipo.convocatoria?.predioNombre || equipo.convocatoria?.predio || null,
@@ -3563,7 +3709,7 @@ export const Screen7MyTeam = () => {
 
       {/* Modal Al Radar: Pregunta cuántos jugadores faltan y envía alerta */}
       {mostrarModalRadar && equipo?.convocatoria && (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div role="dialog" aria-modal="true" aria-label="Convocar al radar" className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setMostrarModalRadar(false)}
@@ -3583,7 +3729,7 @@ export const Screen7MyTeam = () => {
             </p>
 
             {/* Datos del partido */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2 text-xs">
+            <div className="bg-canvas border border-zinc-800 rounded-2xl p-4 mb-5 space-y-2 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-zinc-500">Predio / Cancha</span>
                 <span className="font-bold text-white truncate max-w-[200px]">
@@ -3610,7 +3756,7 @@ export const Screen7MyTeam = () => {
                 ¿Cuántos jugadores se necesitan para completar?
               </label>
               
-              <div className="flex items-center justify-center gap-5 bg-zinc-950 p-4 rounded-2xl border border-zinc-800 mb-3">
+              <div className="flex items-center justify-center gap-5 bg-canvas p-4 rounded-2xl border border-zinc-800 mb-3">
                 <button
                   type="button"
                   onClick={() => setJugadoresFaltantes((prev) => Math.max(1, prev - 1))}
@@ -3676,7 +3822,7 @@ export const Screen7MyTeam = () => {
             </div>
 
             {/* Vista previa del mensaje */}
-            <div className="bg-zinc-950/80 border border-blue-500/30 rounded-2xl p-3.5 mb-5">
+            <div className="bg-canvas/ border border-blue-500/30 rounded-2xl p-3.5 mb-5">
               <div className="text-[11px] font-black uppercase text-blue-400 mb-1">Mensaje en el Radar</div>
               <p className="text-xs text-zinc-300 italic font-medium leading-relaxed">
                 "📢 ¡No completamos! Necesitamos a los {jugadoresFaltantes} jugadores necesarios para jugar en{' '}
@@ -3926,7 +4072,7 @@ export const Screen9VenueSubscription = () => {
 // ==========================================
 export const Screen10VenueDashboard = () => {
   return (
-    <div className="mx-auto h-full w-full max-w-3xl bg-zinc-950 p-6 font-sans text-white">
+    <div className="mx-auto h-full w-full max-w-3xl bg-canvas p-6 font-sans text-white">
       <header className="flex justify-between items-center mb-8 mt-4">
         <div>
           <h1 className="text-2xl font-black">El Templo 🏟️</h1>

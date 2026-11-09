@@ -4,13 +4,27 @@ import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
+const esEntornoPrueba = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return (
+    import.meta.env.DEV ||
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.') ||
+    host.startsWith('172.') ||
+    host.endsWith('.local')
+  );
+};
+
 export const obtenerEstadoNotificaciones = (): NotificationPermission | 'unsupported' => {
-  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  if (typeof window === 'undefined' || !('Notification' in window) || esEntornoPrueba()) return 'unsupported';
   return Notification.permission;
 };
 
 export const requestNotificationPermission = async (userId?: string): Promise<NotificationPermission | 'unsupported'> => {
-  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  if (typeof window === 'undefined' || !('Notification' in window) || esEntornoPrueba()) return 'unsupported';
   
   try {
     const permission = await Notification.requestPermission();

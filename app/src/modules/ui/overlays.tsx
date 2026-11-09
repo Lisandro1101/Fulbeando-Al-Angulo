@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useLocation } from 'react-router-dom'
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -20,7 +19,7 @@ export function Toast({ mensaje, tipo = 'exito' }: { mensaje: string | null; tip
     <div
       role="status"
       aria-live="polite"
-      className={`fixed top-6 left-1/2 z-[400] max-w-[90vw] -translate-x-1/2 whitespace-pre-line rounded-2xl px-6 py-3 text-center text-sm font-black shadow-2xl animate-bounce ${TONOS_TOAST[tipo]}`}
+      className={`fixed top-6 left-1/2 z-[400] max-w-[90vw] -translate-x-1/2 whitespace-pre-line rounded-2xl px-6 py-3 text-center text-sm font-black shadow-2xl animate-slide-up ${TONOS_TOAST[tipo]}`}
     >
       {mensaje}
     </div>
@@ -49,7 +48,7 @@ export function Modal({
   if (!abierto) return null
   return (
     <div
-      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onCerrar}
     >
       <div
@@ -79,9 +78,9 @@ export function Modal({
 /* Skeleton para estados de carga.                                     */
 /* ------------------------------------------------------------------ */
 
-export function Esqueleto({ className = '' }: { className?: string }) {
-  return <div aria-hidden className={`animate-pulse rounded-xl bg-zinc-800/70 ${className}`} />
-}
+import { Skeleton } from '@/components/ui/skeleton'
+
+export const Esqueleto = Skeleton
 
 /* ------------------------------------------------------------------ */
 /* Loading de marca: wordmark FULBEANDO + radar latiendo.             */
@@ -142,6 +141,17 @@ export function useConfirmar(): ConfirmarFn {
   return ctx
 }
 
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog'
+
 export function ProveedorConfirm({ children }: { children: ReactNode }) {
   const [estado, setEstado] = useState<{
     mensaje: string
@@ -167,32 +177,25 @@ export function ProveedorConfirm({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={confirmar}>
       {children}
-      <Modal
-        abierto={estado !== null}
-        etiqueta={opciones.titulo ?? 'Confirmación'}
-        rol="alertdialog"
-      >
-        <h2 className="pr-8 text-lg font-black text-white">{opciones.titulo ?? 'Confirmar'}</h2>
-        <p className="mt-2 text-sm text-zinc-400">{estado?.mensaje}</p>
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={() => responder(false)}
-            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-bold text-white transition hover:bg-zinc-700"
-          >
-            {opciones.textoCancelar ?? 'Cancelar'}
-          </button>
-          <button
-            type="button"
-            onClick={() => responder(true)}
-            className={`flex-1 rounded-xl px-4 py-3 text-sm font-black text-zinc-950 transition ${
-              opciones.peligro ? 'bg-red-500 hover:bg-red-400' : 'bg-emerald-500 hover:bg-emerald-400'
-            }`}
-          >
-            {opciones.textoConfirmar ?? 'Confirmar'}
-          </button>
-        </div>
-      </Modal>
+      <AlertDialog open={estado !== null} onOpenChange={(open) => !open && responder(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{opciones.titulo ?? '¿Estás seguro?'}</AlertDialogTitle>
+            <AlertDialogDescription>{estado?.mensaje}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => responder(false)}>
+              {opciones.textoCancelar ?? 'Cancelar'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => responder(true)}
+              className={opciones.peligro ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black'}
+            >
+              {opciones.textoConfirmar ?? 'Confirmar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ConfirmContext.Provider>
   )
 }

@@ -107,6 +107,7 @@ export interface RadarPinJugador extends RadarPinBase {
   uid: string
   nombre: string
   apellido: string
+  username?: string
   playerRole: string | null
   media: number
   fairPlay: number

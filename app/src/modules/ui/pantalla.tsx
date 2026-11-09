@@ -16,15 +16,17 @@ export function Pantalla({
   return (
     <div className="flex flex-1 min-h-0 w-full flex-col overflow-hidden bg-[#1E0D4A]">
       {/* Panel de arriba: Morado deportivo #361982 con degradé dinámico a pantalla completa */}
-      <header className="sticky top-0 z-20 border-b border-[#4C24B2]/40 bg-gradient-to-r from-[#361982] via-[#2A1367] to-[#361982] px-4 md:pl-8 md:pr-44 py-4 backdrop-blur-md shadow-lg">
-        <div className="flex w-full items-center justify-between gap-3">
-          <div>
-            {titulo && <h1 className="text-lg md:text-xl font-black text-white tracking-wide">{titulo}</h1>}
-            {subtitulo && <p className="text-sm text-indigo-200/90 font-medium">{subtitulo}</p>}
+      {(titulo || subtitulo || acciones) ? (
+        <header className="sticky top-0 z-20 border-b border-[#4C24B2]/40 bg-gradient-to-r from-[#361982] via-[#2A1367] to-[#361982] px-4 md:pl-8 md:pr-44 py-4 backdrop-blur-md shadow-lg">
+          <div className="flex w-full items-center justify-between gap-3">
+            <div>
+              {titulo && <h1 className="text-lg md:text-xl font-black text-white tracking-wide">{titulo}</h1>}
+              {subtitulo && <p className="text-sm text-indigo-200/90 font-medium">{subtitulo}</p>}
+            </div>
+            {acciones && <div className="flex items-center gap-2 shrink-0">{acciones}</div>}
           </div>
-          {acciones && <div className="flex items-center gap-2 shrink-0">{acciones}</div>}
-        </div>
-      </header>
+        </header>
+      ) : null}
 
       {/* Recuadro de contenido: Lienzo claro deportivo de alto contraste que ocupa el 100% del ancho disponible */}
       <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#F8FAFC] via-[#F1F5F9] to-[#E2E8F0]/70 text-slate-800">

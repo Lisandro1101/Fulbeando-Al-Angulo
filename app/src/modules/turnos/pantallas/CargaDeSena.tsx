@@ -5,7 +5,7 @@ import type { Predio, Turno } from '@/domain'
 import { MAX_BYTES_COMPROBANTE, MINUTOS_BLOQUEO_TEMPORAL, canchasDe, calcularMontoSena, turnoId } from '@/domain'
 import { formatearFechaCorta, formatearMoneda } from '@/core/tiempo'
 import { obtenerPredio } from '@/modules/predios/repositorio'
-import { obtenerTurno, solicitarTurno } from '@/modules/turnos/repositorio'
+import { obtenerTurno, solicitarTurno, suscribirTurno } from '@/modules/turnos/repositorio'
 import { subirImagenComprobante } from '@/modules/comprobantes/repositorio'
 import { BotonIngreso } from '@/modules/auth/BotonIngreso'
 import { useSesion } from '@/modules/auth/useSesion'
@@ -78,17 +78,17 @@ export default function CargaDeSena() {
     if (idTurno) void obtenerTurno(idTurno).then(setTurno)
   }, [idTurno])
 
-  // El dueno aprueba desde su panel: consultamos el estado cada 10 segundos.
+  // El dueño aprueba/rechaza desde su panel: escuchamos en tiempo real con onSnapshot
   useEffect(() => {
-    if (vista !== 'esperando' || turno === null) return
-    if (turno.estado !== 'bloqueado_temporal') return
-    if (turno.bloqueadoHasta === null) return
+    if (vista !== 'esperando' || !turno?.id) return
 
-    const t = setInterval(() => {
-      void obtenerTurno(turno.id).then(setTurno)
-    }, 10000)
-    return () => clearInterval(t)
-  }, [vista, turno])
+    const desuscribir = suscribirTurno(turno.id, (turnoActualizado) => {
+      if (turnoActualizado) {
+        setTurno(turnoActualizado)
+      }
+    })
+    return () => desuscribir()
+  }, [vista, turno?.id])
 
   const elegirArchivo = (elegido: File | null) => {
     setError(null)

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Building, Loader2, Lock, Plus, Trash2, Unlock, X } from 'lucide-react'
 import type { Predio, Turno } from '@/domain'
-import { canchasDe } from '@/domain'
+import { canchasDe, calcularPrecioHoraCancha } from '@/domain'
 import { aFechaISO, esHoy, formatearFechaCorta, formatearMoneda, sumarDias } from '@/core/tiempo'
 import { actualizarCobro, listarPrediosDelDueno, obtenerPredio } from '@/modules/predios/repositorio'
 import {
@@ -14,6 +14,8 @@ import {
   listarTurnosDelDia,
   listarTurnosPendientesDeValidacion,
   rechazarTurno,
+  suscribirTurnosDelDia,
+  suscribirTurnosPendientesDeValidacion,
 } from '@/modules/turnos/repositorio'
 import { collection, getDocs, query } from 'firebase/firestore'
 import { db } from '@/core/firebase'
@@ -24,8 +26,9 @@ import { GrillaSemaforo, type CeldaSeleccionada, type SlotVacioSeleccionado } fr
 import { GeneradorGrilla } from '@/modules/predios/componentes/GeneradorGrilla'
 import { GestorCanchas } from '@/modules/canchas/componentes/GestorCanchas'
 import { ModalValidacion } from '@/modules/predios/componentes/ModalValidacion'
+import { BalanceCaja } from '@/modules/predios/componentes/BalanceCaja'
 import { Etiqueta, Pantalla, Tarjeta } from '@/modules/ui/pantalla'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 
 const DIAS = 7
 
@@ -48,6 +51,7 @@ export default function DashboardDueno() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [procesandoTurnoId, setProcesandoTurnoId] = useState<string | null>(null)
+  const [pestanaActiva, setPestanaActiva] = useState<'grilla' | 'balance'>('grilla')
 
   const esDueno =
     sesion.actor !== null &&
@@ -134,6 +138,42 @@ export default function DashboardDueno() {
     void recargar()
   }, [recargar])
 
+  // Suscripciones en tiempo real con onSnapshot:
+  // 1. Solicitudes de reserva pendientes de validación (aparecen de inmediato sin presionar Actualizar)
+  useEffect(() => {
+    const targetPredioId = predioActivoId ?? predio?.id
+    if (!targetPredioId) return
+
+    const desuscribir = suscribirTurnosPendientesDeValidacion(
+      targetPredioId,
+      (lista) => {
+        setPendientes(lista)
+      },
+      (err) => {
+        console.error('Error al escuchar pendientes en tiempo real:', err)
+      },
+    )
+    return () => desuscribir()
+  }, [predioActivoId, predio?.id])
+
+  // 2. Turnos del día seleccionado (la grilla del semáforo se actualiza sola al instante)
+  useEffect(() => {
+    const targetPredioId = predioActivoId ?? predio?.id
+    if (!targetPredioId) return
+
+    const desuscribir = suscribirTurnosDelDia(
+      targetPredioId,
+      fecha,
+      (lista) => {
+        setTurnos(lista)
+      },
+      (err) => {
+        console.error('Error al escuchar turnos del día en tiempo real:', err)
+      },
+    )
+    return () => desuscribir()
+  }, [predioActivoId, predio?.id, fecha])
+
   const manejarBloqueoManual = useCallback(async (turnoId: string) => {
     setProcesandoTurnoId(turnoId)
     // 1. Actualización optimista inmediata en la grilla: cambia a rojo (ocupado) al instante
@@ -215,7 +255,7 @@ export default function DashboardDueno() {
       horaFin: hora,
       estado: 'disponible',
       origen: 'carga_manual_dueno',
-      precioTotal: cancha.precioHora,
+      precioTotal: calcularPrecioHoraCancha(cancha, fecha, hora),
       montoSena: 0,
       organizadorUid: null,
       organizadorNombre: null,
@@ -247,12 +287,7 @@ export default function DashboardDueno() {
   }, [predio, fecha, recargar])
 
 
-  // Mientras haya solicitudes sin validar, la cola se refresca sola.
-  useEffect(() => {
-    if (pendientes.length === 0) return
-    const t = setInterval(() => void recargar(), 20000)
-    return () => clearInterval(t)
-  }, [pendientes.length, recargar])
+
 
   if (sesion.user === null) {
     return (
@@ -362,10 +397,40 @@ export default function DashboardDueno() {
 
         {predio && (
           <>
-            <Tarjeta
-              titulo={`Solicitudes por validar (${pendientes.length})`}
-              descripcion="Revisa el comprobante y aproba con un clic."
-            >
+            {/* PESTAÑAS: GRILLA OPERATIVA vs BALANCE DE CAJA */}
+            <div className="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-2xl border border-slate-700/50 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('grilla')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  pestanaActiva === 'grilla'
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/25'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                ⚽ Grilla de Turnos
+              </button>
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('balance')}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  pestanaActiva === 'balance'
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/25'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                📊 Balance de Caja & Historial
+              </button>
+            </div>
+
+            {pestanaActiva === 'balance' ? (
+              <BalanceCaja predio={predio} />
+            ) : (
+              <>
+                <Tarjeta
+                  titulo={`Solicitudes por validar (${pendientes.length})`}
+                  descripcion="Revisa el comprobante y aproba con un clic."
+                >
               {pendientes.length === 0 ? (
                 <p className="text-sm text-slate-600 font-semibold">No hay solicitudes esperando.</p>
               ) : (
@@ -472,7 +537,8 @@ export default function DashboardDueno() {
                 alSeleccionarVacio={(vacio) => setSlotVacio(vacio)}
               />
             </Tarjeta>
-
+              </>
+            )}
           </>
         )}
       </div>
@@ -521,7 +587,7 @@ export default function DashboardDueno() {
 
     {abrirGestorCanchas && predio && (
       <div
-        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-fade-in"
+        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         onClick={(e) => {
@@ -555,7 +621,7 @@ export default function DashboardDueno() {
 
     {celda && celda.turno.estado !== 'disponible' && celda.semaforo === 'ocupado' && (
       <div
-        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-fade-in"
+        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         onClick={(e) => {
@@ -631,7 +697,7 @@ export default function DashboardDueno() {
 
     {celda && celda.turno.estado === 'disponible' && celda.semaforo === 'libre' && (
       <div
-        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-fade-in"
+        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         onClick={(e) => {
@@ -686,7 +752,7 @@ export default function DashboardDueno() {
 
     {slotVacio && (
       <div
-        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-fade-in"
+        className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         onClick={(e) => {
@@ -702,7 +768,7 @@ export default function DashboardDueno() {
                 <span className="font-bold text-slate-900">{slotVacio.hora}</span> ({esHoy(fecha) ? 'Hoy' : formatearFechaCorta(fecha)})
               </p>
               <p className="mt-1 text-xs text-slate-500 font-medium">
-                Precio de lista: {formatearMoneda(slotVacio.cancha.precioHora)} por turno
+                Precio de lista: {formatearMoneda(calcularPrecioHoraCancha(slotVacio.cancha, fecha, slotVacio.hora))} por turno
               </p>
             </div>
             <button
@@ -759,7 +825,7 @@ export default function DashboardDueno() {
 
     {abrirGenerador && predio && (
       <div
-        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 sm:p-6 animate-fade-in"
+        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 sm:p-6 animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         onClick={(e) => {
@@ -841,7 +907,7 @@ function ModalConfigCobro({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-fade-in"
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/75 backdrop-blur-sm p-0 sm:items-center sm:p-4 animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {

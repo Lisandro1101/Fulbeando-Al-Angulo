@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, Swords, MessageSquare } from 'lucide-react';
-import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha, type RadarPinDesafio } from '../radarService';
+import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, MessageSquare, SlidersHorizontal } from 'lucide-react';
+import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha, type RadarPinDesafio, type RadarPinEquipo } from '../radarService';
 import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
-import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId, abrirChatDesafio } from '@/modules/teams/teamService';
+import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId, abrirChatDesafio, notificarPostulacionAlerta } from '@/modules/teams/teamService';
+import { postularse } from '@/modules/alertas/repositorio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto, calcularMediaJugador, calcularDivisionEquipo, type DivisionEquipoInfo } from '@/domain';
 import { type Punto } from '@/core/geo/geohash';
@@ -14,9 +15,19 @@ import { appEnv } from '@/core/config';
 import Supercluster from 'supercluster';
 import type { ClusterFeature, PointFeature } from 'supercluster';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { Toast } from '@/modules/ui/overlays';
+import { toast } from '@/components/ui/sonner';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerClose,
+} from '@/components/ui/drawer';
 import { obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
 import { BannerSponsorRadar } from '@/modules/publicidad/componentes/BannerSponsorRadar';
+import { BuscadorRadar } from '../componentes/BuscadorRadar';
+import { calcularMedallasJugador, MedalleroDeportivo } from '@/modules/cuenta/medallero';
 
 const LOCALIDADES_FALLBACK = [
   { nombre: 'CABA', lat: -34.6037, lng: -58.3816 },
@@ -139,12 +150,7 @@ function iconoDe(entidad: RadarEntity): L.DivIcon {
   return iconoJugadorLibre;
 }
 
-const EMOJI_POR_TIPO: Record<RadarEntityType, string> = {
-  cancha: '🏟️',
-  equipo: '🛡️',
-  desafio: '⚽',
-  jugador: '🏃',
-};
+// const EMOJI_POR_TIPO: Record<RadarEntityType, string> = { ... } (reservado)
 
 /** Bounding box del viewport en el orden que espera supercluster: [W, S, E, N]. */
 function bboxDe(map: L.Map): [number, number, number, number] {
@@ -251,9 +257,9 @@ function FlyToLocation({ lat, lng }: { lat: number | null, lng: number | null })
 }
 
 // Tipos para el estado unificado
-type RadarEntityType = 'cancha' | 'equipo' | 'desafio' | 'jugador';
+export type RadarEntityType = 'cancha' | 'equipo' | 'desafio' | 'jugador';
 
-interface BaseEntity {
+export interface BaseEntity {
   id: string;
   lat: number;
   lng: number;
@@ -261,7 +267,7 @@ interface BaseEntity {
   distanciaKm: number;
 }
 
-interface CanchaEntity extends BaseEntity {
+export interface CanchaEntity extends BaseEntity {
   type: 'cancha';
   nombre: string;
   direccion?: string;
@@ -269,13 +275,15 @@ interface CanchaEntity extends BaseEntity {
   ciudad?: string;
   telefono?: string;
   tipo: string;
+  tiposCancha?: string[];
+  techada?: boolean;
   cantidadCanchas: number;
   promedioRating?: number;
   ratingCount?: number;
 }
 
 /** Capa de equipos del area: la que mira el dueno de cancha para ofrecerles canchas. */
-interface EquipoEntity extends BaseEntity {
+export interface EquipoEntity extends BaseEntity {
   type: 'equipo';
   equipoId: string;
   nombre: string;
@@ -288,7 +296,7 @@ interface EquipoEntity extends BaseEntity {
   divisionInfo?: DivisionEquipoInfo;
 }
 
-interface DesafioEntity extends BaseEntity {
+export interface DesafioEntity extends BaseEntity {
   type: 'desafio';
   /** Cruce con FULBEANDO: el desafio con `turnoId` ya tiene la cancha reservada. */
   desafioId: string;
@@ -304,16 +312,19 @@ interface DesafioEntity extends BaseEntity {
   jugadoresFaltantes?: number;
 }
 
-interface JugadorEntity extends BaseEntity {
+export interface JugadorEntity extends BaseEntity {
   type: 'jugador';
   uid: string;
   apodo: string;
+  username?: string;
   posicion: string;
   media: number;
   fairPlay: number;
+  fotoUrl?: string | null;
+  disponibleDesdeHora?: string | null;
 }
 
-type RadarEntity = CanchaEntity | EquipoEntity | DesafioEntity | JugadorEntity;
+export type RadarEntity = CanchaEntity | EquipoEntity | DesafioEntity | JugadorEntity;
 
 type FiltroRadar = 'todos' | 'canchas' | 'equipos' | 'desafios' | 'jugadores';
 
@@ -446,14 +457,18 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
       const mediaFifa = rawMedia <= 10 && rawMedia > 0 ? Math.round(rawMedia * 10) : Math.round(rawMedia);
       const rawFp = pin.fairPlay;
       const fairPlayPct = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
+      const username = (pin as any).username || (pin as any).email?.split('@')[0] || '';
       return {
         ...base,
         type: 'jugador',
         uid: pin.uid,
         apodo: `${pin.nombre} ${pin.apellido}`.trim() || 'Jugador',
+        username,
         posicion: ETIQUETA_POSICION[pin.playerRole ?? ''] ?? 'Cualquiera',
         media: mediaFifa,
         fairPlay: fairPlayPct,
+        fotoUrl: (pin as any).fotoUrl ?? null,
+        disponibleDesdeHora: (pin as any).disponibleDesdeHora ?? null,
       };
     }
   }
@@ -675,7 +690,16 @@ export const MapaRadarUnificado: React.FC = () => {
   // Estado de Selección (Bottom Sheet)
   const [seleccionado, setSeleccionado] = useState<RadarEntity | null>(null);
 
-  const [toastMessage, setToastMessage] = useState('');
+  // Barra de Búsqueda interactiva en el Radar
+  const [mostrarBuscador, setMostrarBuscador] = useState(false);
+  const [centroManual, setCentroManual] = useState<Punto | null>(null);
+
+  // Filtros avanzados del Mapa y Radar (tipo cancha, techada, franja horaria)
+  const [mostrarFiltrosAvanzados, setMostrarFiltrosAvanzados] = useState(false);
+  const [filtroTipoCancha, setFiltroTipoCancha] = useState<'todos' | 'F5' | 'F7' | 'F8' | 'F11'>('todos');
+  const [filtroSoloTechada, setFiltroSoloTechada] = useState(false);
+  const [filtroFranjaHoraria, setFiltroFranjaHoraria] = useState<'todos' | 'manana' | 'tarde' | 'noche'>('todos');
+
   const [contactandoWhatsapp, setContactandoWhatsapp] = useState(false);
 
   // Auto-seleccionar equipo si vino por navegación o redirigir al chat de desafío
@@ -791,15 +815,13 @@ export const MapaRadarUnificado: React.FC = () => {
       }
 
       if (!tel || !tel.trim()) {
-        setToastMessage('Este predio no tiene teléfono de contacto registrado.');
-        setTimeout(() => setToastMessage(''), 3500);
+        toast.info('Este predio no tiene teléfono de contacto registrado.');
         return;
       }
 
       const telFormateado = formatearParaWhatsApp(tel);
       if (!telFormateado) {
-        setToastMessage('El número de teléfono del predio no es válido.');
-        setTimeout(() => setToastMessage(''), 3500);
+        toast.error('El número de teléfono del predio no es válido.');
         return;
       }
 
@@ -808,8 +830,7 @@ export const MapaRadarUnificado: React.FC = () => {
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       console.error('Error al abrir WhatsApp:', err);
-      setToastMessage('No se pudo abrir WhatsApp para este predio.');
-      setTimeout(() => setToastMessage(''), 3500);
+      toast.error('No se pudo abrir WhatsApp para este predio.');
     } finally {
       setContactandoWhatsapp(false);
     }
@@ -823,7 +844,7 @@ export const MapaRadarUnificado: React.FC = () => {
   const fallbackLat = usuario?.geo?.lat ?? -34.6037;
   const fallbackLng = usuario?.geo?.lng ?? -58.3816;
 
-  const mapCenter = { lat: geoLoc.latitude || fallbackLat, lng: geoLoc.longitude || fallbackLng };
+  const mapCenter = centroManual ?? { lat: geoLoc.latitude || fallbackLat, lng: geoLoc.longitude || fallbackLng };
 
   // CARGA DE DATOS
   //
@@ -840,7 +861,7 @@ export const MapaRadarUnificado: React.FC = () => {
       try {
         const { pins } = await consultarRadar(punto, radioKm);
         setEntidades(
-          pins.map(entidadDePin).sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 100)
+          pins.map(entidadDePin).sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 1000)
         );
         return;
       } catch (err) {
@@ -869,6 +890,8 @@ export const MapaRadarUnificado: React.FC = () => {
         ciudad: p.ciudad,
         telefono: p.telefono,
         tipo: canchas[0]?.tipo ?? 'Sintetico',
+        tiposCancha: canchas.map((c) => c.tipo),
+        techada: canchas.some((c) => c.techada),
         cantidadCanchas: canchas.length,
         promedioRating: p.reputation?.promedio,
         ratingCount: p.reputation?.ratingCount,
@@ -921,6 +944,7 @@ export const MapaRadarUnificado: React.FC = () => {
         const rawFp = perf.stats?.fairPlayIndex ?? 100;
         const fairPlayPct = rawFp <= 10 && rawFp > 0 ? Math.round(rawFp * 10) : Math.min(100, Math.round(rawFp));
 
+        const username = u.email ? u.email.split('@')[0] : '';
         return {
           id: u.uid,
           type: 'jugador' as const,
@@ -929,9 +953,12 @@ export const MapaRadarUnificado: React.FC = () => {
           distanciaKm: u.distanciaKm,
           uid: u.uid,
           apodo: nombreCompleto(u) || 'Jugador',
+          username,
           posicion: ETIQUETA_POSICION[perf.playerRole ?? ''] ?? 'Cualquiera',
           media: mediaFifa,
           fairPlay: fairPlayPct,
+          fotoUrl: u.fotoUrl ?? null,
+          disponibleDesdeHora: perf.disponibleDesdeHora ?? null,
         };
       });
 
@@ -984,7 +1011,7 @@ export const MapaRadarUnificado: React.FC = () => {
       ...equiposEntities,
       ...desafiosEntities,
       ...jugadoresEntities,
-    ].sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 100));
+    ].sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 1000));
   }, []);
 
   // La carga inicial no vive en un efecto aparte: la dispara
@@ -1041,15 +1068,67 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
 
   const entidadesVisibles = useMemo(() => {
     const tipoVisible = TIPO_POR_FILTRO[filtroActivo];
-    return tipoVisible === null ? entidades : entidades.filter(e => e.type === tipoVisible);
-  }, [entidades, filtroActivo]);
+    let lista = tipoVisible === null ? entidades : entidades.filter((e) => e.type === tipoVisible);
+
+    // Filtro por formato / tipo de cancha (F5, F7, F8, F11)
+    if (filtroTipoCancha !== 'todos') {
+      lista = lista.filter((e) => {
+        if (e.type === 'cancha') {
+          const c = e as CanchaEntity;
+          return (
+            c.tiposCancha?.includes(filtroTipoCancha) ||
+            c.tipo.toUpperCase().includes(filtroTipoCancha) ||
+            c.nombre.toUpperCase().includes(filtroTipoCancha)
+          );
+        }
+        if (e.type === 'desafio') {
+          const d = e as DesafioEntity;
+          return d.modalidad.toUpperCase().includes(filtroTipoCancha);
+        }
+        if (e.type === 'equipo') {
+          const eq = e as EquipoEntity;
+          return eq.modalidad.toUpperCase().includes(filtroTipoCancha);
+        }
+        return true;
+      });
+    }
+
+    // Filtro por cancha techada
+    if (filtroSoloTechada) {
+      lista = lista.filter((e) => {
+        if (e.type === 'cancha') {
+          const c = e as CanchaEntity;
+          return c.techada === true || c.nombre.toLowerCase().includes('techad') || c.tipo.toLowerCase().includes('techad');
+        }
+        if (e.type === 'desafio') {
+          const d = e as DesafioEntity;
+          return d.conCancha === true;
+        }
+        return false;
+      });
+    }
+
+    // Filtro por franja horaria (mañana: <13h, tarde: 13-19h, noche: >=19h)
+    if (filtroFranjaHoraria !== 'todos') {
+      lista = lista.filter((e) => {
+        if (e.type === 'desafio') {
+          const d = e as DesafioEntity;
+          const hora = new Date(d.fechaUnix).getHours();
+          if (filtroFranjaHoraria === 'manana') return hora < 13;
+          if (filtroFranjaHoraria === 'tarde') return hora >= 13 && hora < 19;
+          if (filtroFranjaHoraria === 'noche') return hora >= 19;
+        }
+        return true;
+      });
+    }
+
+    return lista;
+  }, [entidades, filtroActivo, filtroTipoCancha, filtroSoloTechada, filtroFranjaHoraria]);
 
   return (
     <div className="h-full w-full bg-canvas relative font-sans overflow-hidden">
       
-      {/* Toast Notification */}
-      <Toast mensaje={toastMessage} />
-
+      
       {/* MAPA BASE */}
       <div className="absolute inset-0 z-0">
         <MapContainer
@@ -1133,6 +1212,27 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             <IconoJugador className="w-3.5 h-3.5 shrink-0" />
             <span>Jugadores<span className="hidden sm:inline"> Libres</span></span>
           </button>
+
+          {/* BOTÓN FILTROS AVANZADOS */}
+          <button
+            onClick={() => setMostrarFiltrosAvanzados((v) => !v)}
+            aria-label="Filtros avanzados"
+            title="Filtrar por formato de cancha, techada y franja horaria"
+            className={`px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full font-bold text-[11px] sm:text-xs whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              (filtroTipoCancha !== 'todos' || filtroSoloTechada || filtroFranjaHoraria !== 'todos')
+                ? 'bg-emerald-500 text-zinc-950 font-black shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                : mostrarFiltrosAvanzados
+                ? 'bg-white/20 text-white'
+                : 'text-indigo-200/80 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Filtros</span>
+            {(filtroTipoCancha !== 'todos' || filtroSoloTechada || filtroFranjaHoraria !== 'todos') && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            )}
+          </button>
+
           {cargando && (
             <span className="px-2 py-1 sm:px-3 sm:py-2 text-[10px] sm:text-[11px] font-bold text-indigo-300 whitespace-nowrap animate-pulse">
               Buscando…
@@ -1140,6 +1240,93 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
           )}
         </div>
       </div>
+
+      {/* PANEL FLOTANTE DE FILTROS AVANZADOS (FORMATO, TECHADA, HORARIO) */}
+      {mostrarFiltrosAvanzados && (
+        <div className="absolute top-[3.8rem] sm:top-[4.2rem] w-full flex justify-center z-25 pointer-events-none px-2 sm:px-4 animate-in fade-in duration-200">
+          <div className="bg-canvas/95 backdrop-blur-xl border border-zinc-700/80 rounded-2xl p-3 shadow-2xl pointer-events-auto max-w-lg w-full space-y-2.5">
+            {/* Formato de Cancha */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-400 font-bold">Formato / Cancha:</span>
+              <div className="flex gap-1">
+                {(['todos', 'F5', 'F7', 'F8', 'F11'] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => setFiltroTipoCancha(fmt)}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
+                      filtroTipoCancha === fmt
+                        ? 'bg-pitch text-zinc-950 font-black'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {fmt === 'todos' ? 'Todas' : fmt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cancha Techada */}
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-800/80">
+              <span className="text-zinc-400 font-bold">Cancha Techada:</span>
+              <button
+                type="button"
+                onClick={() => setFiltroSoloTechada((v) => !v)}
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                  filtroSoloTechada
+                    ? 'bg-emerald-500 text-zinc-950 font-black'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                <span>🌧️ Solo Techadas</span>
+              </button>
+            </div>
+
+            {/* Franja Horaria */}
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-800/80">
+              <span className="text-zinc-400 font-bold">Horario:</span>
+              <div className="flex gap-1">
+                {[
+                  { id: 'todos', label: 'Cualquiera' },
+                  { id: 'manana', label: '☀️ Mañana' },
+                  { id: 'tarde', label: '🌤️ Tarde' },
+                  { id: 'noche', label: '🌙 Noche' },
+                ].map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFiltroFranjaHoraria(id as any)}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
+                      filtroFranjaHoraria === id
+                        ? 'bg-emerald-500 text-zinc-950 font-black'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Limpiar Filtros */}
+            {(filtroTipoCancha !== 'todos' || filtroSoloTechada || filtroFranjaHoraria !== 'todos') && (
+              <div className="pt-1 border-t border-zinc-800/80 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroTipoCancha('todos');
+                    setFiltroSoloTechada(false);
+                    setFiltroFranjaHoraria('todos');
+                  }}
+                  className="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline transition cursor-pointer"
+                >
+                  Restablecer filtros avanzados
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* BANNER FLOTANTE DE SPONSORS / PUBLICIDAD NATIVA EN EL RADAR (OPCIÓN A) */}
       {!seleccionado && (
@@ -1180,26 +1367,57 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             <Target className="w-5 h-5" />
           </button>
           
-          <button onClick={() => navigate('/partidos', { state: { backgroundLocation: location } })} aria-label="Lanzar desafío" className="absolute bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] md:bottom-8 right-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] z-10 active:scale-95 transition cursor-pointer">
+          <button 
+            onClick={() => setMostrarBuscador(true)} 
+            aria-label="Buscar en el mapa" 
+            title="Buscar predio, barrio, equipo o jugador"
+            className="absolute bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] md:bottom-8 right-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 p-4 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.4)] z-10 active:scale-95 transition cursor-pointer"
+          >
             <Search className="w-6 h-6" />
           </button>
         </>
       )}
 
-      {/* BOTTOM SHEET UNIFICADA */}
-      {seleccionado && (
-        <div className="fixed md:absolute bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-0 right-0 md:left-6 md:right-auto md:w-[26rem] md:max-w-[calc(100vw-18rem)] bg-zinc-900/95 backdrop-blur-xl rounded-t-[32px] md:rounded-3xl border-t md:border border-zinc-800/80 p-5 sm:p-6 animate-in slide-in-from-bottom shadow-[0_-10px_50px_rgba(0,0,0,0.7)] md:shadow-2xl z-30 transition-all max-h-[80vh] overflow-y-auto">
-          {/* Indicador de arrastre / grab bar */}
-          <div className="w-10 h-1 bg-zinc-700/50 rounded-full mx-auto mb-3" />
+      {/* BUSCADOR INTERACTIVO EN EL RADAR */}
+      <BuscadorRadar
+        abierto={mostrarBuscador}
+        onCerrar={() => setMostrarBuscador(false)}
+        entidades={entidades}
+        onSeleccionar={(entidad) => {
+          if (entidad.lat && entidad.lng && (entidad.lat !== 0 || entidad.lng !== 0)) {
+            setCentroManual({ lat: entidad.lat, lng: entidad.lng });
+          }
+          setSeleccionado(entidad);
+          setMostrarBuscador(false);
+        }}
+      />
 
-          {/* Botón Cerrar: elevado y en su propia esquina sin tocar datos */}
-          <button 
-            onClick={() => setSeleccionado(null)} 
-            aria-label="Cerrar panel" 
-            className="absolute top-4 right-4 z-20 text-zinc-400 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full p-2 transition cursor-pointer border border-zinc-700/50 shadow-md active:scale-90"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      {/* BOTTOM SHEET UNIFICADA CON VAUL DRAWER */}
+      <Drawer open={!!seleccionado} onOpenChange={(open) => !open && setSeleccionado(null)}>
+        {seleccionado && (
+          <DrawerContent className="p-5 sm:p-6 pb-8 min-h-[520px] max-h-[92vh] md:max-w-lg md:mx-auto">
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>
+                {seleccionado.type === 'cancha'
+                  ? seleccionado.nombre
+                  : seleccionado.type === 'equipo'
+                  ? seleccionado.nombre
+                  : seleccionado.type === 'desafio'
+                  ? (seleccionado.equipo || 'Desafío')
+                  : seleccionado.apodo}
+              </DrawerTitle>
+              <DrawerDescription>Detalle y acciones de la entidad seleccionada en el radar</DrawerDescription>
+            </DrawerHeader>
+
+            <DrawerClose asChild>
+              <button 
+                onClick={() => setSeleccionado(null)} 
+                aria-label="Cerrar panel" 
+                className="absolute top-4 right-4 z-20 text-zinc-400 hover:text-white bg-zinc-800/90 hover:bg-zinc-700 rounded-full p-2 transition cursor-pointer border border-zinc-700/50 shadow-md active:scale-90"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </DrawerClose>
 
           {/* RENDERIZADO CONDICIONAL SEGÚN TIPO */}
           
@@ -1354,7 +1572,11 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                         modalidad: seleccionado.modalidad,
                         escudoUrl: seleccionado.escudoUrl,
                         captainId: capId,
-                        divisionInfo: seleccionado.divisionInfo,
+                        divisionInfo: seleccionado.divisionInfo ? {
+                          nombre: seleccionado.divisionInfo.nombre,
+                          color: seleccionado.divisionInfo.colorHex || '#8B5CF6',
+                          badge: seleccionado.divisionInfo.tier || 'D5',
+                        } : undefined,
                       },
                     });
                     setSeleccionado(null);
@@ -1424,42 +1646,57 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 onClick={async () => {
                   if (!usuario) { navigate('/login'); return; }
                   if (seleccionado.creatorId === usuario.uid) {
-                    setToastMessage('Este partido fue publicado por vos');
-                    setTimeout(() => setToastMessage(''), 3000);
+                    toast.info('Este partido fue publicado por vos');
                     return;
                   }
                   try {
                     const nombreUsuario = nombreCompleto(usuario) || usuario.nombre || 'Un jugador';
-                    await notificarAceptacionDesafio(
-                      usuario.uid,
-                      nombreUsuario,
-                      seleccionado.creatorId,
-                      {
-                        id: seleccionado.desafioId,
-                        equipoId: seleccionado.equipoId,
-                        equipoNombre: seleccionado.equipo,
-                        descripcion: seleccionado.descripcion,
-                      }
-                    );
-                    setToastMessage(
-                      seleccionado.tipoDesafio === 'busqueda_jugador'
-                        ? '¡Te sumaste a la convocatoria! Se le avisó al capitán 🧤'
-                        : '¡Aceptaste el desafío! Se abrió el chat para coordinar el partido ⚽'
-                    );
-                    setTimeout(() => setToastMessage(''), 4000);
-                    setSeleccionado(null);
-                    if (seleccionado.tipoDesafio !== 'busqueda_jugador') {
+
+                    if (seleccionado.tipoDesafio === 'busqueda_jugador') {
+                      await postularse(seleccionado.desafioId, {
+                        uid: usuario.uid,
+                        nombre: nombreUsuario,
+                        posicion: usuario.perfilDeportivo?.posicion ?? null,
+                      }).catch((e) => console.warn('Alerta Firestore postularse:', e));
+
+                      await notificarPostulacionAlerta(
+                        usuario.uid,
+                        nombreUsuario,
+                        seleccionado.creatorId,
+                        {
+                          id: seleccionado.desafioId,
+                          fecha: new Date(seleccionado.fechaUnix).toISOString().split('T')[0]!,
+                          horaInicio: formatearHorario(seleccionado.fechaUnix).split(' ')[1] || '19:00',
+                          horaFin: '',
+                          posicion: seleccionado.posicionBuscada ?? null,
+                        }
+                      );
+
+                      toast.success('¡Te postulaste a la convocatoria! Se le notificó al capitán en tiempo real 🧤');
+                    } else {
+                      await notificarAceptacionDesafio(
+                        usuario.uid,
+                        nombreUsuario,
+                        seleccionado.creatorId,
+                        {
+                          id: seleccionado.desafioId,
+                          equipoId: seleccionado.equipoId,
+                          equipoNombre: seleccionado.equipo,
+                          descripcion: seleccionado.descripcion,
+                        }
+                      );
+                      toast.success('¡Aceptaste el desafío! Se abrió el chat para coordinar el partido ⚽');
                       abrirChatDesafio({
                         rival: {
-                          equipoId: seleccionado.equipoId,
-                          nombre: seleccionado.equipo,
+                          equipoId: seleccionado.equipoId || seleccionado.id,
+                          nombre: seleccionado.equipo || "Equipo rival",
                         },
                       });
                     }
+                    setSeleccionado(null);
                   } catch (err: any) {
-                    console.error('Error enviando aceptación del desafío:', err);
-                    setToastMessage('No se pudo enviar el aviso al organizador.');
-                    setTimeout(() => setToastMessage(''), 3000);
+                    console.error('Error enviando postulación / desafío:', err);
+                    toast.error('No se pudo enviar la postulación al organizador.');
                   }
                 }}
                 className="w-full h-13 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-2xl font-black shadow-[0_0_20px_rgba(245,158,11,0.35)] flex justify-center items-center gap-2 active:scale-95 transition uppercase tracking-wider text-sm cursor-pointer"
@@ -1474,14 +1711,21 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
               {/* Avatar con anillo luminoso y badge de disponibilidad */}
               <div className="relative mb-3">
                 <div className="w-16 h-16 bg-zinc-800 rounded-full border-2 border-blue-500 ring-4 ring-blue-500/20 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.35)] overflow-hidden">
-                  <IconoJugador className="w-8 h-8" />
+                  {seleccionado.fotoUrl?.startsWith('http') ? (
+                    <img src={seleccionado.fotoUrl} alt={seleccionado.apodo} className="w-full h-full object-cover" />
+                  ) : (
+                    <IconoJugador className="w-8 h-8" />
+                  )}
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 bg-emerald-500 w-4 h-4 rounded-full border-2 border-zinc-900 shadow-sm" title="Disponible hoy" />
               </div>
 
               {/* Título centralizado + Media estilo FIFA */}
-              <div className="flex items-center justify-center gap-2 flex-wrap mb-2 px-4">
+              <div className="flex items-center justify-center gap-2 flex-wrap mb-1 px-4">
                 <h3 className="text-white font-black text-xl tracking-tight">{seleccionado.apodo}</h3>
+                {seleccionado.username && (
+                  <span className="text-sm font-semibold text-zinc-400">@{seleccionado.username}</span>
+                )}
                 {(() => {
                   const tema = obtenerTemaSegunMedia(seleccionado.media);
                   return (
@@ -1502,10 +1746,23 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 </span>
               </div>
 
-              {/* Distancia y disponibilidad */}
-              <p className="text-xs text-zinc-400 font-medium mb-5">
-                Disponible hoy · {seleccionado.distanciaKm.toFixed(1)} km de distancia
+              {/* Distancia y disponibilidad horaria */}
+              <p className="text-xs text-zinc-400 font-medium mb-4">
+                {seleccionado.disponibleDesdeHora
+                  ? `Disponible hoy a partir de las ${seleccionado.disponibleDesdeHora} hs`
+                  : 'Disponible hoy (todo el día)'} · {seleccionado.distanciaKm.toFixed(1)} km de distancia
               </p>
+
+              {/* Medallero Deportivo y Fair Play */}
+              <div className="w-full mb-5 text-left bg-zinc-800/50 border border-zinc-700/60 rounded-2xl p-3">
+                <MedalleroDeportivo
+                  medallas={calcularMedallasJugador(
+                    null,
+                    seleccionado.fairPlay,
+                    seleccionado.media
+                  )}
+                />
+              </div>
 
               {/* Botones estilizados, equilibrados y con texto en una sola línea */}
               <div className="grid grid-cols-2 gap-3 w-full">
@@ -1518,8 +1775,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 </button>
                 <button 
                   onClick={() => {
-                    setToastMessage(`¡Invitación al equipo enviada a ${seleccionado.apodo}!`);
-                    setTimeout(() => setToastMessage(''), 3000);
+                    toast.success(`¡Invitación al equipo enviada a ${seleccionado.apodo}!`);
                   }} 
                   className="h-13 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)] flex items-center justify-center gap-2 active:scale-95 transition cursor-pointer text-xs sm:text-sm tracking-wide whitespace-nowrap px-3"
                 >
@@ -1530,8 +1786,9 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
             </div>
           )}
 
-        </div>
-      )}
+          </DrawerContent>
+        )}
+      </Drawer>
     </div>
   );
 };

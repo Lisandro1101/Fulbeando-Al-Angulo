@@ -6,6 +6,14 @@ import { optimizeAvatarImage } from '@/imageCompressor'
 import { uploadImageToR2 } from '@/uploader'
 import { useDatosCarta } from '@/modules/cuenta/useDatosCarta'
 import { crearPublicacion } from '../repositorio'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerClose,
+} from '@/components/ui/drawer'
 
 /** Tope de fotos por post (el MVP no tiene video). */
 const MAX_FOTOS = 4
@@ -162,6 +170,7 @@ export const Composer = () => {
             }}
             className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 rounded-full transition cursor-pointer"
             title="Subir foto"
+            aria-label="Subir foto"
           >
             <ImagePlus className="w-5 h-5 text-emerald-400" />
           </button>
@@ -175,6 +184,7 @@ export const Composer = () => {
               }}
               className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-zinc-800 rounded-full transition cursor-pointer"
               title="Compartir mi carta FUT"
+              aria-label="Compartir mi carta FUT"
             >
               <Sparkles className="w-5 h-5 text-amber-400" />
             </button>
@@ -182,25 +192,27 @@ export const Composer = () => {
         </div>
       </div>
 
-      {/* 2. MODAL PARA CREAR PUBLICACIÓN (SE ABRE AL TOCAR) */}
-      {modalAbierto && (
-        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div
-            className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col my-auto max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* 2. MODAL PARA CREAR PUBLICACIÓN CON VAUL DRAWER */}
+      <Drawer open={modalAbierto} onOpenChange={(open) => !open && cerrarModal()}>
+        <DrawerContent className="p-5 sm:p-6 pb-[max(2.5rem,calc(env(safe-area-inset-bottom,0px)+2rem))] min-h-[560px] max-h-[94vh] md:max-w-lg md:mx-auto">
+          <DrawerHeader className="sr-only">
+            <DrawerTitle>Crear publicación</DrawerTitle>
+            <DrawerDescription>Comparte novedades, fotos o busca rival para tu equipo</DrawerDescription>
+          </DrawerHeader>
             {/* Header del modal */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800">
               <div className="w-8" /> {/* Espaciador balanceador */}
               <h3 className="font-black text-white text-base">Crear publicación</h3>
-              <button
-                type="button"
-                onClick={cerrarModal}
-                disabled={publicando}
-                className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <DrawerClose asChild>
+                <button
+                  type="button"
+                  onClick={cerrarModal}
+                  disabled={publicando}
+                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </DrawerClose>
             </div>
 
             {/* Cuerpo del modal */}
@@ -352,7 +364,7 @@ export const Composer = () => {
             </div>
 
             {/* Footer del modal: herramientas y botón publicar */}
-            <div className="p-4 bg-zinc-950/40 border-t border-zinc-800 space-y-3">
+            <div className="p-4 bg-canvas/ border-t border-zinc-800 space-y-3">
               {/* Barra de adición (Fotos / Carta) */}
               <div className="flex items-center justify-between bg-zinc-800/60 border border-zinc-700/60 rounded-xl px-4 py-2">
                 <span className="text-xs font-bold text-zinc-300">Añadir a tu publicación</span>
@@ -396,9 +408,8 @@ export const Composer = () => {
                 <span>{publicando ? 'Publicando...' : 'Publicar'}</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </DrawerContent>
+        </Drawer>
 
       {/* Input de archivo oculto */}
       <input

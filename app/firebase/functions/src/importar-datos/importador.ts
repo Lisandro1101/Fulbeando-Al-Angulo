@@ -118,14 +118,20 @@ export async function importarPlan(plan: PlanImportacion): Promise<ResumenImport
   }
 
   // ---------------------------------------------------------------- Auth + usuarios
-  for (const u of plan.usuarios) {
-    try {
-      await upsertarAuth(auth, u)
-      await db.collection(COLECCIONES.usuarios).doc(u.uid).set(conAuditoria(u.doc), { merge: true })
-      resumen.usuarios += 1
-    } catch (error) {
-      anotar(`usuario ${u.uid}`, error)
-    }
+  const BATCH_SIZE = 25
+  for (let i = 0; i < plan.usuarios.length; i += BATCH_SIZE) {
+    const chunk = plan.usuarios.slice(i, i + BATCH_SIZE)
+    await Promise.all(
+      chunk.map(async (u) => {
+        try {
+          await upsertarAuth(auth, u)
+          await db.collection(COLECCIONES.usuarios).doc(u.uid).set(conAuditoria(u.doc), { merge: true })
+          resumen.usuarios += 1
+        } catch (error) {
+          anotar(`usuario ${u.uid}`, error)
+        }
+      })
+    )
   }
 
   // ---------------------------------------------------------------- Solicitudes

@@ -18,6 +18,8 @@ export type EstadoDesafio = 'ABIERTO' | 'ACEPTADO' | 'CANCELADO' | 'FINALIZADO'
 
 export type ModalidadDesafio = 'F5' | 'F7' | 'F8' | 'F11'
 
+export type EstadoCanchaDesafio = 'CON_CANCHA' | 'BUSCA_CANCHA'
+
 /** Si el equipo ya tiene cancha reservada o busca pagarla a medias. */
 export type TipoDesafio = 'partido_equipo' | 'busqueda_jugador'
 

@@ -71,7 +71,7 @@ export const TarjetaSponsorMuro: React.FC<TarjetaSponsorMuroProps> = ({ anuncio 
       {/* Imagen / Flyer del Anuncio */}
       {anuncio.imagenUrl && (
         <div
-          className="relative w-full h-52 sm:h-64 bg-zinc-950 overflow-hidden cursor-pointer group"
+          className="relative w-full h-52 sm:h-64 bg-canvas overflow-hidden cursor-pointer group"
           onClick={handleClick}
         >
           <img
@@ -90,7 +90,7 @@ export const TarjetaSponsorMuro: React.FC<TarjetaSponsorMuroProps> = ({ anuncio 
       )}
 
       {/* Footer con Botón de Acción Principal */}
-      <div className="p-3.5 bg-zinc-950/80 border-t border-zinc-800/80 flex items-center justify-between gap-3">
+      <div className="p-3.5 bg-canvas/80 border-t border-zinc-800/80 flex items-center justify-between gap-3">
         <span className="text-[11px] text-zinc-500 font-semibold truncate">
           {new URL(anuncio.enlaceDestino.startsWith('http') ? anuncio.enlaceDestino : `https://${anuncio.enlaceDestino}`).hostname.replace('www.', '')}
         </span>

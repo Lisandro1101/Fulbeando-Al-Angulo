@@ -108,7 +108,8 @@ export const BannerSponsorRadar: React.FC<Props> = ({
       <div className={`pointer-events-auto z-20 flex justify-center ${className}`}>
         <button
           onClick={() => setMinimizado(false)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-950/90 backdrop-blur-md border border-amber-500/40 text-xs font-bold text-amber-300 shadow-lg shadow-black/50 hover:bg-zinc-900 transition active:scale-95 cursor-pointer"
+          aria-label="Abrir promo sponsor"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-canvas/90 backdrop-blur-md border border-amber-500/40 text-xs font-bold text-amber-300 shadow-lg shadow-black/50 hover:bg-zinc-900 transition active:scale-95 cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
           <span className="truncate max-w-[180px] sm:max-w-xs">{anuncioActual.nombreSponsor}</span>
@@ -128,7 +129,7 @@ export const BannerSponsorRadar: React.FC<Props> = ({
       onMouseLeave={() => setPausado(false)}
       className={`pointer-events-auto z-20 w-full max-w-lg transition-all duration-200 ${className}`}
     >
-      <div className="relative overflow-hidden rounded-2xl bg-zinc-950/90 backdrop-blur-xl border border-amber-500/35 p-2.5 sm:p-3 shadow-[0_10px_35px_rgba(0,0,0,0.7)]">
+      <div className="relative overflow-hidden rounded-2xl bg-canvas/90 backdrop-blur-xl border border-amber-500/35 p-2.5 sm:p-3 shadow-[0_10px_35px_rgba(0,0,0,0.7)]">
         {/* Glow de fondo decorativo */}
         <div className="absolute -top-10 -right-10 w-28 h-28 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
 
