@@ -1,5 +1,5 @@
-// Service Worker Build Version: 2026-11-10T17-57-00-071Z
-const SW_VERSION = '2026-11-10T17-57-00-071Z';
+// Service Worker Build Version: 2026-11-10T18-08-30-910Z
+const SW_VERSION = '2026-11-10T18-08-30-910Z';
 
 try {
   importScripts('https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js');
