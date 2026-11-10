@@ -26,6 +26,7 @@ export interface AltaUsuario {
   nombre: string
   apellido: string
   email: string
+  username?: string | null
   telefono?: string | null
   rol: Rol
   zona?: string | null
@@ -38,6 +39,7 @@ export const crearUsuario = async (alta: AltaUsuario): Promise<void> => {
 
   const usuario: Escritura<Usuario> = {
     ...alta,
+    username: alta.username ?? alta.email?.split('@')[0] ?? null,
     telefono: alta.telefono ?? null,
     zona: alta.zona ?? null,
     municipio: alta.municipio ?? null,
@@ -66,7 +68,7 @@ export const obtenerUsuario = async (uid: string): Promise<Usuario | null> => {
  */
 export const asegurarUsuario = async (
   uid: string,
-  perfil: { nombre: string; apellido: string; email: string },
+  perfil: { nombre: string; apellido: string; email: string; username?: string | null },
   rolPorDefecto: Rol = 'jugador',
   fechaNacimiento: string | null = null,
 ): Promise<Usuario | null> => {
@@ -74,9 +76,11 @@ export const asegurarUsuario = async (
   if (snap.exists()) return { ...snap.data(), uid } as Usuario
 
   const batch = writeBatch(db)
+  const username = perfil.username ?? perfil.email?.split('@')[0] ?? null
   const usuario: Escritura<Usuario> = {
     uid,
     ...perfil,
+    username,
     rol: rolPorDefecto,
     telefono: null,
     whatsappVerificado: false,
@@ -128,6 +132,7 @@ export const actualizarDatosBasicos = async (
   uid: string,
   cambios: {
     nombre?: string
+    username?: string | null
     email?: string
     fotoUrl?: string | null
     fechaNacimiento?: string | null

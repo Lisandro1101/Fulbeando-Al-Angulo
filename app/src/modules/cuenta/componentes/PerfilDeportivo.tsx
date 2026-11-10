@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Camera, Clock, Crosshair, Loader2, MapPin, Trash2, Upload } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Camera, Check, Clock, Crosshair, Loader2, MapPin, Trash2, Upload } from 'lucide-react'
 import type { NivelAutopercibido, PerfilDeportivo, PiernaHabil, Posicion, Usuario } from '@/domain'
 import { PERFIL_DEPORTIVO_VACIO } from '@/domain'
+import { useSesion } from '@/modules/auth/useSesion'
 import { actualizarPerfilDeportivo, actualizarZonaYMunicipio, guardarGeo } from '@/modules/usuarios/repositorio'
 import { DIVISION_GEOGRAFICA, calcularGeoZona, inferirMunicipio } from '@/core/geo/zonas'
 import { calcularMedallasJugador, MedalleroDeportivo } from '../medallero'
@@ -281,32 +282,53 @@ function Interruptor({
 }
 
 export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCambio: (usuario: Usuario) => void }) {
+  const sesion = useSesion();
   const [apodo, setApodo] = useState(usuario.nombre || '');
-  const [username, setUsername] = useState(usuario.email?.split('@')[0] || '');
-  const [emojiFoto, setEmojiFoto] = useState(usuario.fotoUrl || '⚽');
+  const [username, setUsername] = useState(usuario.username || usuario.email?.split('@')[0] || '');
+  const [emojiFoto, setEmojiFoto] = useState(usuario.fotoUrl || '');
   const [fechaNacimiento, setFechaNacimiento] = useState(usuario.fechaNacimiento || '');
   const [guardando, setGuardando] = useState(false);
+  const [guardadoExitoso, setGuardadoExitoso] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApodo(usuario.nombre || '');
+    setUsername(usuario.username || usuario.email?.split('@')[0] || '');
+    setEmojiFoto(usuario.fotoUrl || '');
+    setFechaNacimiento(usuario.fechaNacimiento || '');
+  }, [usuario.uid, usuario.nombre, usuario.username, usuario.fotoUrl, usuario.fechaNacimiento]);
 
   const guardar = async () => {
     setGuardando(true);
     setError(null);
+    setGuardadoExitoso(false);
     try {
-      // Solo se manda el email si el usuario lo cambio de verdad: si no, cada
-      // "Guardar Cambios" reescribia la direccion con el dominio de relleno.
-      const cambios: { nombre: string; email?: string; fotoUrl: string | null; fechaNacimiento: string | null } = {
-        nombre: apodo,
-        fotoUrl: emojiFoto,
+      const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      const cleanApodo = apodo.trim();
+
+      const cambios: {
+        nombre: string;
+        username: string;
+        fotoUrl: string | null;
+        fechaNacimiento: string | null;
+      } = {
+        nombre: cleanApodo || cleanUsername || usuario.nombre || 'Jugador',
+        username: cleanUsername || usuario.username || usuario.email?.split('@')[0] || '',
+        fotoUrl: emojiFoto || null,
         fechaNacimiento: fechaNacimiento || null,
       };
-      const emailEditado = username + '@fulbeando.local';
-      if (username && emailEditado !== usuario.email) cambios.email = emailEditado;
 
       const { actualizarDatosBasicos } = await import('@/modules/usuarios/repositorio');
       await actualizarDatosBasicos(usuario.uid, cambios);
       onCambio({ ...usuario, ...cambios });
-    } catch {
-      setError('Error al guardar.');
+      if (sesion.refrescar) {
+        await sesion.refrescar();
+      }
+      setGuardadoExitoso(true);
+      setTimeout(() => setGuardadoExitoso(false), 3500);
+    } catch (err: unknown) {
+      console.error('[PerfilBasicoCard] Error al guardar datos:', err);
+      setError(err instanceof Error ? err.message : 'Error al guardar los cambios.');
     } finally {
       setGuardando(false);
     }
@@ -426,14 +448,25 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
       
       {error && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl font-bold">{error}</p>}
       
+      {guardadoExitoso && (
+        <p className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl font-bold flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          ¡Información guardada con éxito!
+        </p>
+      )}
+
       <div className="pt-2">
         <button 
           type="button"
           onClick={guardar} 
           disabled={guardando} 
-          className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition cursor-pointer disabled:opacity-50"
+          className={`w-full font-black py-3 rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50 active:scale-95 ${
+            guardadoExitoso
+              ? 'bg-emerald-600 text-white shadow-emerald-600/30'
+              : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white shadow-emerald-500/25'
+          }`}
         >
-          {guardando ? 'Guardando...' : 'Guardar Cambios'}
+          {guardando ? 'Guardando...' : guardadoExitoso ? '✓ ¡Cambios Guardados!' : 'Guardar Cambios'}
         </button>
       </div>
     </div>

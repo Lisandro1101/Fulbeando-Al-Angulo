@@ -78,6 +78,8 @@ export interface Usuario extends Auditoria {
   nombre: string
   apellido: string
   email: string
+  /** Handle o identificador publico del jugador (ej. @franco10) */
+  username?: string | null
   telefono: string | null
   whatsappVerificado: boolean
   rol: Rol

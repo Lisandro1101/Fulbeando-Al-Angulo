@@ -582,16 +582,15 @@ export const buscarJugadores = async (
       // REGLA ESTRICTA: Solo usuarios con rol de jugador pueden aparecer en la búsqueda
       if (data.rol !== 'jugador') return false
 
-      const nombreCompleto = `${data.nombre ?? ''} ${data.apellido ?? ''}`.trim().toLowerCase()
-      const displayName = `${data.displayName ?? ''}`.trim().toLowerCase()
-      const email = `${data.email ?? ''}`.toLowerCase()
-      const username = email.split('@')[0] || ''
+      const userProp = `${data.username ?? ''}`.toLowerCase()
+      const username = userProp || email.split('@')[0] || ''
 
       return (
         nombreCompleto.includes(q) ||
         displayName.includes(q) ||
         email.includes(q) ||
-        username.includes(q)
+        username.includes(q) ||
+        userProp.includes(q)
       )
     })
     .slice(0, limite)
@@ -604,9 +603,7 @@ export const buscarJugadores = async (
       return {
         uid: d.id,
         name: nombre,
-        // El `@` de la app es el prefijo del email: sale del MISMO documento,
-        // no de una consulta extra.
-        username: `${data.email ?? ''}`.split('@')[0] || d.id,
+        username: (data.username as string) || `${data.email ?? ''}`.split('@')[0] || d.id,
         role: 'PLAYER' as RolEquipo,
         avatarUrl: data.fotoUrl ?? null,
         geo: data.geo ?? null,
