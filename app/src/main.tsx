@@ -1,13 +1,16 @@
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
+import { ErrorBoundary } from '@/modules/ui/ErrorBoundary'
 import './styles/index.css'
 
 const raiz = document.getElementById('root')
 if (!raiz) throw new Error('Falta el nodo #root en index.html')
 
 createRoot(raiz).render(
-  <App />
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
 )
 
 import { appEnv } from '@/core/config'
