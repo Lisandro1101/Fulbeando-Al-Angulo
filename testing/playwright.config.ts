@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: 'reporte-html', open: 'never' }]],
   outputDir: 'resultados',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.BASE_URL || 'https://fulbeando-al-angulo-26.web.app',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
@@ -20,5 +20,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
   ],
 });
+

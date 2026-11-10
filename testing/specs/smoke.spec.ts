@@ -112,7 +112,9 @@ test.describe('Fase 1 — Smoke test', () => {
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
-    await expect(page.getByRole('heading', { name: /AL ÁNGULO/i })).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator('img[alt="FULBEAND"], img[alt*="FULBEANDO" i], img[src*="logo-fulbeand"]').first()
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByPlaceholder('Email')).toBeVisible();
     await expect(page.getByPlaceholder('Contraseña')).toBeVisible();
     await expect(page.getByRole('button', { name: /INGRESAR/i })).toBeVisible();
