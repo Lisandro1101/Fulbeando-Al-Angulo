@@ -32,6 +32,7 @@ export const auth = getAuth(app);
 // puedan comunicarse con el emulador local sobre HTTP sin que el socket gRPC/WebChannel se resetee.
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  ignoreUndefinedProperties: true,
 });
 export const rtdb = getDatabase(app);
 export const storage = getStorage(app);

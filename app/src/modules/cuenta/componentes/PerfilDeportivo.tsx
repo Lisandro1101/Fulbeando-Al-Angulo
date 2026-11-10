@@ -3,7 +3,7 @@ import { Camera, Check, Clock, Crosshair, Loader2, MapPin, Trash2, Upload } from
 import type { NivelAutopercibido, PerfilDeportivo, PiernaHabil, Posicion, Usuario } from '@/domain'
 import { PERFIL_DEPORTIVO_VACIO } from '@/domain'
 import { useSesion } from '@/modules/auth/useSesion'
-import { actualizarPerfilDeportivo, actualizarZonaYMunicipio, guardarGeo } from '@/modules/usuarios/repositorio'
+import { actualizarDatosBasicos, actualizarPerfilDeportivo, actualizarZonaYMunicipio, guardarGeo } from '@/modules/usuarios/repositorio'
 import { DIVISION_GEOGRAFICA, calcularGeoZona, inferirMunicipio } from '@/core/geo/zonas'
 import { calcularMedallasJugador, MedalleroDeportivo } from '../medallero'
 
@@ -318,7 +318,6 @@ export function PerfilBasicoCard({ usuario, onCambio }: { usuario: Usuario; onCa
         fechaNacimiento: fechaNacimiento || null,
       };
 
-      const { actualizarDatosBasicos } = await import('@/modules/usuarios/repositorio');
       await actualizarDatosBasicos(usuario.uid, cambios);
       onCambio({ ...usuario, ...cambios });
       if (sesion.refrescar) {

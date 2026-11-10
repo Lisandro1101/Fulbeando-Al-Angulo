@@ -25,6 +25,7 @@ import {
   DrawerClose,
 } from '@/components/ui/drawer';
 import { obtenerTemaSegunMedia } from '@/modules/cuenta/componentes/TarjetaJugador';
+import { BannerSponsorRadar } from '@/modules/publicidad/componentes/BannerSponsorRadar';
 import { BuscadorRadar } from '../componentes/BuscadorRadar';
 import { calcularMedallasJugador, MedalleroDeportivo } from '@/modules/cuenta/medallero';
 
@@ -1327,6 +1328,13 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
         </div>
       )}
 
+
+      {/* BANNER FLOTANTE DE SPONSORS / PUBLICIDAD NATIVA EN EL RADAR */}
+      {!seleccionado && (
+        <div className="absolute top-[4.5rem] sm:top-20 w-full flex justify-center z-20 pointer-events-none px-3 sm:px-4">
+          <BannerSponsorRadar />
+        </div>
+      )}
 
       {/* SELECTOR DE LOCALIDAD FALLBACK (Opcional, ya que ahora usa la ciudad del perfil, pero se mantiene como alternativa si quieren moverse) */}
       {geoLoc.isFallback && !usuario?.geo && (

@@ -107,14 +107,14 @@ export const actualizarPerfilDeportivo = async (
   uid: string,
   cambios: Partial<PerfilDeportivo>,
 ): Promise<void> => {
-  await updateDoc(ref(uid), {
+  await setDoc(ref(uid), {
     perfilDeportivo: cambios,
     ...auditoriaUpdate(),
-  })
+  }, { merge: true })
 }
 
 export const actualizarZona = async (uid: string, zona: string | null): Promise<void> => {
-  await updateDoc(ref(uid), { zona, ...auditoriaUpdate() })
+  await setDoc(ref(uid), { zona, ...auditoriaUpdate() }, { merge: true })
 }
 
 export const actualizarZonaYMunicipio = async (
@@ -125,7 +125,7 @@ export const actualizarZonaYMunicipio = async (
     geo?: GeoIndex | null
   },
 ): Promise<void> => {
-  await updateDoc(ref(uid), { ...datos, ...auditoriaUpdate() })
+  await setDoc(ref(uid), { ...datos, ...auditoriaUpdate() }, { merge: true })
 }
 
 export const actualizarDatosBasicos = async (
@@ -138,7 +138,7 @@ export const actualizarDatosBasicos = async (
     fechaNacimiento?: string | null
   },
 ): Promise<void> => {
-  await updateDoc(ref(uid), { ...cambios, ...auditoriaUpdate() })
+  await setDoc(ref(uid), { ...cambios, ...auditoriaUpdate() }, { merge: true })
 }
 
 export const actualizarOnboardingStep = async (
