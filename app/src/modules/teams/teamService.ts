@@ -1835,13 +1835,35 @@ export const incorporarRefuerzoAEquipo = async (
     posicion?: string | null
   },
 ): Promise<void> => {
-  const eqRef = doc(db, COLECCIONES.equipos, equipoId)
-  const snap = await getDoc(eqRef)
-  if (!snap.exists()) return
+  let targetEquipoId = equipoId
+  let eqRef = doc(db, COLECCIONES.equipos, targetEquipoId)
+  let snap = await getDoc(eqRef)
+
+  // Si equipoId era el ID de un desafío en vez del ID de un equipo, buscar el desafío
+  if (!snap.exists()) {
+    try {
+      const desafioSnap = await getDoc(doc(db, COLECCIONES.desafios, targetEquipoId))
+      if (desafioSnap.exists()) {
+        const dData = desafioSnap.data()
+        if (dData.equipoId) {
+          targetEquipoId = dData.equipoId
+          eqRef = doc(db, COLECCIONES.equipos, targetEquipoId)
+          snap = await getDoc(eqRef)
+        }
+      }
+    } catch (e) {
+      console.warn('Error resolviendo equipoId desde desafío:', e)
+    }
+  }
+
+  if (!snap.exists()) {
+    console.warn('incorporarRefuerzoAEquipo: No se encontró el equipo', targetEquipoId)
+    return
+  }
 
   const equipoData = snap.data()
 
-  // Actualizar convocatoria: el refuerzo se suma únicamente a los confirmados y refuerzos del partido
+  // Actualizar convocatoria: el refuerzo se suma a confirmados y refuerzos
   const conv = equipoData.convocatoria || {}
   const confirmadosActuales: string[] = Array.isArray(conv.confirmados) ? conv.confirmados : []
   const nuevosConfirmados = confirmadosActuales.includes(jugador.uid)
@@ -1865,10 +1887,26 @@ export const incorporarRefuerzoAEquipo = async (
         },
       ]
 
+  // Agregar también a members con esTemporal: true para que todas las vistas de equipo lo listen
+  const membersActuales = Array.isArray(equipoData.members) ? equipoData.members : []
+  const nuevosMembers = membersActuales.some((m: any) => m.uid === jugador.uid)
+    ? membersActuales
+    : [
+        ...membersActuales,
+        {
+          uid: jugador.uid,
+          name: jugador.nombre,
+          role: 'PLAYER',
+          esTemporal: true,
+          position: jugador.posicion || 'DEL',
+        },
+      ]
+
   const faltantes = Math.max(0, (conv.jugadoresFaltantes || 1) - 1)
   const alertaRadarEnviada = faltantes > 0
 
   await updateDoc(eqRef, {
+    members: nuevosMembers,
     convocatoria: {
       ...conv,
       confirmados: nuevosConfirmados,
@@ -1882,17 +1920,21 @@ export const incorporarRefuerzoAEquipo = async (
   // Sincronizar y restar faltantes en el Radar inmediatamente
   let desafioId = conv.alertaRadarId
   if (!desafioId) {
-    try {
-      const qD = query(
-        collection(db, COLECCIONES.desafios),
-        where('equipoId', '==', equipoId),
-        where('estado', '==', 'ABIERTO'),
-      )
-      const snapD = await getDocs(qD)
-      if (!snapD.empty) {
-        desafioId = snapD.docs[0]?.id
-      }
-    } catch {}
+    if (equipoId !== targetEquipoId) {
+      desafioId = equipoId
+    } else {
+      try {
+        const qD = query(
+          collection(db, COLECCIONES.desafios),
+          where('equipoId', '==', targetEquipoId),
+          where('estado', '==', 'ABIERTO'),
+        )
+        const snapD = await getDocs(qD)
+        if (!snapD.empty) {
+          desafioId = snapD.docs[0]?.id
+        }
+      } catch {}
+    }
   }
 
   if (desafioId) {

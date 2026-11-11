@@ -1856,20 +1856,37 @@ export const Screen7MyTeam = () => {
               goles: st.goles,
               asistencias: st.asistencias,
               mvpCount: st.mvpCount,
-              posicion: 'DEL',
+              posicion: r.posicion || 'DEL',
             });
             return {
               id: r.uid,
               username: r.nombre || r.name || 'Refuerzo',
               apodo: r.nombre || r.name || 'Refuerzo',
-              emoji: '⚡',
+              emoji: r.avatarUrl || '⚡',
               isCapitan: false,
               esTemporal: true,
               stats: st,
               media: med,
             };
           });
-        return [...miembrosConf, ...refuerzosConf];
+        // Si hay IDs en confirmados que aún no se mapearon en miembros ni refuerzos
+        const cubiertos = new Set([...miembrosConf.map((m: any) => m.id), ...refuerzosConf.map((r: any) => r.id)]);
+        const restantes = confIds
+          .filter((id) => !cubiertos.has(id))
+          .map((id) => {
+            const mTemp = t.members?.find((m: any) => m.uid === id);
+            return {
+              id,
+              username: mTemp?.name || 'Refuerzo Convocado',
+              apodo: mTemp?.name || 'Refuerzo Convocado',
+              emoji: '⚡',
+              isCapitan: false,
+              esTemporal: true,
+              stats: { goles: 0, asistencias: 0, partidosJugados: 0, mvpCount: 0 },
+              media: 75,
+            };
+          });
+        return [...miembrosConf, ...refuerzosConf, ...restantes];
       })(),
       reputation: t.reputation || null,
       convocatoria: t.convocatoria
@@ -2165,7 +2182,7 @@ export const Screen7MyTeam = () => {
 
     const nuevosEquipos = equipos.map(eq => {
       if(eq.id === teamId && eq.convocatoria) {
-         const myPlayerId = eq.plantel.find((p: any) => p.id === currentUid)?.id;
+         const myPlayerId = currentUid;
          if(!myPlayerId) return eq;
          
          const newConf = (eq.convocatoria.confirmados || []).filter((id: any) => id !== myPlayerId);
@@ -2857,7 +2874,7 @@ export const Screen7MyTeam = () => {
                     </div>
                   ) : (
                     (() => {
-                      const myId = equipo.plantel.find((p: any) => p.id === currentUid)?.id;
+                      const myId = currentUid;
                       const confirmó = myId && equipo.convocatoria.confirmados?.includes(myId);
                       const seBajó = myId && equipo.convocatoria.bajas?.includes(myId);
                       return (

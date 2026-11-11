@@ -6,7 +6,7 @@ import { UserPlus, X, Search, Phone, Clock, Target, User, MapPin, Navigation, Me
 import { listarDesafiosCercanos, consultarRadar, type RadarPin, type RadarPinCancha, type RadarPinDesafio, type RadarPinEquipo } from '../radarService';
 import { listarPrediosCercanos, obtenerPredio } from '@/modules/predios/repositorio';
 import { listarCandidatosRadar } from '@/modules/usuarios/repositorio';
-import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId, abrirChatDesafio, notificarPostulacionAlerta } from '@/modules/teams/teamService';
+import { listarEquiposCercanos, notificarAceptacionDesafio, obtenerEquipoPorId, abrirChatDesafio, notificarPostulacionAlerta, incorporarRefuerzoAEquipo } from '@/modules/teams/teamService';
 import { postularse } from '@/modules/alertas/repositorio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto, calcularMediaJugador, calcularDivisionEquipo, type DivisionEquipoInfo } from '@/domain';
@@ -1749,6 +1749,16 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                         posicion: usuario.perfilDeportivo?.posicion ?? null,
                       }).catch((e) => console.warn('Alerta Firestore postularse:', e));
 
+                      // Incorporar inmediatamente al jugador como convocado confirmado
+                      const targetEquipoId = seleccionado.equipoId || seleccionado.desafioId;
+                      const avatarJugador = (usuario as any).avatarUrl || (usuario as any).foto || (usuario as any).photoURL || null;
+                      await incorporarRefuerzoAEquipo(targetEquipoId, {
+                        uid: usuario.uid,
+                        nombre: nombreUsuario,
+                        avatarUrl: avatarJugador,
+                        posicion: usuario.perfilDeportivo?.posicion ?? null,
+                      }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
+
                       await notificarPostulacionAlerta(
                         usuario.uid,
                         nombreUsuario,
@@ -1764,7 +1774,7 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                         }
                       );
 
-                      toast.success('¡Te postulaste a la convocatoria! Se le notificó al capitán en tiempo real 🧤');
+                      toast.success('¡Te sumaste al partido! Ya figurás en los convocados del equipo ⚽');
                     } else {
                       await notificarAceptacionDesafio(
                         usuario.uid,
