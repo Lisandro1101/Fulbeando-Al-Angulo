@@ -31,6 +31,12 @@ import { AdminDashboard } from '@/modules/admin/AdminDashboard';
 // Mapa Radar Unificado (único mapa en toda la aplicación)
 import { MapaRadarUnificado } from '@/modules/radar/pantallas/MapaRadarUnificado';
 
+// Páginas públicas para visitantes, buscadores y Google AdSense
+import { LandingPage } from '@/modules/landing/LandingPage';
+import { PoliticaPrivacidad } from '@/modules/legales/PoliticaPrivacidad';
+import { TerminosCondiciones } from '@/modules/legales/TerminosCondiciones';
+import { Contacto } from '@/modules/legales/Contacto';
+
 /** 
  * Guarda de Autenticación 
  * Asegura que el usuario esté logueado y tenga el rol correcto para acceder.
@@ -104,9 +110,25 @@ const ProtectedRoute = ({
   return children;
 };
 
+/**
+ * En la raíz (/), si el visitante no inició sesión se le muestra la Landing Page
+ * pública con todo el contenido editorial, explicaciones y enlaces legales (requerido por AdSense).
+ * Si el usuario ya está autenticado, se muestra el muro comunitario de la app.
+ */
+const RutaRaizOComunidad = () => {
+  const { usuario, cargando } = useSesion();
+  if (cargando) return <CargandoFulbeando />;
+  if (!usuario) return <LandingPage />;
+  return <FulbeandoHome />;
+};
+
 const rutasHijas: RouteObject[] = [
-  // Flujo 1: Acceso (Sin Layout Principal)
+  // Flujo 1: Acceso y Páginas Públicas Informativas y Legales
   { path: '/login', element: <Screen1Login /> },
+  { path: '/landing', element: <LandingPage /> },
+  { path: '/privacidad', element: <PoliticaPrivacidad /> },
+  { path: '/terminos', element: <TerminosCondiciones /> },
+  { path: '/contacto', element: <Contacto /> },
   { path: '/role-selector', element: <ProtectedRoute><Screen2RoleSelector /></ProtectedRoute> },
   { path: '/plan-pendiente', element: <ProtectedRoute><PlanPendiente /></ProtectedRoute> },
   // Panel del superadmin: FUERA de AppLayout a proposito, para que no herede
@@ -123,7 +145,7 @@ const rutasHijas: RouteObject[] = [
   { 
     element: <AppLayout />, 
     children: [
-      { path: '/', element: <ProtectedRoute><FulbeandoHome /></ProtectedRoute> },
+      { path: '/', element: <RutaRaizOComunidad /> },
       { path: '/radar', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><MapaRadarUnificado /></ProtectedRoute> },
       { path: '/equipo', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen7MyTeam /></ProtectedRoute> },
       { path: '/partidos', element: <ProtectedRoute denyRoles={['dueno_predio']} redirectDenegado="/venue-dashboard"><Screen6LaunchChallenge /></ProtectedRoute> },

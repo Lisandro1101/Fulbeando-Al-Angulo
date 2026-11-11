@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { crearPublicacion } from '@/modules/comunidad/repositorio';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Building, Share2, CheckCircle, Search, Calendar, ChevronRight, Settings, X, Loader2, MessageCircle, Copy, Users, Check, Radio, Lock, Unlock, Trash2, Clock, Trophy } from 'lucide-react';
 import { ingresoConGoogle, ingresoConEmail, registroConEmail } from '@/modules/auth/servicio';
@@ -248,6 +248,17 @@ export const Screen1Login = () => {
           .
         </p>
       </div>
+
+      {/* Enlaces legales públicos para usuarios y Google AdSense */}
+      <footer className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-indigo-200/80 max-w-sm text-center">
+        <Link to="/" className="hover:text-white transition">Inicio</Link>
+        <span>•</span>
+        <Link to="/terminos" className="hover:text-white transition">Términos y Condiciones</Link>
+        <span>•</span>
+        <Link to="/privacidad" className="hover:text-white transition">Privacidad</Link>
+        <span>•</span>
+        <Link to="/contacto" className="hover:text-white transition">Contacto</Link>
+      </footer>
 
       <ModalTerminos
         abierto={mostrarModalTerminos}

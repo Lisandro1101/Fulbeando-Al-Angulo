@@ -139,8 +139,12 @@ export const AppLayout = () => {
     }).length;
   }, [notificaciones]);
 
+  // Si estamos en la raíz sin usuario autenticado, dejamos que Outlet renderice la Landing Page limpia sin layout interno
+  if (!sesion.usuario && location.pathname === '/') {
+    return <Outlet />;
+  }
+
   // Decide if we should render background + modal
-  // We only do this if we actually match one of the floating routes and have a backgroundLocation
   const esModal = Boolean(state?.backgroundLocation);
 
   return (
