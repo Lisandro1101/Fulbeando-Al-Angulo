@@ -10,7 +10,7 @@ import {
   rechazarSuplente,
   renunciarPostulacion,
 } from '@/modules/alertas/repositorio'
-import { notificarPostulacionAlerta } from '@/modules/teams/teamService'
+import { notificarPostulacionAlerta, notificarResolucionPostulacion } from '@/modules/teams/teamService'
 
 /**
  * Tarjeta de una alerta "Falta 1" dentro del radar. El jugador se postula con
@@ -184,6 +184,15 @@ export function TarjetaAlerta({
                       className="btn-ghost h-8 w-8 px-0"
                       onClick={async () => {
                         await confirmarSuplente(alerta.id, p.uid)
+                        await notificarResolucionPostulacion({
+                          jugadorUid: p.uid,
+                          jugadorNombre: p.nombre,
+                          capitanUid: uid,
+                          capitanNombre: nombre || 'Organizador',
+                          equipoNombre: `Partido ${alerta.fecha}`,
+                          alertaId: alerta.id,
+                          resultado: 'aceptada',
+                        }).catch(console.warn)
                         await onCambio()
                       }}
                     >
@@ -195,6 +204,16 @@ export function TarjetaAlerta({
                       className="btn-ghost h-8 w-8 px-0"
                       onClick={async () => {
                         await rechazarSuplente(alerta.id, p.uid)
+                        await notificarResolucionPostulacion({
+                          jugadorUid: p.uid,
+                          jugadorNombre: p.nombre,
+                          capitanUid: uid,
+                          capitanNombre: nombre || 'Organizador',
+                          equipoNombre: `Partido ${alerta.fecha}`,
+                          alertaId: alerta.id,
+                          resultado: 'rechazada',
+                        }).catch(console.warn)
+                        await onCambio()
                       }}
                     >
                       <X className="h-4 w-4" />

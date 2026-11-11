@@ -18,6 +18,7 @@ import {
   unirseAEquipo,
   marcarNotificacionComoLeida,
   incorporarRefuerzoAEquipo,
+  notificarResolucionPostulacion,
   type InvitacionEquipo,
 } from '@/modules/teams/teamService';
 import { confirmarSuplente, rechazarSuplente } from '@/modules/alertas/repositorio';
@@ -66,7 +67,9 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
           n.tipo === 'desafio_equipo' ||
           n.tipo === 'desafio_aviso_miembro' ||
           n.tipo === 'desafio_aceptado' ||
-          n.tipo === 'postulacion_partido'
+          n.tipo === 'postulacion_partido' ||
+          n.tipo === 'postulacion_aceptada' ||
+          n.tipo === 'postulacion_rechazada'
         );
       }
       return true;
@@ -143,6 +146,17 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
         );
       }
       await responderInvitacion(notif.id, 'aceptada');
+      if (suplenteUid) {
+        await notificarResolucionPostulacion({
+          jugadorUid: suplenteUid,
+          jugadorNombre: notif.remitenteNombre,
+          capitanUid: usuarioUid,
+          capitanNombre: notif.destinatarioNombre || 'El Organizador',
+          equipoNombre: notif.equipoNombre || 'Partido',
+          alertaId,
+          resultado: 'aceptada',
+        }).catch(console.warn);
+      }
       setFeedback('¡Suplente confirmado para el partido!');
       setTimeout(() => setFeedback(null), 3500);
     } catch (err) {
@@ -161,6 +175,17 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
         await rechazarSuplente(alertaId, suplenteUid).catch(console.warn);
       }
       await responderInvitacion(notif.id, 'rechazada');
+      if (suplenteUid) {
+        await notificarResolucionPostulacion({
+          jugadorUid: suplenteUid,
+          jugadorNombre: notif.remitenteNombre,
+          capitanUid: usuarioUid,
+          capitanNombre: notif.destinatarioNombre || 'El Organizador',
+          equipoNombre: notif.equipoNombre || 'Partido',
+          alertaId,
+          resultado: 'rechazada',
+        }).catch(console.warn);
+      }
       setFeedback('Postulación rechazada');
       setTimeout(() => setFeedback(null), 3500);
     } catch (err) {
@@ -181,6 +206,19 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
         }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
       }
       await responderInvitacion(notif.id, 'aceptada');
+      if (notif.remitenteUid) {
+        await notificarResolucionPostulacion({
+          jugadorUid: notif.remitenteUid,
+          jugadorNombre: nombreEmisor,
+          capitanUid: usuarioUid,
+          capitanNombre: notif.destinatarioNombre || 'El Capitán',
+          equipoId: notif.equipoId,
+          equipoNombre: notif.equipoNombre,
+          equipoEscudoUrl: notif.equipoEscudoUrl,
+          partidoId: notif.desafioId || notif.equipoId,
+          resultado: 'aceptada',
+        }).catch(console.warn);
+      }
       setFeedback(`¡Sumaste a ${nombreEmisor} como refuerzo para el partido! ⚽`);
       setTimeout(() => setFeedback(null), 3500);
     } catch (err: any) {
@@ -195,6 +233,18 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
     setProcesandoId(notif.id);
     try {
       await responderInvitacion(notif.id, 'rechazada');
+      if (notif.remitenteUid) {
+        await notificarResolucionPostulacion({
+          jugadorUid: notif.remitenteUid,
+          jugadorNombre: notif.remitenteNombre,
+          capitanUid: usuarioUid,
+          capitanNombre: notif.destinatarioNombre || 'El Capitán',
+          equipoId: notif.equipoId,
+          equipoNombre: notif.equipoNombre,
+          partidoId: notif.desafioId || notif.equipoId,
+          resultado: 'rechazada',
+        }).catch(console.warn);
+      }
       setFeedback('Postulación descartada');
       setTimeout(() => setFeedback(null), 3500);
     } catch (err) {
@@ -361,6 +411,10 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                         <Trophy className="w-5 h-5 text-emerald-400" />
                       ) : tipo === 'postulacion_partido' ? (
                         <span className="text-lg">🏃</span>
+                      ) : tipo === 'postulacion_aceptada' ? (
+                        <Trophy className="w-5 h-5 text-emerald-400" />
+                      ) : tipo === 'postulacion_rechazada' ? (
+                        <span className="text-lg">⚠️</span>
                       ) : (
                         <Shield className="w-5 h-5 text-amber-500" />
                       )}
@@ -378,6 +432,10 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                             ? '🏆 Desafío Aceptado'
                             : tipo === 'postulacion_partido'
                             ? '🏃 Nuevo Suplente'
+                            : tipo === 'postulacion_aceptada'
+                            ? '🎉 ¡Confirmado en Partido!'
+                            : tipo === 'postulacion_rechazada'
+                            ? '⚠️ Cupo Completo'
                             : '🛡️ Invitación a Plantel'}
                         </span>
                         <span
@@ -573,6 +631,75 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                                   Chat
                                 </button>
                               )}
+                            </>
+                          )}
+
+                          {/* El jugador fue confirmado para el partido */}
+                          {tipo === 'postulacion_aceptada' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={procesandoId === notif.id}
+                                onClick={async () => {
+                                  setProcesandoId(notif.id);
+                                  await responderInvitacion(notif.id, 'aceptada');
+                                  setProcesandoId(null);
+                                  setFeedback('¡A preparar los botines! ⚽');
+                                  setTimeout(() => setFeedback(null), 3500);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
+                              >
+                                {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                ¡A jugar!
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onCerrar();
+                                  navigate('/partidos');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-amber-400 font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                              >
+                                Ver Convocatoria
+                              </button>
+                              {onAbrirChatDesafio && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAbrirChat(notif)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                                  Chat con Capitán
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {/* Notificación de cupo completado */}
+                          {tipo === 'postulacion_rechazada' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={procesandoId === notif.id}
+                                onClick={async () => {
+                                  setProcesandoId(notif.id);
+                                  await responderInvitacion(notif.id, 'aceptada');
+                                  setProcesandoId(null);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700"
+                              >
+                                Entendido
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onCerrar();
+                                  navigate('/radar');
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs flex items-center gap-1 transition cursor-pointer shadow-sm"
+                              >
+                                Buscar otro partido ⚽
+                              </button>
                             </>
                           )}
                         </div>

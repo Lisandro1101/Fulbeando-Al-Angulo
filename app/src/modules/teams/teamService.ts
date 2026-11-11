@@ -713,6 +713,8 @@ export type TipoInvitacion =
   | 'postulacion_partido'
   | 'desafio_equipo'
   | 'desafio_aviso_miembro'
+  | 'postulacion_aceptada'
+  | 'postulacion_rechazada'
 
 export interface InvitacionEquipo {
   id: string
@@ -842,6 +844,53 @@ export const notificarPostulacionAlerta = async (
     mensaje: `${remitenteNombre} quiere sumarse al partido del ${alerta.fecha} (${alerta.horaInicio} a ${alerta.horaFin})${
       alerta.posicion ? ` como ${alerta.posicion}` : ''
     }.`,
+    estado: 'pendiente',
+    creadaEn: serverTimestamp(),
+    leida: false,
+  }
+  await setDoc(invRef, invData)
+  return invRef.id
+}
+
+/**
+ * Notifica al jugador postulante que su solicitud fue aceptada o rechazada.
+ * Genera una notificación en Firestore dirigida al UID del jugador para que
+ * le aparezca la alerta push interactiva y en su panel de notificaciones.
+ */
+export const notificarResolucionPostulacion = async (params: {
+  jugadorUid: string
+  jugadorNombre?: string
+  capitanUid: string
+  capitanNombre: string
+  equipoId?: string
+  equipoNombre: string
+  equipoEscudoUrl?: string | null
+  partidoId?: string
+  alertaId?: string
+  resultado: 'aceptada' | 'rechazada'
+  mensajePersonalizado?: string
+}): Promise<string> => {
+  const invRef = doc(collection(db, COLECCIONES.invitaciones))
+  const tipo: TipoInvitacion =
+    params.resultado === 'aceptada' ? 'postulacion_aceptada' : 'postulacion_rechazada'
+  const invData: InvitacionEquipo = {
+    id: invRef.id,
+    tipo,
+    equipoId: params.equipoId || params.partidoId || params.alertaId || '',
+    equipoNombre: params.equipoNombre,
+    equipoEscudoUrl: params.equipoEscudoUrl || null,
+    remitenteUid: params.capitanUid,
+    remitenteNombre: params.capitanNombre,
+    capitanNombre: params.capitanNombre,
+    destinatarioUid: params.jugadorUid,
+    destinatarioNombre: params.jugadorNombre || 'Jugador',
+    desafioId: params.partidoId,
+    alertaId: params.alertaId,
+    mensaje:
+      params.mensajePersonalizado ||
+      (params.resultado === 'aceptada'
+        ? `¡Confirmaron tu lugar para jugar con ${params.equipoNombre}! ⚽ ¡A preparar los botines!`
+        : `El organizador de ${params.equipoNombre} ya completó los cupos para este partido.`),
     estado: 'pendiente',
     creadaEn: serverTimestamp(),
     leida: false,

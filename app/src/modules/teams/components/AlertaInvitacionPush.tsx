@@ -8,6 +8,7 @@ import {
   responderDesafioEquipo,
   unirseAEquipo,
   incorporarRefuerzoAEquipo,
+  notificarResolucionPostulacion,
   abrirChatDesafio,
   marcarDesafioComoLeido,
   type InvitacionEquipo,
@@ -105,6 +106,12 @@ export const AlertaInvitacionPush: React.FC = () => {
         } else if (inv.tipo === 'postulacion_partido') {
           tituloNotif = '¡Nuevo jugador para tu partido! 🏃';
           cuerpoNotif = inv.mensaje || `${nombreEmisor} quiere sumarse como suplente ese día.`;
+        } else if (inv.tipo === 'postulacion_aceptada') {
+          tituloNotif = '¡Confirmado para el partido! ⚽';
+          cuerpoNotif = inv.mensaje || `¡Confirmaron tu lugar para jugar con ${inv.equipoNombre}!`;
+        } else if (inv.tipo === 'postulacion_rechazada') {
+          tituloNotif = 'Aviso de postulación ⚽';
+          cuerpoNotif = inv.mensaje || `El organizador de ${inv.equipoNombre} completó los cupos para este partido.`;
         } else {
           tituloNotif = '¡Te invitaron a un equipo en Fulbeando!';
           cuerpoNotif = `${nombreEmisor} te invitó a unirte a ${inv.equipoNombre}. ¡Entrá a responder!`;
@@ -189,6 +196,19 @@ export const AlertaInvitacionPush: React.FC = () => {
           }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
         }
         await responderInvitacion(invitacionActual.id, 'aceptada');
+        if (invitacionActual.remitenteUid) {
+          await notificarResolucionPostulacion({
+            jugadorUid: invitacionActual.remitenteUid,
+            jugadorNombre: nombreEmisor,
+            capitanUid: sesion.user.uid,
+            capitanNombre: sesion.usuario?.nombre || sesion.user.displayName || 'El Capitán',
+            equipoId: invitacionActual.equipoId,
+            equipoNombre: invitacionActual.equipoNombre,
+            equipoEscudoUrl: invitacionActual.equipoEscudoUrl,
+            partidoId: invitacionActual.desafioId || invitacionActual.equipoId,
+            resultado: 'aceptada',
+          }).catch(console.warn);
+        }
         setToastExito(`¡Sumaste a ${nombreEmisor} como refuerzo para el partido! ⚽`);
         setTimeout(() => setToastExito(null), 4000);
       } else if (tipo === 'postulacion_partido') {
@@ -198,8 +218,29 @@ export const AlertaInvitacionPush: React.FC = () => {
           );
         }
         await responderInvitacion(invitacionActual.id, 'aceptada');
+        if (invitacionActual.remitenteUid) {
+          await notificarResolucionPostulacion({
+            jugadorUid: invitacionActual.remitenteUid,
+            jugadorNombre: nombreEmisor,
+            capitanUid: sesion.user.uid,
+            capitanNombre: sesion.usuario?.nombre || sesion.user.displayName || 'El Organizador',
+            equipoNombre: invitacionActual.equipoNombre || 'Partido',
+            alertaId: invitacionActual.alertaId,
+            resultado: 'aceptada',
+          }).catch(console.warn);
+        }
         setToastExito(`¡${nombreEmisor} sumado al partido con éxito! ⚽`);
         setTimeout(() => setToastExito(null), 4000);
+      } else if (tipo === 'postulacion_aceptada') {
+        await responderInvitacion(invitacionActual.id, 'aceptada');
+        setToastExito('¡Confirmado! A preparar los botines ⚽');
+        setTimeout(() => setToastExito(null), 3500);
+        handleCerrar();
+        navigate('/partidos');
+      } else if (tipo === 'postulacion_rechazada') {
+        await responderInvitacion(invitacionActual.id, 'aceptada');
+        handleCerrar();
+        navigate('/radar');
       }
     } catch (err: any) {
       console.error('Error al responder alerta:', err);
@@ -243,6 +284,31 @@ export const AlertaInvitacionPush: React.FC = () => {
       } else if (tipo === 'postulacion_partido' && invitacionActual.alertaId) {
         await rechazarSuplente(invitacionActual.alertaId, invitacionActual.remitenteUid).catch(() => {});
         await responderInvitacion(invitacionActual.id, 'rechazada');
+        if (invitacionActual.remitenteUid) {
+          await notificarResolucionPostulacion({
+            jugadorUid: invitacionActual.remitenteUid,
+            jugadorNombre: invitacionActual.remitenteNombre,
+            capitanUid: sesion.user?.uid || '',
+            capitanNombre: sesion.usuario?.nombre || 'El Organizador',
+            equipoNombre: invitacionActual.equipoNombre || 'Partido',
+            alertaId: invitacionActual.alertaId,
+            resultado: 'rechazada',
+          }).catch(console.warn);
+        }
+      } else if (tipo === 'desafio_aceptado') {
+        await responderInvitacion(invitacionActual.id, 'rechazada');
+        if (invitacionActual.remitenteUid) {
+          await notificarResolucionPostulacion({
+            jugadorUid: invitacionActual.remitenteUid,
+            jugadorNombre: invitacionActual.remitenteNombre,
+            capitanUid: sesion.user?.uid || '',
+            capitanNombre: sesion.usuario?.nombre || 'El Capitán',
+            equipoId: invitacionActual.equipoId,
+            equipoNombre: invitacionActual.equipoNombre,
+            partidoId: invitacionActual.desafioId,
+            resultado: 'rechazada',
+          }).catch(console.warn);
+        }
       } else {
         await responderInvitacion(invitacionActual.id, 'rechazada');
       }
@@ -284,6 +350,10 @@ export const AlertaInvitacionPush: React.FC = () => {
               ? 'Alerta Push • Desafío Aceptado'
               : tipo === 'postulacion_partido'
               ? 'Alerta Push • Jugador Disponible'
+              : tipo === 'postulacion_aceptada'
+              ? '🎉 ¡Confirmado en el Partido!'
+              : tipo === 'postulacion_rechazada'
+              ? 'Aviso • Cupo Completo'
               : 'Alerta Push • Nueva Invitación'}
           </div>
 
@@ -291,10 +361,12 @@ export const AlertaInvitacionPush: React.FC = () => {
           <div className="w-18 h-18 sm:w-20 sm:h-20 mx-auto rounded-full bg-zinc-800 border-4 border-amber-500 flex items-center justify-center overflow-hidden mb-3 shadow-xl">
             {tipo === 'desafio_equipo' ? (
               <Swords className="w-9 h-9 sm:w-10 sm:h-10 text-amber-400" />
-            ) : tipo === 'desafio_aceptado' ? (
+            ) : tipo === 'desafio_aceptado' || tipo === 'postulacion_aceptada' ? (
               <Trophy className="w-10 h-10 text-amber-400" />
             ) : tipo === 'postulacion_partido' ? (
               <UserPlus className="w-10 h-10 text-amber-400" />
+            ) : tipo === 'postulacion_rechazada' ? (
+              <span className="text-3xl">⚠️</span>
             ) : invitacionActual.equipoEscudoUrl ? (
               <img
                 src={invitacionActual.equipoEscudoUrl}
@@ -314,6 +386,10 @@ export const AlertaInvitacionPush: React.FC = () => {
               ? '¡Aceptaron tu desafío!'
               : tipo === 'postulacion_partido'
               ? '¡Quieren sumarse a tu partido!'
+              : tipo === 'postulacion_aceptada'
+              ? '¡Confirmaron tu lugar para jugar! ⚽'
+              : tipo === 'postulacion_rechazada'
+              ? 'Aviso sobre tu postulación'
               : '¡Te invitaron a un equipo!'}
           </h3>
 
@@ -350,7 +426,18 @@ export const AlertaInvitacionPush: React.FC = () => {
             </div>
           ) : (
             <p className="text-sm text-zinc-300 mb-6 leading-relaxed">
-              {tipo === 'desafio_aceptado' ? (
+              {tipo === 'postulacion_aceptada' ? (
+                <>
+                  ¡Excelente! El organizador de{' '}
+                  <span className="font-black text-white">{invitacionActual.equipoNombre}</span> confirmó tu lugar en el partido.
+                  ¡Tu lugar en la cancha ya está asegurado! ⚽
+                </>
+              ) : tipo === 'postulacion_rechazada' ? (
+                <>
+                  El organizador de{' '}
+                  <span className="font-black text-white">{invitacionActual.equipoNombre}</span> ya completó los cupos disponibles para este partido.
+                </>
+              ) : tipo === 'desafio_aceptado' ? (
                 <>
                   <button
                     type="button"
@@ -469,14 +556,18 @@ export const AlertaInvitacionPush: React.FC = () => {
                       ? 'Ver en Mi Equipo'
                       : tipo === 'invitacion_equipo'
                       ? 'Aceptar y Unirme'
+                      : tipo === 'postulacion_aceptada'
+                      ? '¡Excelente, voy a jugar! ⚽'
+                      : tipo === 'postulacion_rechazada'
+                      ? 'Buscar otro partido ⚽'
                       : 'Confirmar Jugador'}
                   </>
                 )}
               </button>
 
-              {(tipo === 'desafio_aceptado' || tipo === 'postulacion_partido') && (
+              {(tipo === 'desafio_aceptado' || tipo === 'postulacion_partido' || tipo === 'postulacion_aceptada') && (
                 <div className="flex gap-2">
-                  {invitacionActual.remitenteUid && (
+                  {invitacionActual.remitenteUid && tipo !== 'postulacion_aceptada' && (
                     <button
                       type="button"
                       onClick={() => {
@@ -497,7 +588,7 @@ export const AlertaInvitacionPush: React.FC = () => {
                     className="flex-1 flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
                   >
                     <MessageSquareQuote className="w-3.5 h-3.5 text-amber-400" />
-                    Abrir Chat
+                    {tipo === 'postulacion_aceptada' ? 'Chat con el Capitán' : 'Abrir Chat'}
                   </button>
                 </div>
               )}
