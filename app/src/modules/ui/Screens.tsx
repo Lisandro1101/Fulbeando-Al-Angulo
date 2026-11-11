@@ -1836,6 +1836,7 @@ export const Screen7MyTeam = () => {
               username: m.name,
               apodo: m.name,
               emoji: m.uid === t.captainId ? '👑' : '🏃‍♂️',
+              posicion: m.position || 'DEL',
               isCapitan: m.uid === t.captainId,
               esTemporal: false,
               stats: st,
@@ -1845,6 +1846,9 @@ export const Screen7MyTeam = () => {
         const refuerzosConf = (Array.isArray(t.convocatoria?.refuerzos) ? t.convocatoria.refuerzos : [])
           .filter((r: any) => confIds.includes(r.uid))
           .map((r: any) => {
+            const mMatch = t.members?.find((m: any) => m.uid === r.uid);
+            const nombreRef = r.nombre || r.name || mMatch?.name || 'Refuerzo';
+            const posRef = r.posicion || mMatch?.position || 'DEL';
             const st = (t.estadisticasJugadores && t.estadisticasJugadores[r.uid]) || {
               goles: 0,
               asistencias: 0,
@@ -1856,13 +1860,14 @@ export const Screen7MyTeam = () => {
               goles: st.goles,
               asistencias: st.asistencias,
               mvpCount: st.mvpCount,
-              posicion: r.posicion || 'DEL',
+              posicion: posRef,
             });
             return {
               id: r.uid,
-              username: r.nombre || r.name || 'Refuerzo',
-              apodo: r.nombre || r.name || 'Refuerzo',
+              username: nombreRef,
+              apodo: nombreRef,
               emoji: r.avatarUrl || '⚡',
+              posicion: posRef,
               isCapitan: false,
               esTemporal: true,
               stats: st,
@@ -1875,11 +1880,13 @@ export const Screen7MyTeam = () => {
           .filter((id) => !cubiertos.has(id))
           .map((id) => {
             const mTemp = t.members?.find((m: any) => m.uid === id);
+            const nombreTemp = mTemp?.name || 'Refuerzo';
             return {
               id,
-              username: mTemp?.name || 'Refuerzo Convocado',
-              apodo: mTemp?.name || 'Refuerzo Convocado',
+              username: nombreTemp,
+              apodo: nombreTemp,
               emoji: '⚡',
+              posicion: mTemp?.position || null,
               isCapitan: false,
               esTemporal: true,
               stats: { goles: 0, asistencias: 0, partidosJugados: 0, mvpCount: 0 },
@@ -3398,88 +3405,112 @@ export const Screen7MyTeam = () => {
                 whileHover={{ y: -1, scale: 1.008 }}
                 whileTap={{ scale: 0.985 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                className="flex items-center gap-4 bg-zinc-900 p-3 rounded-2xl border border-zinc-800 shadow-sm hover:border-zinc-700/80 transition-shadow"
+                className="flex flex-col bg-zinc-900 p-3 rounded-2xl border border-zinc-800 shadow-sm hover:border-zinc-700/80 transition-all"
               >
-                <div className="w-10 h-10 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center font-bold text-amber-500">
-                  {jugador.emoji?.startsWith('http') ? (
-                    <img src={jugador.emoji} alt={jugador.apodo} className="w-full h-full object-cover" />
-                  ) : (
-                    jugador.emoji
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm truncate text-white">{jugador.apodo}</h4>
-                    {esRefuerzo && (
-                      <span className="text-[11px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-black shrink-0">
-                        ⚡ Refuerzo
-                      </span>
-                    )}
+                {/* Fila Principal: Avatar, Identificación y Estadísticas */}
+                <div className="flex items-center justify-between gap-3 min-w-0 w-full">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center font-bold text-amber-500 shrink-0 border border-zinc-700/60">
+                      {jugador.emoji?.startsWith('http') ? (
+                        <img src={jugador.emoji} alt={jugador.apodo} className="w-full h-full object-cover" />
+                      ) : (
+                        jugador.emoji
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-sm truncate text-white max-w-[130px] sm:max-w-none">{jugador.apodo}</h4>
+                        {esRefuerzo && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-black shrink-0">
+                            ⚡ Refuerzo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider mt-0.5 truncate">
+                        {jugador.isCapitan
+                          ? '👑 CAPITÁN'
+                          : esRefuerzo
+                          ? (jugador.posicion ? `Refuerzo • ${jugador.posicion}` : 'Refuerzo Convocado')
+                          : (jugador.posicion || 'JUGADOR')}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-400 font-semibold">{jugador.isCapitan ? 'CAPITÁN' : esRefuerzo ? 'REFUERZO DEL PARTIDO' : 'JUGADOR'}</p>
+
+                  {/* Estadísticas de Jugador y Media / OVR */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col items-end text-[11px] font-bold text-zinc-400 leading-tight">
+                      <div className="flex items-center gap-1.5">
+                        <span title="Goles">⚽ {jugador.stats?.goles || 0}</span>
+                        <span title="Asistencias">👟 {jugador.stats?.asistencias || 0}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 mt-0.5">{jugador.stats?.partidosJugados || 0} PJ</span>
+                    </div>
+                    {(() => {
+                      const tema = obtenerTemaSegunMedia(jugador.media || 55);
+                      return (
+                        <div 
+                          className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 shadow-md ${tema.badgeMediaClass}`}
+                          title={`Media / OVR ${jugador.media || 55} (${tema.nombreTier})`}
+                        >
+                          {jugador.media || 55}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
 
-                {/* Estadísticas de Jugador y Media / OVR */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex flex-col items-end text-[11px] font-bold text-zinc-400">
-                    <div className="flex items-center gap-1.5">
-                      <span title="Goles">⚽ {jugador.stats?.goles || 0}</span>
-                      <span title="Asistencias">👟 {jugador.stats?.asistencias || 0}</span>
-                    </div>
-                    <span className="text-[11px] text-zinc-500">{jugador.stats?.partidosJugados || 0} PJ</span>
-                  </div>
-                  {(() => {
-                    const tema = obtenerTemaSegunMedia(jugador.media || 55);
-                    return (
-                      <div 
-                        className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 shadow-md ${tema.badgeMediaClass}`}
-                        title={`Media / OVR ${jugador.media || 55} (${tema.nombreTier})`}
-                      >
-                        {jugador.media || 55}
+                {/* Fila de Acciones: Refuerzo a Plantel o Gestión Capitán */}
+                {((esRefuerzo && equipo.isCapitan) || canRemove || canLeave) && (
+                  <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2 w-full">
+                    {esRefuerzo && equipo.isCapitan && (
+                      <>
+                        <span className="text-[11px] text-zinc-400 font-medium">Jugador libre convocado</span>
+                        <button 
+                          onClick={() => {
+                            setUsuarioSeleccionado({
+                              uid: jugador.id,
+                              username: jugador.username || jugador.apodo,
+                              apodo: jugador.apodo,
+                              emoji: jugador.emoji,
+                            });
+                            setMostrarInvitar(true);
+                          }}
+                          className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 active:scale-95 shadow-sm cursor-pointer ml-auto"
+                          title="Invitar a ser miembro permanente del plantel"
+                        >
+                          <span>+ Sumar al Plantel</span>
+                        </button>
+                      </>
+                    )}
+
+                    {canRemove && (
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button 
+                          onClick={() => handleDelegateCaptain(equipo.id, jugador.id)}
+                          className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors cursor-pointer"
+                        >
+                          Hacer Capitán
+                        </button>
+                        <button 
+                          onClick={() => handleRemovePlayer(equipo.id, jugador.id, false)}
+                          className="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
+                        >
+                          Liberar
+                        </button>
                       </div>
-                    );
-                  })()}
-                </div>
-                {esRefuerzo && equipo.isCapitan && (
-                  <button 
-                    onClick={() => {
-                      setUsuarioSeleccionado({
-                        uid: jugador.id,
-                        username: jugador.username || jugador.apodo,
-                        apodo: jugador.apodo,
-                        emoji: jugador.emoji,
-                      });
-                      setMostrarInvitar(true);
-                    }}
-                    className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors shrink-0 cursor-pointer"
-                    title="Invitar a ser miembro permanente del plantel"
-                  >
-                    + Sumar al Plantel
-                  </button>
-                )}
-                {canRemove && (
-                  <div className="flex flex-col gap-1">
-                    <button 
-                      onClick={() => handleDelegateCaptain(equipo.id, jugador.id)}
-                      className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-colors cursor-pointer"
-                    >
-                      Hacer Capitán
-                    </button>
-                    <button 
-                      onClick={() => handleRemovePlayer(equipo.id, jugador.id, false)}
-                      className="bg-red-500/10 text-red-500 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
-                    >
-                      Liberar
-                    </button>
+                    )}
+
+                    {canLeave && (
+                      <div className="ml-auto">
+                        <button 
+                          onClick={() => handleRemovePlayer(equipo.id, jugador.id, true)}
+                          className="bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
+                        >
+                          Salir
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-                {canLeave && (
-                  <button 
-                    onClick={() => handleRemovePlayer(equipo.id, jugador.id, true)}
-                    className="bg-red-500/10 text-red-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-colors cursor-pointer"
-                  >
-                    Salir
-                  </button>
                 )}
               </motion.div>
             );
