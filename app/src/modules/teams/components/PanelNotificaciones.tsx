@@ -662,16 +662,6 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                               >
                                 Ver Convocatoria
                               </button>
-                              {onAbrirChatDesafio && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleAbrirChat(notif)}
-                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
-                                >
-                                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                                  Chat con Capitán
-                                </button>
-                              )}
                             </>
                           )}
 

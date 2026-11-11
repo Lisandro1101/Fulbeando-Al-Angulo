@@ -565,9 +565,9 @@ export const AlertaInvitacionPush: React.FC = () => {
                 )}
               </button>
 
-              {(tipo === 'desafio_aceptado' || tipo === 'postulacion_partido' || tipo === 'postulacion_aceptada') && (
+              {(tipo === 'desafio_aceptado' || tipo === 'postulacion_partido') && (
                 <div className="flex gap-2">
-                  {invitacionActual.remitenteUid && tipo !== 'postulacion_aceptada' && (
+                  {invitacionActual.remitenteUid && (
                     <button
                       type="button"
                       onClick={() => {
@@ -580,16 +580,18 @@ export const AlertaInvitacionPush: React.FC = () => {
                       Ver Ficha
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      abrirChatDesafio({ desafio: invitacionActual });
-                    }}
-                    className="flex-1 flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
-                  >
-                    <MessageSquareQuote className="w-3.5 h-3.5 text-amber-400" />
-                    {tipo === 'postulacion_aceptada' ? 'Chat con el Capitán' : 'Abrir Chat'}
-                  </button>
+                  {tipo === 'desafio_aceptado' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        abrirChatDesafio({ desafio: invitacionActual });
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
+                    >
+                      <MessageSquareQuote className="w-3.5 h-3.5 text-amber-400" />
+                      Abrir Chat
+                    </button>
+                  )}
                 </div>
               )}
 

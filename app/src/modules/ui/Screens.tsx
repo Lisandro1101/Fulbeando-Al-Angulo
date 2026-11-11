@@ -2275,11 +2275,20 @@ export const Screen7MyTeam = () => {
     if (!equipo || !equipo.convocatoria || !sesion.user) return;
     setEnviandoAlRadar(true);
     try {
-      const predio = equipo.convocatoria.predioNombre || equipo.convocatoria.predio || 'Complejo Deportivo';
-      const cancha = equipo.convocatoria.canchaNombre || equipo.convocatoria.cancha || 'Cancha reservada';
+      const tieneCancha = Boolean(
+        equipo.convocatoria.predioNombre &&
+        equipo.convocatoria.predioNombre !== 'A definir' &&
+        equipo.convocatoria.predioNombre !== 'Sin cancha pactada' &&
+        equipo.convocatoria.predioNombre.trim() !== ''
+      );
+      const estadoCancha = tieneCancha ? 'CON_CANCHA' : 'SIN_CANCHA';
+      const predio = tieneCancha ? (equipo.convocatoria.predioNombre || equipo.convocatoria.predio || 'Complejo') : 'Sin cancha pactada (a definir)';
+      const cancha = tieneCancha ? (equipo.convocatoria.canchaNombre || equipo.convocatoria.cancha || '') : '';
       const fecha = equipo.convocatoria.fecha || 'Próximo partido';
 
-      const textoAlerta = `¡No completamos! Necesitamos a los ${jugadoresFaltantes} jugadores necesarios para jugar en ${predio} (${cancha}). Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`;
+      const textoAlerta = tieneCancha
+        ? `¡Faltan jugadores! Necesitamos ${jugadoresFaltantes} jugador(es) en ${predio}${cancha ? ` (${cancha})` : ''}. Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`
+        : `¡Faltan jugadores! Necesitamos ${jugadoresFaltantes} jugador(es). Sin cancha pactada (a definir). Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`;
 
       // Geo del usuario o fallback
       const geoPunto = sesion.usuario?.geo
@@ -2296,7 +2305,11 @@ export const Screen7MyTeam = () => {
         equipoNombre: equipo.nombre,
         equipoEscudoUrl: equipo.emoji?.startsWith('http') ? equipo.emoji : null,
         modalidad: (equipo.formato || 'F5') as any,
-        estadoCancha: 'CON_CANCHA',
+        estadoCancha,
+        conCancha: tieneCancha,
+        predioNombre: tieneCancha ? predio : null,
+        tipoDesafio: 'busqueda_jugador',
+        jugadoresFaltantes,
         estado: 'ABIERTO',
         turnoId: equipo.convocatoria.turnoId ?? null,
         predioId: equipo.convocatoria.predioId ?? null,

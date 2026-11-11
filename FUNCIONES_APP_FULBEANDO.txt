@@ -1,0 +1,126 @@
+================================================================================
+                    FULBEANDO - MAPA FUNCIONAL DEL SISTEMA
+================================================================================
+
+Este documento define la estructura teórica y operativa completa de Fulbeando,
+dividida por funciones centrales. Cada función se audita y desglosa paso a paso
+(End-to-End: desde su inicio real en el flujo hasta su finalización) para contrastar
+la lógica de negocio con el código de la aplicación y garantizar su funcionamiento.
+
+--------------------------------------------------------------------------------
+ÍNDICE DE FUNCIONES DEL SISTEMA
+--------------------------------------------------------------------------------
+
+[FUNCIÓN 1]: CONVOCATORIA DE PARTIDO Y BÚSQUEDA DE REFUERZOS EN EL RADAR ("FALTA JUGADOR")
+[FUNCIÓN 2]: GESTIÓN DE EQUIPO, PLANTEL Y CONVOCATORIA INTERNA
+[FUNCIÓN 3]: CREACIÓN, RETO Y DISPUTA DE DESAFÍOS ENTRE EQUIPOS (MATCHMAKING)
+[FUNCIÓN 4]: EXPLORACIÓN, RESERVA DE CANCHAS Y GESTIÓN DE SEÑAS EN PREDIOS
+[FUNCIÓN 5]: RADAR EN VIVO (MAPA GEOLOCALIZADO EN TIEMPO REAL)
+[FUNCIÓN 6]: GESTIÓN INTEGRAL PARA DUEÑOS DE PREDIOS (CANCHAS Y TURNOS)
+[FUNCIÓN 7]: PERFIL DE JUGADOR, CARTA FIFA / DNI FUTBOLERO Y ESTADÍSTICAS
+[FUNCIÓN 8]: TERCER TIEMPO, VOTACIÓN POST-PARTIDO, CALIFICACIONES Y FAIR PLAY
+[FUNCIÓN 9]: COMUNIDAD, MURO SOCIAL Y TORNEOS RELÁMPAGO
+[FUNCIÓN 10]: PANEL DE CONTROL, ARBITRAJE Y SUPERADMIN
+[FUNCIÓN 11]: PUBLICIDAD, MONETIZACIÓN Y SPONSORS LOCALES
+
+================================================================================
+DESGLOSE EN PROFUNDIDAD: FUNCIÓN 1
+"CONVOCATORIA DE PARTIDO Y BÚSQUEDA DE REFUERZOS EN EL RADAR (FALTA JUGADOR)"
+================================================================================
+
+REGLA DE ORO DE ESTA FUNCIÓN:
+"Falta un jugador" NO es una entidad aislada ni se crea sola. 
+NACE ESTRICTAMENTE a partir de una CONVOCATORIA INTERNA abierta por el capitán 
+de un equipo. Si el plantel no llega a completar los cupos necesarios, el 
+capitán activa el envío de la convocatoria hacia el RADAR con los jugadores 
+faltantes.
+
+--------------------------------------------------------------------------------
+TRAZABILIDAD PASO A PASO (DE PRINCIPIO A FIN):
+--------------------------------------------------------------------------------
+
+1. DISPARADOR INICIAL: APERTURA DE LA CONVOCATORIA POR EL CAPITÁN
+   - ¿Dónde?: En la sección de Gestión de Equipo (`/equipo` o ficha del partido).
+   - ¿Quién?: Exclusivamente el Capitán o Administrador del equipo.
+   - Datos de la Convocatoria:
+     * Modalidad del equipo: Fútbol 5, 7, 8 u 11 (determina el cupo necesario).
+     * Fecha y Horario del partido.
+     * Condición de Cancha (2 variantes posibles):
+       A) CON CANCHA PACTADA: Predio seleccionado, turno asignado o seña paga.
+       B) SIN CANCHA PACTADA / A DEFINIR: El partido está planeado, pero la 
+          cancha se definirá luego o se buscará según los confirmados.
+     * Cupo requerido de titulares (ej: 5 para F5, 7 para F7, etc.).
+
+2. RESPUESTA DEL PLANTEL PROPIO Y DETECCIÓN DEL FALTANTE
+   - Los miembros del equipo reciben la convocatoria en la app y votan:
+     "Voy" (confirmado) o "Me bajo" (baja).
+   - El sistema calcula en tiempo real los cupos cubiertos vs los faltantes:
+     Ejemplo: En F5 hay 3 confirmados -> Faltan 2 jugadores.
+
+3. ACTIVACIÓN Y ENVÍO AL RADAR ("AL RADAR / FALTA JUGADOR"):
+   - Si no se completan los cupos, el capitán presiona el botón:
+     [Mandar al Radar / Al Radar].
+   - Configuración del envío al Radar:
+     * Cantidad total exacta de jugadores faltantes (ej: 2).
+     * Posición buscada (Arquero, Defensor, Mediocampista, Delantero o Cualquiera).
+   - Generación de la Alerta en Firestore (Colección `desafios` vinculada al equipo):
+     * `tipoDesafio`: 'busqueda_jugador'
+     * `jugadoresFaltantes`: Número entero con la cantidad requerida.
+     * `posicionBuscada`: Posición filtrada o null.
+     * `estadoCancha`: 'CON_CANCHA' o 'SIN_CANCHA' (según la convocatoria).
+     * `predioNombre`: Nombre del predio (si tiene cancha) o "A definir / Sin cancha pactada".
+     * `equipoId` y `convocatoriaId`: Referencias cruzadas para sincronización.
+
+4. DIFUSIÓN EN RADAR Y COMUNIDAD CON INFORMACIÓN COMPLETA:
+   - En el Radar (`/radar`):
+     * Marcador distintivo ("Falta Jugador") mostrando explícitamente:
+       "Faltan X jugadores" (ej: "Faltan 2").
+     * Estado transparente de cancha:
+       - Si tiene cancha: Ícono verde + "Cancha confirmada en [Nombre Predio]".
+       - Si no tiene cancha: Ícono naranja + "Sin cancha pactada / Cancha a definir".
+     * Modalidad (F5/F7/F11), fecha, hora y posición solicitada.
+   - En Comunidad / Feed:
+     * Tarjeta informativa idéntica y completa para que el jugador sepa de antemano
+       si ya hay predio o si se busca cancha en conjunto.
+
+5. POSTULACIÓN DEL JUGADOR LIBRE:
+   - El jugador interesado ve la alerta en el Radar o Comunidad.
+   - Lee toda la información: faltantes, si hay cancha o no, horario y equipo.
+   - Presiona "¡Me postulo para jugar!".
+   - Se crea la solicitud en `invitaciones` dirigida al UID del capitán del equipo:
+     `tipo: 'postulacion_suplente'` / `'postulacion_refuerzo'`.
+
+6. REVISIÓN Y DECISIÓN DEL CAPITÁN:
+   - Al capitán le llega la notificación push y la alerta en su Panel de Notificaciones.
+   - Puede ver la Carta FIFA / perfil del postulante (nivel, posición, reputación).
+   - El capitán decide con un solo toque:
+     * [ACEPTAR]: Incorpora al jugador como refuerzo temporal del partido.
+     * [RECHAZAR]: Descarta la postulación.
+
+7. RESOLUCIÓN, DESCUENTO DE CUPOS Y NOTIFICACIÓN AL JUGADOR:
+   - IMPORTANTE: NO EXISTE CHAT PRIVADO ENTRE POSTULANTE Y CAPITÁN.
+     La interacción es puramente resolutiva y deportiva.
+   - Si el capitán ACEPTA:
+     * El jugador es sumado a la lista de `confirmados` y `refuerzos` de la convocatoria.
+     * RESTA AUTOMÁTICA EN EL RADAR:
+       `jugadoresFaltantes = jugadoresFaltantes - 1`.
+       El pin del Radar se actualiza al instante (ej: pasa de "Faltan 2" a "Falta 1").
+     * Si `jugadoresFaltantes` llega a 0:
+       La alerta se cierra y sale automáticamente del Radar (cupo completo).
+     * El jugador recibe notificación push y modal con sonido/vibración:
+       "🎉 ¡Confirmado en el Partido!".
+       Al tocar "¡A jugar!", se le abre directamente la ficha completa del partido
+       (con horario, predio/cancha pactada o aviso de cancha a definir).
+   - Si el capitán RECHAZA:
+     * El jugador recibe notificación de que el cupo fue cubierto o no fue aceptado,
+       quedando libre de inmediato para postularse a otros partidos.
+
+8. CIERRE DE LA CONVOCATORIA Y DÍA DEL PARTIDO:
+   - Si el capitán completa el equipo (con el plantel o con refuerzos), puede cerrar
+     la convocatoria manualmente ("Cerrar Convocatoria"), lo que retira la alerta del Radar.
+   - El refuerzo temporal figura en la nómina oficial del partido para el Tercer Tiempo
+     (calificación mutua de fair play y estadísticas sin quedar como miembro fijo del club).
+
+================================================================================
+FIN DEL DESGLOSE DE FUNCIÓN 1
+================================================================================

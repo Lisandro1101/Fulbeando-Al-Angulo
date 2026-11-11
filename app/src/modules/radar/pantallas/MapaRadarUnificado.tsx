@@ -306,6 +306,8 @@ export interface DesafioEntity extends BaseEntity {
   modalidad: string;
   fechaUnix: number;
   conCancha: boolean;
+  predioNombre?: string | null;
+  canchaNombre?: string | null;
   descripcion: string | null;
   tipoDesafio?: 'partido_equipo' | 'busqueda_jugador';
   posicionBuscada?: string | null;
@@ -916,7 +918,14 @@ export const MapaRadarUnificado: React.FC = () => {
         equipo: d.equipoNombre,
         modalidad: d.modalidad,
         fechaUnix: d.fechaUnix,
-        conCancha: d.turnoId !== null,
+        conCancha: Boolean(
+          (d as any).estadoCancha === 'CON_CANCHA' ||
+          (d as any).conCancha === true ||
+          d.turnoId !== null ||
+          ((d as any).predioNombre && (d as any).predioNombre !== 'Sin cancha pactada (a definir)' && (d as any).predioNombre !== 'A definir')
+        ),
+        predioNombre: (d as any).predioNombre ?? null,
+        canchaNombre: (d as any).canchaNombre ?? null,
         descripcion: d.descripcion,
         tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
         posicionBuscada: d.posicionBuscada ?? null,
@@ -1632,11 +1641,11 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 </div>
               )}
 
-              {/* PUENTE ENTRE MODULOS */}
-              <div className={`mb-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-800/60 border-zinc-700 text-zinc-400'}`}>
+              {/* Información de Cancha */}
+              <div className={`mb-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${seleccionado.conCancha ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
                 {seleccionado.conCancha
-                  ? '✅ Cancha ya reservada (turno confirmado)'
-                  : '⚽ Buscan cancha: se coordina al aceptar'}
+                  ? `✅ Cancha confirmada${seleccionado.predioNombre ? `: ${seleccionado.predioNombre}` : ''}`
+                  : '⚽ Sin cancha pactada (a definir)'}
               </div>
 
               {seleccionado.descripcion && (

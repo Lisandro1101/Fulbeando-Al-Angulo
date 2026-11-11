@@ -1874,6 +1874,26 @@ export const incorporarRefuerzoAEquipo = async (
       alertaRadarEnviada,
     },
   })
+
+  // Sincronizar y restar faltantes en el Radar inmediatamente
+  if (conv.alertaRadarId) {
+    try {
+      const desafioRef = doc(db, COLECCIONES.desafios, conv.alertaRadarId)
+      if (faltantes > 0) {
+        await updateDoc(desafioRef, {
+          jugadoresFaltantes: faltantes,
+        })
+      } else {
+        // Cupo completado: cerramos la alerta del radar para retirarla del mapa
+        await updateDoc(desafioRef, {
+          jugadoresFaltantes: 0,
+          estado: 'ACEPTADO',
+        })
+      }
+    } catch (e) {
+      console.warn('Error sincronizando jugadores faltantes en el radar:', e)
+    }
+  }
 }
 
 /**
