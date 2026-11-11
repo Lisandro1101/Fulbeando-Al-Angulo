@@ -1,20 +1,42 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, Lock, Eye, Cookie, HelpCircle, Mail } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Shield, Lock, Eye, Cookie, HelpCircle, Mail, Home } from 'lucide-react';
 
 export const PoliticaPrivacidad: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleVolver = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black">
+    <div className="min-h-screen w-full bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black scroll-smooth">
       {/* Barra de navegación superior */}
-      <header className="sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-md border-b border-zinc-800">
+      <header className="sticky top-0 z-50 bg-[#0B0F19]/95 backdrop-blur-md border-b border-zinc-800">
         <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
-          <Link
-            to="/"
-            className="flex items-center gap-2 text-zinc-300 hover:text-emerald-400 font-bold text-sm transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver a Fulbeando</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleVolver}
+              className="flex items-center gap-2 text-zinc-300 hover:text-emerald-400 font-bold text-sm transition cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Volver atrás</span>
+            </button>
+            <span className="text-zinc-600">|</span>
+            <Link
+              to="/"
+              className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs font-semibold transition"
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Inicio</span>
+            </Link>
+          </div>
+
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               Legal & Privacidad
@@ -69,7 +91,7 @@ export const PoliticaPrivacidad: React.FC = () => {
           </ul>
         </section>
 
-        {/* Sección 3: Publicidad de Terceros y Google AdSense (OBLIGATORIA DE ADSENSE) */}
+        {/* Sección 3: Publicidad de Terceros y Google AdSense */}
         <section className="space-y-4 bg-emerald-950/20 p-6 rounded-2xl border border-emerald-500/30">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
             <Cookie className="w-4 h-4" />
@@ -130,11 +152,15 @@ export const PoliticaPrivacidad: React.FC = () => {
           </p>
         </section>
 
-        {/* Pie de página */}
+        {/* Pie de página con botón volver */}
         <footer className="pt-8 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
           <div>© {new Date().getFullYear()} Fulbeando. Todos los derechos reservados.</div>
           <div className="flex items-center gap-4">
-            <Link to="/terminos" className="hover:text-zinc-300 transition">Términos y Condiciones</Link>
+            <button type="button" onClick={handleVolver} className="hover:text-zinc-300 transition cursor-pointer">
+              ← Volver
+            </button>
+            <span>•</span>
+            <Link to="/terminos" className="hover:text-zinc-300 transition">Términos</Link>
             <span>•</span>
             <Link to="/contacto" className="hover:text-zinc-300 transition">Contacto</Link>
             <span>•</span>

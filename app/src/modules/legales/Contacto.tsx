@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle2, Shield, MapPin } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle2, Shield, MapPin, Home } from 'lucide-react';
 
 export const Contacto: React.FC = () => {
+  const navigate = useNavigate();
   const [enviado, setEnviado] = useState(false);
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [mensaje, setMensaje] = useState('');
+
+  const handleVolver = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,17 +24,29 @@ export const Contacto: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black">
+    <div className="min-h-screen w-full bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black scroll-smooth">
       {/* Barra de navegación superior */}
-      <header className="sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-md border-b border-zinc-800">
+      <header className="sticky top-0 z-50 bg-[#0B0F19]/95 backdrop-blur-md border-b border-zinc-800">
         <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
-          <Link
-            to="/"
-            className="flex items-center gap-2 text-zinc-300 hover:text-emerald-400 font-bold text-sm transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver a Fulbeando</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleVolver}
+              className="flex items-center gap-2 text-zinc-300 hover:text-emerald-400 font-bold text-sm transition cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Volver atrás</span>
+            </button>
+            <span className="text-zinc-600">|</span>
+            <Link
+              to="/"
+              className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-xs font-semibold transition"
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Inicio</span>
+            </Link>
+          </div>
+
           <div className="flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               Soporte & Contacto
@@ -104,7 +125,7 @@ export const Contacto: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => { setEnviado(false); setNombre(''); setEmail(''); setMensaje(''); }}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-xl transition"
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-xl transition cursor-pointer"
                 >
                   Enviar otro mensaje
                 </button>
@@ -164,13 +185,17 @@ export const Contacto: React.FC = () => {
           </div>
         </div>
 
-        {/* Pie de página */}
+        {/* Pie de página con botón volver */}
         <footer className="pt-8 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
           <div>© {new Date().getFullYear()} Fulbeando. Todos los derechos reservados.</div>
           <div className="flex items-center gap-4">
-            <Link to="/privacidad" className="hover:text-zinc-300 transition">Política de Privacidad</Link>
+            <button type="button" onClick={handleVolver} className="hover:text-zinc-300 transition cursor-pointer">
+              ← Volver
+            </button>
             <span>•</span>
-            <Link to="/terminos" className="hover:text-zinc-300 transition">Términos y Condiciones</Link>
+            <Link to="/privacidad" className="hover:text-zinc-300 transition">Privacidad</Link>
+            <span>•</span>
+            <Link to="/terminos" className="hover:text-zinc-300 transition">Términos</Link>
             <span>•</span>
             <Link to="/" className="text-emerald-400 hover:text-emerald-300 transition">Inicio</Link>
           </div>

@@ -1,68 +1,184 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
   MapPin, 
-  Calendar, 
   Trophy, 
   ArrowRight, 
-  ShieldCheck, 
+  ArrowUp,
   Sparkles, 
-  CheckCircle2, 
   ChevronRight, 
   Building2, 
   Flame, 
   HelpCircle,
-  ExternalLink
+  Menu,
+  X
 } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const [mostrarScrollTop, setMostrarScrollTop] = useState(false);
+  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 250) {
+        setMostrarScrollTop(true);
+      } else {
+        setMostrarScrollTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    setMenuMovilAbierto(false);
+    const element = document.getElementById(id);
+    if (element) {
+      const yOffset = -80; // Offset para la barra fija
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black overflow-x-hidden">
-      {/* 1. Header / Barra Superior */}
-      <header className="sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-md border-b border-zinc-800/80">
+    <div className="w-full min-h-screen bg-[#0B0F19] text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black scroll-smooth relative">
+      {/* 1. Header / Barra Superior Fija */}
+      <header className="sticky top-0 z-50 bg-[#0B0F19]/95 backdrop-blur-md border-b border-zinc-800/80 transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
+          <button 
+            type="button" 
+            onClick={scrollToTop} 
+            className="flex items-center gap-2.5 cursor-pointer text-left focus:outline-none"
+          >
             <img 
               src="/logo-fulbeand-completo.svg?v=20261109" 
               alt="Fulbeando" 
               className="h-9 sm:h-12 w-auto object-contain" 
             />
-          </Link>
+          </button>
 
           {/* Navegación Desktop */}
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-300">
-            <a href="#como-funciona" className="hover:text-emerald-400 transition">¿Cómo Funciona?</a>
-            <a href="#beneficios" className="hover:text-emerald-400 transition">Jugadores</a>
-            <a href="#predios" className="hover:text-emerald-400 transition">Dueños de Predios</a>
-            <a href="#faq" className="hover:text-emerald-400 transition">Preguntas Frecuentes</a>
+            <button
+              type="button"
+              onClick={() => scrollToSection('como-funciona')}
+              className="hover:text-emerald-400 transition cursor-pointer"
+            >
+              ¿Cómo Funciona?
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection('beneficios')}
+              className="hover:text-emerald-400 transition cursor-pointer"
+            >
+              Jugadores
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection('predios')}
+              className="hover:text-emerald-400 transition cursor-pointer"
+            >
+              Dueños de Predios
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection('faq')}
+              className="hover:text-emerald-400 transition cursor-pointer"
+            >
+              Preguntas Frecuentes
+            </button>
           </nav>
 
           {/* Botones de Acción */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/login"
-              className="px-4 py-2 text-sm font-bold text-zinc-200 hover:text-white transition"
+              className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold text-zinc-200 hover:text-white transition"
             >
               Ingresar
             </Link>
             <Link
               to="/login"
-              className="px-4 sm:px-5 py-2 sm:py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 sm:px-5 py-2 sm:py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <span>Registrarme</span>
               <ChevronRight className="w-4 h-4 hidden sm:inline" />
             </Link>
+
+            {/* Botón Menú Móvil */}
+            <button
+              type="button"
+              onClick={() => setMenuMovilAbierto(!menuMovilAbierto)}
+              aria-label="Abrir menú de navegación"
+              className="md:hidden p-2 text-zinc-400 hover:text-white rounded-lg bg-zinc-900 border border-zinc-800 cursor-pointer"
+            >
+              {menuMovilAbierto ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Menú desplegable Móvil */}
+        <AnimatePresence>
+          {menuMovilAbierto && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden bg-zinc-950 border-b border-zinc-800 px-4 py-4 space-y-3"
+            >
+              <button
+                type="button"
+                onClick={() => scrollToSection('como-funciona')}
+                className="block w-full text-left py-2 text-sm font-semibold text-zinc-300 hover:text-emerald-400"
+              >
+                ¿Cómo Funciona?
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('beneficios')}
+                className="block w-full text-left py-2 text-sm font-semibold text-zinc-300 hover:text-emerald-400"
+              >
+                Jugadores y Equipos
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('predios')}
+                className="block w-full text-left py-2 text-sm font-semibold text-zinc-300 hover:text-emerald-400"
+              >
+                Complejos y Predios
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('faq')}
+                className="block w-full text-left py-2 text-sm font-semibold text-zinc-300 hover:text-emerald-400"
+              >
+                Preguntas Frecuentes
+              </button>
+              <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+                <Link to="/terminos" className="hover:text-white">Términos</Link>
+                <span>•</span>
+                <Link to="/privacidad" className="hover:text-white">Privacidad</Link>
+                <span>•</span>
+                <Link to="/contacto" className="hover:text-white">Contacto</Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
       {/* 2. Hero Section */}
-      <section className="relative pt-12 pb-20 sm:pt-20 sm:pb-32 px-4 sm:px-6 overflow-hidden">
+      <section className="relative pt-10 pb-16 sm:pt-20 sm:pb-28 px-4 sm:px-6 overflow-hidden">
         {/* Luces y resplandores de fondo */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/3 right-10 w-[450px] h-[350px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/3 right-10 w-[400px] h-[300px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-5xl mx-auto text-center relative z-10 space-y-6 sm:space-y-8">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs sm:text-sm font-bold tracking-wide">
@@ -89,12 +205,13 @@ export const LandingPage: React.FC = () => {
               <span>Comenzar gratis</span>
               <ArrowRight className="w-5 h-5" />
             </Link>
-            <a
-              href="#como-funciona"
-              className="w-full sm:w-auto px-7 py-4 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold rounded-2xl transition text-base"
+            <button
+              type="button"
+              onClick={() => scrollToSection('como-funciona')}
+              className="w-full sm:w-auto px-7 py-4 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold rounded-2xl transition text-base cursor-pointer"
             >
               Conocer cómo funciona
-            </a>
+            </button>
           </div>
 
           {/* Métricas destacadas */}
@@ -330,8 +447,8 @@ export const LandingPage: React.FC = () => {
               <ul className="space-y-2 text-xs sm:text-sm text-zinc-400">
                 <li><Link to="/login" className="hover:text-emerald-400 transition">Iniciar Sesión</Link></li>
                 <li><Link to="/login" className="hover:text-emerald-400 transition">Crear Cuenta</Link></li>
-                <li><a href="#como-funciona" className="hover:text-emerald-400 transition">¿Cómo Funciona?</a></li>
-                <li><a href="#predios" className="hover:text-emerald-400 transition">Complejos Deportivos</a></li>
+                <li><button type="button" onClick={() => scrollToSection('como-funciona')} className="hover:text-emerald-400 transition cursor-pointer">¿Cómo Funciona?</button></li>
+                <li><button type="button" onClick={() => scrollToSection('predios')} className="hover:text-emerald-400 transition cursor-pointer">Complejos Deportivos</button></li>
               </ul>
             </div>
 
@@ -353,6 +470,23 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Botón flotante para volver arriba */}
+      <AnimatePresence>
+        {mostrarScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={scrollToTop}
+            aria-label="Volver arriba"
+            title="Volver arriba"
+            className="fixed bottom-6 right-6 z-40 p-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-full shadow-2xl transition cursor-pointer"
+          >
+            <ArrowUp className="w-5 h-5" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
