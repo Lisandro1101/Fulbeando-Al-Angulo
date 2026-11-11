@@ -137,13 +137,37 @@ const iconoJugadorLibre = L.divIcon({
   iconAnchor: [16, 16]
 });
 
+/**
+ * Extrae la cantidad exacta de jugadores faltantes para el Radar.
+ * Si no está explícito en `jugadoresFaltantes`, lo deduce inteligentemente
+ * del texto descriptivo ("Necesitamos 3 jugadores", "Faltan 2", etc.).
+ */
+export function obtenerCantidadFaltantes(entidad: {
+  jugadoresFaltantes?: number | null;
+  descripcion?: string | null;
+}): number {
+  if (typeof entidad.jugadoresFaltantes === 'number' && entidad.jugadoresFaltantes > 0) {
+    return entidad.jugadoresFaltantes;
+  }
+  const desc = entidad.descripcion || '';
+  const match =
+    desc.match(/(?:necesitamos(?:\s+a)?(?:\s+los)?|faltan|buscamos)\s+(\d+)\s+jugador/i) ||
+    desc.match(/(\d+)\s+jugador(?:es)?/i);
+  if (match && match[1]) {
+    const n = parseInt(match[1], 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return 1;
+}
+
 /** Icono de pin segun el tipo de entidad del radar. */
 function iconoDe(entidad: RadarEntity): L.DivIcon {
   if (entidad.type === 'cancha') return iconoPredio;
   if (entidad.type === 'equipo') return iconoEquipo;
   if (entidad.type === 'desafio') {
     if (entidad.tipoDesafio === 'busqueda_jugador') {
-      return iconoAlertaJugador(entidad.jugadoresFaltantes || 1);
+      const cant = obtenerCantidadFaltantes(entidad);
+      return iconoAlertaJugador(cant);
     }
     return iconoDesafio;
   }
@@ -438,6 +462,15 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
     }
     case 'desafio': {
       const p = pin as RadarPinDesafio;
+      const cant = obtenerCantidadFaltantes(p);
+      const desc = p.descripcion || '';
+      const esBusqueda =
+        p.tipoDesafio === 'busqueda_jugador' ||
+        (p.jugadoresFaltantes !== undefined && p.jugadoresFaltantes > 0) ||
+        desc.includes('¡No completamos!') ||
+        desc.includes('Faltan jugadores') ||
+        p.posicionBuscada !== null;
+
       return {
         ...base,
         type: 'desafio',
@@ -449,9 +482,9 @@ const entidadDePin = (pin: RadarPin): RadarEntity => {
         fechaUnix: pin.fechaUnix,
         conCancha: pin.conCancha,
         descripcion: pin.descripcion,
-        tipoDesafio: p.tipoDesafio ?? (p.jugadoresFaltantes && p.jugadoresFaltantes > 0 ? 'busqueda_jugador' : 'partido_equipo'),
+        tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
         posicionBuscada: p.posicionBuscada,
-        jugadoresFaltantes: p.jugadoresFaltantes,
+        jugadoresFaltantes: cant,
       };
     }
     case 'jugador': {
@@ -901,11 +934,14 @@ export const MapaRadarUnificado: React.FC = () => {
     });
 
     const desafiosEntities: DesafioEntity[] = desafios.map((d) => {
+      const cant = obtenerCantidadFaltantes(d);
+      const desc = d.descripcion || '';
       const esBusqueda =
         d.tipoDesafio === 'busqueda_jugador' ||
-        (d.jugadoresFaltantes && d.jugadoresFaltantes > 0) ||
+        cant > 0 ||
         d.posicionBuscada !== null ||
-        (d.descripcion?.startsWith('¡No completamos!') ?? false);
+        desc.startsWith('¡No completamos!') ||
+        desc.includes('Faltan jugadores');
       return {
         id: d.id,
         type: 'desafio' as const,
@@ -929,7 +965,7 @@ export const MapaRadarUnificado: React.FC = () => {
         descripcion: d.descripcion,
         tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
         posicionBuscada: d.posicionBuscada ?? null,
-        jugadoresFaltantes: d.jugadoresFaltantes ?? (esBusqueda ? 1 : undefined),
+        jugadoresFaltantes: cant,
       };
     });
 
@@ -1631,10 +1667,12 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                 <span className="bg-zinc-800 text-zinc-400 px-2.5 py-1 rounded-lg border border-zinc-700/80 font-medium">{seleccionado.distanciaKm.toFixed(1)} km</span>
               </div>
 
-              {/* Faltantes / Puesto si es búsqueda de jugador */}
               {seleccionado.tipoDesafio === 'busqueda_jugador' && (
                 <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-300 flex items-center justify-center gap-2">
-                  <span>Faltan: {seleccionado.jugadoresFaltantes || 1} jugador(es)</span>
+                  <span>
+                    Faltan: {obtenerCantidadFaltantes(seleccionado)}{' '}
+                    {obtenerCantidadFaltantes(seleccionado) === 1 ? 'jugador' : 'jugadores'}
+                  </span>
                   {seleccionado.posicionBuscada && (
                     <span>• Puesto: {seleccionado.posicionBuscada}</span>
                   )}

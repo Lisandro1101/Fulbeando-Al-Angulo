@@ -6,7 +6,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import type { RadarEntity, RadarEntityType, CanchaEntity, EquipoEntity, DesafioEntity, JugadorEntity } from '../pantallas/MapaRadarUnificado'
-import { IconoCancha, IconoEquipo, IconoDesafio, IconoJugador } from '../pantallas/MapaRadarUnificado'
+import { IconoCancha, IconoEquipo, IconoDesafio, IconoJugador, obtenerCantidadFaltantes } from '../pantallas/MapaRadarUnificado'
 import { buscarJugadores } from '@/modules/teams/teamService'
 
 // Función auxiliar para normalizar texto (sin tildes, minúsculas)
@@ -276,13 +276,18 @@ export function BuscadorRadar({
                 badgeLabel = 'Equipo'
               } else if (esDesafio) {
                 const d = item as DesafioEntity
+                const cant = obtenerCantidadFaltantes(d)
                 titulo = d.equipo || 'Desafío Abierto'
-                subtitulo = d.posicionBuscada
-                  ? `Busca ${d.posicionBuscada} (${d.modalidad})`
-                  : `Partido desafío ${d.modalidad}`
+                subtitulo = d.tipoDesafio === 'busqueda_jugador'
+                  ? `Faltan ${cant} ${cant === 1 ? 'jugador' : 'jugadores'} · ${d.modalidad}${d.posicionBuscada ? ` (${d.posicionBuscada})` : ''}`
+                  : (d.posicionBuscada
+                    ? `Busca ${d.posicionBuscada} (${d.modalidad})`
+                    : `Partido desafío ${d.modalidad}`)
                 badgeBg = 'bg-amber-500/15'
                 badgeColor = 'text-amber-400'
-                badgeLabel = 'Falta 1 / Desafío'
+                badgeLabel = d.tipoDesafio === 'busqueda_jugador'
+                  ? (cant > 1 ? `Faltan ${cant}` : 'Falta 1')
+                  : 'Desafío'
               } else if (esJugador) {
                 const j = item as JugadorEntity
                 titulo = j.apodo || 'Jugador'

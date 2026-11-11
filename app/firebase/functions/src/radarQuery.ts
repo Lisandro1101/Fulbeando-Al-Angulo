@@ -151,9 +151,13 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
       }
     }
     case 'desafio': {
-      const rawFaltantes = num(raw.jugadoresFaltantes, 0)
+      const desc = strOrNull(raw.descripcion) || ''
+      const matchNum = desc.match(/(?:necesitamos(?:\s+a)?(?:\s+los)?|faltan|buscamos)\s+(\d+)\s+jugador/i) || desc.match(/(\d+)\s+jugador(?:es)?/i)
+      const numExtraido = matchNum ? parseInt(matchNum[1], 10) : 0
+      const rawFaltantes = num(raw.jugadoresFaltantes, numExtraido)
       const posicionBuscada = strOrNull(raw.posicionBuscada)
-      const esBusqueda = raw.tipoDesafio === 'busqueda_jugador' || rawFaltantes > 0 || posicionBuscada !== null || (strOrNull(raw.descripcion)?.startsWith('¡No completamos!') ?? false)
+      const esBusqueda = raw.tipoDesafio === 'busqueda_jugador' || rawFaltantes > 0 || posicionBuscada !== null || desc.startsWith('¡No completamos!') || desc.includes('Faltan jugadores')
+      const faltantesFinal = rawFaltantes > 0 ? rawFaltantes : (esBusqueda ? 1 : undefined)
 
       return {
         ...base,
@@ -167,7 +171,7 @@ function aPin(tipo: Tipo, id: string, raw: DocumentData, punto: Punto, radioKm: 
         descripcion: strOrNull(raw.descripcion),
         tipoDesafio: esBusqueda ? 'busqueda_jugador' : 'partido_equipo',
         posicionBuscada,
-        jugadoresFaltantes: rawFaltantes > 0 ? rawFaltantes : (esBusqueda ? 1 : undefined),
+        jugadoresFaltantes: faltantesFinal,
       }
     }
     case 'jugador': {

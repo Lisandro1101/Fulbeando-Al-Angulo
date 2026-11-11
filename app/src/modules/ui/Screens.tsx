@@ -2134,10 +2134,14 @@ export const Screen7MyTeam = () => {
 
   const handleCreateConvocatoria = () => {
     if (!equipo) return;
+    const formatoNum = parseInt((equipo.modalidadBase || equipo.formato || 'F5').replace(/\D/g, '')) || 5;
+    const confirmadosIniciales = currentUid ? [currentUid] : [];
+    const faltantesIniciales = Math.max(1, formatoNum - confirmadosIniciales.length);
     const nuevaConv = {
       fecha: convFecha,
-      confirmados: currentUid ? [currentUid] : [],
+      confirmados: confirmadosIniciales,
       bajas: [],
+      jugadoresFaltantes: faltantesIniciales,
     };
     actualizarConvocatoriaEquipo(equipo.id, nuevaConv).catch(console.error);
     const nuevosEquipos = [...equipos];
@@ -2170,8 +2174,22 @@ export const Screen7MyTeam = () => {
          if(status === 'voy') newConf.push(myPlayerId);
          if(status === 'bajo') newBajas.push(myPlayerId);
 
-         const convActualizada = { ...eq.convocatoria, confirmados: newConf, bajas: newBajas };
+         const formatoNum = parseInt((eq.modalidadBase || eq.formato || 'F5').replace(/\D/g, '')) || 5;
+         const faltantesActualizados = Math.max(0, formatoNum - newConf.length);
+
+         const convActualizada = {
+           ...eq.convocatoria,
+           confirmados: newConf,
+           bajas: newBajas,
+           jugadoresFaltantes: faltantesActualizados,
+         };
          actualizarConvocatoriaEquipo(teamId, convActualizada).catch(console.error);
+
+         if (eq.convocatoria.alertaRadarId) {
+           updateDoc(doc(db, COLECCIONES.desafios, eq.convocatoria.alertaRadarId), {
+             jugadoresFaltantes: faltantesActualizados,
+           }).catch((e) => console.warn('Error sincronizando faltantes con el radar:', e));
+         }
 
          return { ...eq, convocatoria: convActualizada };
       }
@@ -2696,9 +2714,13 @@ export const Screen7MyTeam = () => {
                   {equipo.isCapitan && (
                     <motion.button
                       onClick={() => {
-                        const formatoNum = parseInt((equipo.formato || 'F5').replace(/\D/g, '')) || 5;
+                        const modalidadStr = equipo.modalidadBase || equipo.formato || 'F5';
+                        const formatoNum = parseInt(modalidadStr.replace(/\D/g, '')) || 5;
                         const yaConfirmados = (equipo.convocatoria.confirmados || []).length;
-                        const faltan = Math.max(1, formatoNum - yaConfirmados);
+                        const faltanCalculados = Math.max(1, formatoNum - yaConfirmados);
+                        const faltan = typeof equipo.convocatoria.jugadoresFaltantes === 'number' && equipo.convocatoria.jugadoresFaltantes > 0
+                          ? equipo.convocatoria.jugadoresFaltantes
+                          : faltanCalculados;
                         setJugadoresFaltantes(faltan);
                         setMostrarModalRadar(true);
                       }}
@@ -2741,7 +2763,14 @@ export const Screen7MyTeam = () => {
                     <div className="flex items-center gap-2 text-blue-200 font-bold truncate">
                       <Radio className="w-4 h-4 text-blue-400 animate-pulse shrink-0" />
                       <span className="truncate">
-                        En Radar: faltan {equipo.convocatoria.jugadoresFaltantes || 1} jugador(es)
+                        En Radar: faltan{' '}
+                        {equipo.convocatoria.jugadoresFaltantes ||
+                          Math.max(
+                            1,
+                            (parseInt((equipo.modalidadBase || equipo.formato || 'F5').replace(/\D/g, '')) || 5) -
+                              (equipo.convocatoria.confirmados?.length || 0),
+                          )}{' '}
+                        jugador(es)
                       </span>
                     </div>
                     <button
