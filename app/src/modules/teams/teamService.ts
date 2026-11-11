@@ -821,6 +821,9 @@ export const notificarPostulacionAlerta = async (
   destinatarioUid: string,
   alerta: {
     id: string
+    equipoId?: string
+    equipoNombre?: string
+    equipoEscudoUrl?: string | null
     fecha: string
     horaInicio: string
     horaFin: string
@@ -831,17 +834,18 @@ export const notificarPostulacionAlerta = async (
   const invData: InvitacionEquipo = {
     id: invRef.id,
     tipo: 'postulacion_partido',
-    equipoId: alerta.id,
-    equipoNombre: `Partido ${alerta.fecha}`,
-    equipoEscudoUrl: null,
+    equipoId: alerta.equipoId || alerta.id,
+    equipoNombre: alerta.equipoNombre || `Partido ${alerta.fecha}`,
+    equipoEscudoUrl: alerta.equipoEscudoUrl ?? null,
     remitenteUid,
     remitenteNombre,
     capitanNombre: remitenteNombre,
     destinatarioUid,
     destinatarioNombre: '',
+    desafioId: alerta.id,
     alertaId: alerta.id,
     posicion: alerta.posicion ?? null,
-    mensaje: `${remitenteNombre} quiere sumarse al partido del ${alerta.fecha} (${alerta.horaInicio} a ${alerta.horaFin})${
+    mensaje: `${remitenteNombre} quiere sumarse como refuerzo al partido de ${alerta.equipoNombre || 'tu equipo'}${
       alerta.posicion ? ` como ${alerta.posicion}` : ''
     }.`,
     estado: 'pendiente',
@@ -1876,9 +1880,24 @@ export const incorporarRefuerzoAEquipo = async (
   })
 
   // Sincronizar y restar faltantes en el Radar inmediatamente
-  if (conv.alertaRadarId) {
+  let desafioId = conv.alertaRadarId
+  if (!desafioId) {
     try {
-      const desafioRef = doc(db, COLECCIONES.desafios, conv.alertaRadarId)
+      const qD = query(
+        collection(db, COLECCIONES.desafios),
+        where('equipoId', '==', equipoId),
+        where('estado', '==', 'ABIERTO'),
+      )
+      const snapD = await getDocs(qD)
+      if (!snapD.empty) {
+        desafioId = snapD.docs[0]?.id
+      }
+    } catch {}
+  }
+
+  if (desafioId) {
+    try {
+      const desafioRef = doc(db, COLECCIONES.desafios, desafioId)
       if (faltantes > 0) {
         await updateDoc(desafioRef, {
           jugadoresFaltantes: faltantes,

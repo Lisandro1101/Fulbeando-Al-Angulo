@@ -2308,11 +2308,64 @@ export const Screen7MyTeam = () => {
         ? `¡Faltan jugadores! Necesitamos ${jugadoresFaltantes} jugador(es) en ${predio}${cancha ? ` (${cancha})` : ''}. Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`
         : `¡Faltan jugadores! Necesitamos ${jugadoresFaltantes} jugador(es). Sin cancha pactada (a definir). Fecha: ${fecha}. ¡Sumate a ${equipo.nombre}!`;
 
-      // Geo del usuario o fallback
-      const geoPunto = sesion.usuario?.geo
-        ? { lat: sesion.usuario.geo.lat, lng: sesion.usuario.geo.lng }
-        : { lat: -34.6037, lng: -58.3816 };
-      const geoIndex = aGeoIndex(geoPunto);
+      // 1. Si la convocatoria tiene predio asignado, buscar la ubicación exacta del predio
+      let geoPunto: { lat: number; lng: number } | null = null;
+      if (equipo.convocatoria.predioId) {
+        try {
+          const predioData = await obtenerPredio(equipo.convocatoria.predioId);
+          if (predioData?.geo?.lat && predioData?.geo?.lng) {
+            geoPunto = { lat: predioData.geo.lat, lng: predioData.geo.lng };
+          }
+        } catch (e) {
+          console.warn('Error obteniendo geo del predio:', e);
+        }
+      }
+
+      // 2. Si no, chequear la ubicación guardada del equipo
+      if (!geoPunto && (equipo as any).geo?.lat && (equipo as any).geo?.lng) {
+        geoPunto = { lat: (equipo as any).geo.lat, lng: (equipo as any).geo.lng };
+      }
+
+      // 3. Si no, chequear la ubicación guardada del usuario capitán
+      if (!geoPunto && sesion.usuario?.geo?.lat && sesion.usuario?.geo?.lng) {
+        geoPunto = { lat: sesion.usuario.geo.lat, lng: sesion.usuario.geo.lng };
+      }
+
+      // 4. Si no, chequear la última ubicación del navegador guardada en localStorage
+      if (!geoPunto) {
+        const guardada = typeof window !== 'undefined' ? localStorage.getItem('al_angulo_ultima_ubicacion') : null;
+        if (guardada) {
+          try {
+            const p = JSON.parse(guardada);
+            if (p.lat && p.lng) geoPunto = p;
+          } catch {}
+        }
+      }
+
+      // 5. Si no, consultar geolocalización actual del navegador
+      if (!geoPunto && typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, maximumAge: 60000 });
+          });
+          if (pos?.coords?.latitude && pos?.coords?.longitude) {
+            geoPunto = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          }
+        } catch {}
+      }
+
+      // 6. Fallback final a centro de CABA si nada está disponible
+      if (!geoPunto) {
+        geoPunto = { lat: -34.6037, lng: -58.3816 };
+      }
+
+      // Guardar en localStorage para sincronizar con la pantalla del Radar
+      try {
+        localStorage.setItem('al_angulo_ultima_ubicacion', JSON.stringify(geoPunto));
+      } catch {}
+
+      // Generar geohash con cobertura amplia (30 km) para garantizar solapamiento de prefijos en Firestore
+      const geoIndex = aGeoIndex(geoPunto, 30);
 
       // Creamos el desafío en Firestore (/challenges) para que figure en el Radar
       const desafioRef = doc(collection(db, COLECCIONES.desafios));

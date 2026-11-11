@@ -138,10 +138,15 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   const handleAceptarSuplente = async (notif: InvitacionEquipo) => {
     setProcesandoId(notif.id);
     try {
-      const alertaId = notif.alertaId || notif.equipoId || notif.id;
       const suplenteUid = notif.remitenteUid;
-      if (alertaId && suplenteUid) {
-        await confirmarSuplente(alertaId, suplenteUid).catch((e) =>
+      if (notif.equipoId) {
+        await incorporarRefuerzoAEquipo(notif.equipoId, {
+          uid: suplenteUid,
+          nombre: notif.remitenteNombre || 'Jugador',
+          posicion: notif.posicion,
+        }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
+      } else if (notif.alertaId) {
+        await confirmarSuplente(notif.alertaId, suplenteUid).catch((e) =>
           console.warn('Alerta ya confirmada o completada:', e),
         );
       }
@@ -151,16 +156,19 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
           jugadorUid: suplenteUid,
           jugadorNombre: notif.remitenteNombre,
           capitanUid: usuarioUid,
-          capitanNombre: notif.destinatarioNombre || 'El Organizador',
+          capitanNombre: notif.destinatarioNombre || 'El Capitán',
+          equipoId: notif.equipoId,
           equipoNombre: notif.equipoNombre || 'Partido',
-          alertaId,
+          partidoId: notif.desafioId || notif.alertaId,
+          alertaId: notif.alertaId,
           resultado: 'aceptada',
         }).catch(console.warn);
       }
-      setFeedback('¡Suplente confirmado para el partido!');
+      setFeedback(`¡Sumaste a ${notif.remitenteNombre || 'jugador'} como refuerzo para el partido! ⚽`);
       setTimeout(() => setFeedback(null), 3500);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setFeedback(err?.message || 'Error al aceptar');
     } finally {
       setProcesandoId(null);
     }
@@ -169,7 +177,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   const handleRechazarSuplente = async (notif: InvitacionEquipo) => {
     setProcesandoId(notif.id);
     try {
-      const alertaId = notif.alertaId || notif.equipoId || notif.id;
+      const alertaId = notif.alertaId || notif.desafioId;
       const suplenteUid = notif.remitenteUid;
       if (alertaId && suplenteUid) {
         await rechazarSuplente(alertaId, suplenteUid).catch(console.warn);
@@ -180,8 +188,10 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
           jugadorUid: suplenteUid,
           jugadorNombre: notif.remitenteNombre,
           capitanUid: usuarioUid,
-          capitanNombre: notif.destinatarioNombre || 'El Organizador',
+          capitanNombre: notif.destinatarioNombre || 'El Capitán',
+          equipoId: notif.equipoId,
           equipoNombre: notif.equipoNombre || 'Partido',
+          partidoId: notif.desafioId || notif.alertaId,
           alertaId,
           resultado: 'rechazada',
         }).catch(console.warn);

@@ -38,9 +38,17 @@ export const listarDesafiosCercanos = async (
         limit(20)
       )
 
-  const snap = await getDocs(q)
+  let snap
+  try {
+    snap = await getDocs(q)
+  } catch (err) {
+    console.warn('Error en query geo de desafíos, usando fallback de abiertos:', err)
+    snap = await getDocs(
+      query(collection(db, COLECCIONES.desafios), where('estado', '==', 'ABIERTO'), limit(50))
+    )
+  }
 
-  return snap.docs
+  let desafios = snap.docs
     .map((d) => d.data() as Desafio)
     .map((d) => ({
       ...d,
@@ -49,6 +57,28 @@ export const listarDesafiosCercanos = async (
     }))
     .filter((d) => d.distanciaKm <= radioKm)
     .sort((a, b) => a.distanciaKm - b.distanciaKm)
+
+  // Si la consulta geo estricta por prefijos devolvió 0 resultados, consultar desafíos
+  // abiertos generales para no perder alertas recién publicadas por posibles desfases de prefijos
+  if (desafios.length === 0 && !esRadioGrande) {
+    try {
+      const snapFallback = await getDocs(
+        query(collection(db, COLECCIONES.desafios), where('estado', '==', 'ABIERTO'), limit(50))
+      )
+      desafios = snapFallback.docs
+        .map((d) => d.data() as Desafio)
+        .map((d) => ({
+          ...d,
+          distanciaKm: d.geo ? haversineKm(punto, d.geo) : 0,
+        }))
+        .filter((d) => d.distanciaKm <= Math.max(radioKm, 50))
+        .sort((a, b) => a.distanciaKm - b.distanciaKm)
+    } catch (e) {
+      console.warn('Error en fallback de desafios:', e)
+    }
+  }
+
+  return desafios
 }
 
 /**

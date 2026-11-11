@@ -212,7 +212,13 @@ export const AlertaInvitacionPush: React.FC = () => {
         setToastExito(`¡Sumaste a ${nombreEmisor} como refuerzo para el partido! ⚽`);
         setTimeout(() => setToastExito(null), 4000);
       } else if (tipo === 'postulacion_partido') {
-        if (invitacionActual.alertaId) {
+        if (invitacionActual.equipoId) {
+          await incorporarRefuerzoAEquipo(invitacionActual.equipoId, {
+            uid: invitacionActual.remitenteUid,
+            nombre: nombreEmisor,
+            posicion: invitacionActual.posicion,
+          }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
+        } else if (invitacionActual.alertaId) {
           await confirmarSuplente(invitacionActual.alertaId, invitacionActual.remitenteUid).catch((e) =>
             console.warn('Error confirmando suplente:', e)
           );
@@ -223,13 +229,15 @@ export const AlertaInvitacionPush: React.FC = () => {
             jugadorUid: invitacionActual.remitenteUid,
             jugadorNombre: nombreEmisor,
             capitanUid: sesion.user.uid,
-            capitanNombre: sesion.usuario?.nombre || sesion.user.displayName || 'El Organizador',
+            capitanNombre: sesion.usuario?.nombre || sesion.user.displayName || 'El Capitán',
+            equipoId: invitacionActual.equipoId,
             equipoNombre: invitacionActual.equipoNombre || 'Partido',
+            partidoId: invitacionActual.desafioId || invitacionActual.alertaId,
             alertaId: invitacionActual.alertaId,
             resultado: 'aceptada',
           }).catch(console.warn);
         }
-        setToastExito(`¡${nombreEmisor} sumado al partido con éxito! ⚽`);
+        setToastExito(`¡Sumaste a ${nombreEmisor} como refuerzo para el partido! ⚽`);
         setTimeout(() => setToastExito(null), 4000);
       } else if (tipo === 'postulacion_aceptada') {
         await responderInvitacion(invitacionActual.id, 'aceptada');
@@ -281,16 +289,20 @@ export const AlertaInvitacionPush: React.FC = () => {
     try {
       if (tipo === 'desafio_equipo') {
         await responderDesafioEquipo(invitacionActual.id, 'rechazado');
-      } else if (tipo === 'postulacion_partido' && invitacionActual.alertaId) {
-        await rechazarSuplente(invitacionActual.alertaId, invitacionActual.remitenteUid).catch(() => {});
+      } else if (tipo === 'postulacion_partido') {
+        if (invitacionActual.alertaId) {
+          await rechazarSuplente(invitacionActual.alertaId, invitacionActual.remitenteUid).catch(() => {});
+        }
         await responderInvitacion(invitacionActual.id, 'rechazada');
         if (invitacionActual.remitenteUid) {
           await notificarResolucionPostulacion({
             jugadorUid: invitacionActual.remitenteUid,
             jugadorNombre: invitacionActual.remitenteNombre,
             capitanUid: sesion.user?.uid || '',
-            capitanNombre: sesion.usuario?.nombre || 'El Organizador',
+            capitanNombre: sesion.usuario?.nombre || 'El Capitán',
+            equipoId: invitacionActual.equipoId,
             equipoNombre: invitacionActual.equipoNombre || 'Partido',
+            partidoId: invitacionActual.desafioId || invitacionActual.alertaId,
             alertaId: invitacionActual.alertaId,
             resultado: 'rechazada',
           }).catch(console.warn);

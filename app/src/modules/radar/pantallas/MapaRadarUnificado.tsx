@@ -11,7 +11,9 @@ import { postularse } from '@/modules/alertas/repositorio';
 import { useSesion } from '@/modules/auth/useSesion';
 import { canchasDe, nombreCompleto, calcularMediaJugador, calcularDivisionEquipo, type DivisionEquipoInfo } from '@/domain';
 import { type Punto } from '@/core/geo/geohash';
-import { appEnv } from '@/core/config';
+import { appEnv, COLECCIONES } from '@/core/config';
+import { db } from '@/core/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import Supercluster from 'supercluster';
 import type { ClusterFeature, PointFeature } from 'supercluster';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -945,8 +947,8 @@ export const MapaRadarUnificado: React.FC = () => {
       return {
         id: d.id,
         type: 'desafio' as const,
-        lat: d.geo.lat,
-        lng: d.geo.lng,
+        lat: d.geo?.lat ?? -34.6037,
+        lng: d.geo?.lng ?? -58.3816,
         distanciaKm: d.distanciaKm,
         desafioId: d.id,
         creatorId: d.creatorId,
@@ -1092,6 +1094,46 @@ export const MapaRadarUnificado: React.FC = () => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
+  }, [vista, cargarRadar]);
+
+  // Escucha en tiempo real de desafíos abiertos: si se publica una búsqueda de jugadores,
+  // salta inmediatamente en el Radar sin necesidad de mover el mapa o recargar.
+  useEffect(() => {
+    const qDesafios = query(
+      collection(db, COLECCIONES.desafios),
+      where('estado', '==', 'ABIERTO')
+    );
+    let primerSnapshot = true;
+    const unsub = onSnapshot(
+      qDesafios,
+      (snap) => {
+        if (primerSnapshot) {
+          primerSnapshot = false;
+          return;
+        }
+
+        // Avisar al usuario cuando un equipo publica una nueva búsqueda de jugadores
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            if (data.tipoDesafio === 'busqueda_jugador') {
+              const cant = obtenerCantidadFaltantes(data as any);
+              toast.info(`🧤 ¡Falta jugador! ${data.equipoNombre || 'Un equipo'} busca ${cant} ${cant === 1 ? 'jugador' : 'jugadores'}.`);
+            }
+          }
+        });
+
+        // Refrescar las entidades del mapa en tiempo real
+        if (vista) {
+          cargarRadar(vista.punto, vista.radioKm).catch(console.warn);
+        }
+      },
+      (err) => {
+        console.warn('Error en listener de desafíos en tiempo real:', err);
+      }
+    );
+
+    return () => unsub();
   }, [vista, cargarRadar]);
 
   /** 'canchas' -> 'cancha'. Tabla explicita: derivarlo con `slice` es fragil. */
@@ -1713,6 +1755,8 @@ const TIPO_POR_FILTRO: Record<FiltroRadar, RadarEntityType | null> = {
                         seleccionado.creatorId,
                         {
                           id: seleccionado.desafioId,
+                          equipoId: seleccionado.equipoId,
+                          equipoNombre: seleccionado.equipo,
                           fecha: new Date(seleccionado.fechaUnix).toISOString().split('T')[0]!,
                           horaInicio: formatearHorario(seleccionado.fechaUnix).split(' ')[1] || '19:00',
                           horaFin: '',
