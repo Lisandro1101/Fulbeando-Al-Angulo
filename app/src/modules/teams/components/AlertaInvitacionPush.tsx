@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Shield, Check, X, Loader2, Trophy, UserPlus, Swords, Clock, MapPin, MessageSquareQuote, ArrowRightLeft } from 'lucide-react';
+import { Bell, Shield, Check, X, Loader2, Trophy, UserPlus, Swords, Clock, MapPin, MessageSquareQuote, ArrowRightLeft, User } from 'lucide-react';
 import { useSesion } from '@/modules/auth/useSesion';
 import {
   escucharInvitacionesPendientes,
@@ -352,12 +352,36 @@ export const AlertaInvitacionPush: React.FC = () => {
             <p className="text-sm text-zinc-300 mb-6 leading-relaxed">
               {tipo === 'desafio_aceptado' ? (
                 <>
-                  <span className="font-bold text-amber-400">{nombreEmisor}</span> aceptó sumarse a jugar con{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (invitacionActual.remitenteUid) {
+                        handleCerrar();
+                        navigate(`/carta/${invitacionActual.remitenteUid}`);
+                      }
+                    }}
+                    className="font-bold text-amber-400 hover:underline cursor-pointer"
+                  >
+                    {nombreEmisor}
+                  </button>{' '}
+                  aceptó sumarse a jugar con{' '}
                   <span className="font-black text-white">{invitacionActual.equipoNombre}</span> ese día.
                 </>
               ) : tipo === 'postulacion_partido' ? (
                 <>
-                  <span className="font-bold text-amber-400">{nombreEmisor}</span> se postuló para sumarse hoy al partido{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (invitacionActual.remitenteUid) {
+                        handleCerrar();
+                        navigate(`/carta/${invitacionActual.remitenteUid}`);
+                      }
+                    }}
+                    className="font-bold text-amber-400 hover:underline cursor-pointer"
+                  >
+                    {nombreEmisor}
+                  </button>{' '}
+                  se postuló para sumarse hoy al partido{' '}
                   {invitacionActual.posicion && (
                     <>
                       como <span className="font-bold text-white">{invitacionActual.posicion}</span>
@@ -367,7 +391,19 @@ export const AlertaInvitacionPush: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <span className="font-bold text-amber-400">{nombreEmisor}</span> te invitó a unirte al plantel de{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (invitacionActual.remitenteUid) {
+                        handleCerrar();
+                        navigate(`/carta/${invitacionActual.remitenteUid}`);
+                      }
+                    }}
+                    className="font-bold text-amber-400 hover:underline cursor-pointer"
+                  >
+                    {nombreEmisor}
+                  </button>{' '}
+                  te invitó a unirte al plantel de{' '}
                   <span className="font-black text-white">{invitacionActual.equipoNombre}</span>.
                 </>
               )}
@@ -437,6 +473,34 @@ export const AlertaInvitacionPush: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {(tipo === 'desafio_aceptado' || tipo === 'postulacion_partido') && (
+                <div className="flex gap-2">
+                  {invitacionActual.remitenteUid && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCerrar();
+                        navigate(`/carta/${invitacionActual.remitenteUid}`);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-400 font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      Ver Ficha
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      abrirChatDesafio({ desafio: invitacionActual });
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2.5 rounded-xl border border-zinc-700 transition-all active:scale-95 text-xs cursor-pointer shadow-sm"
+                  >
+                    <MessageSquareQuote className="w-3.5 h-3.5 text-amber-400" />
+                    Abrir Chat
+                  </button>
+                </div>
+              )}
 
               {(tipo === 'desafio_equipo' || tipo === 'desafio_aviso_miembro') && (
                 <>

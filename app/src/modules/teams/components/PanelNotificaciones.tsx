@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   Bell,
@@ -8,12 +9,15 @@ import {
   Swords,
   MessageSquare,
   Loader2,
+  User,
+  ExternalLink,
 } from 'lucide-react';
 import {
   responderInvitacion,
   responderDesafioEquipo,
   unirseAEquipo,
   marcarNotificacionComoLeida,
+  incorporarRefuerzoAEquipo,
   type InvitacionEquipo,
 } from '@/modules/teams/teamService';
 import { confirmarSuplente, rechazarSuplente } from '@/modules/alertas/repositorio';
@@ -41,6 +45,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
   notificaciones,
   onAbrirChatDesafio,
 }) => {
+  const navigate = useNavigate();
   const [filtro, setFiltro] = useState<'todas' | 'pendientes' | 'equipos' | 'partidos'>('todas');
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -156,11 +161,57 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
         await rechazarSuplente(alertaId, suplenteUid).catch(console.warn);
       }
       await responderInvitacion(notif.id, 'rechazada');
+      setFeedback('Postulación rechazada');
+      setTimeout(() => setFeedback(null), 3500);
     } catch (err) {
       console.error(err);
     } finally {
       setProcesandoId(null);
     }
+  };
+
+  const handleAceptarRefuerzo = async (notif: InvitacionEquipo) => {
+    setProcesandoId(notif.id);
+    try {
+      const nombreEmisor = notif.remitenteNombre || notif.capitanNombre || 'Jugador';
+      if (notif.equipoId) {
+        await incorporarRefuerzoAEquipo(notif.equipoId, {
+          uid: notif.remitenteUid,
+          nombre: nombreEmisor,
+        }).catch((err) => console.warn('Error incorporando refuerzo al equipo:', err));
+      }
+      await responderInvitacion(notif.id, 'aceptada');
+      setFeedback(`¡Sumaste a ${nombreEmisor} como refuerzo para el partido! ⚽`);
+      setTimeout(() => setFeedback(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      setFeedback(err?.message || 'Error al aceptar refuerzo');
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
+  const handleRechazarRefuerzo = async (notif: InvitacionEquipo) => {
+    setProcesandoId(notif.id);
+    try {
+      await responderInvitacion(notif.id, 'rechazada');
+      setFeedback('Postulación descartada');
+      setTimeout(() => setFeedback(null), 3500);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setProcesandoId(null);
+    }
+  };
+
+  const handleVerFicha = (uid: string) => {
+    onCerrar();
+    navigate(`/carta/${uid}`);
+  };
+
+  const handleAbrirChat = (notif: InvitacionEquipo) => {
+    onCerrar();
+    onAbrirChatDesafio?.(notif);
   };
 
   return (
@@ -292,8 +343,16 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    {/* Icono temático */}
-                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                    {/* Icono temático / Avatar clickeable para ver ficha */}
+                    <button
+                      type="button"
+                      disabled={!notif.remitenteUid}
+                      onClick={() => notif.remitenteUid && handleVerFicha(notif.remitenteUid)}
+                      title={notif.remitenteUid ? 'Click para ver ficha de jugador' : undefined}
+                      className={`w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden shadow-sm ${
+                        notif.remitenteUid ? 'cursor-pointer hover:border-amber-400 hover:scale-105 active:scale-95 transition' : ''
+                      }`}
+                    >
                       {notif.equipoEscudoUrl ? (
                         <img src={notif.equipoEscudoUrl} alt={notif.equipoNombre} className="w-full h-full object-cover" />
                       ) : tipo === 'desafio_equipo' ? (
@@ -305,7 +364,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                       ) : (
                         <Shield className="w-5 h-5 text-amber-500" />
                       )}
-                    </div>
+                    </button>
 
                     {/* Contenido */}
                     <div className="flex-1 min-w-0">
@@ -352,7 +411,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
 
                       {/* Botones de acción si la notificación está pendiente */}
                       {esPendiente && (
-                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-zinc-800">
+                        <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-zinc-800">
                           {tipo === 'invitacion_equipo' && (
                             <>
                               <button
@@ -372,6 +431,16 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                               >
                                 Rechazar
                               </button>
+                              {notif.remitenteUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerFicha(notif.remitenteUid)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-amber-400 font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <User className="w-3.5 h-3.5" />
+                                  Ver Perfil
+                                </button>
+                              )}
                             </>
                           )}
 
@@ -380,10 +449,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                               {onAbrirChatDesafio && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    onCerrar();
-                                    onAbrirChatDesafio(notif);
-                                  }}
+                                  onClick={() => handleAbrirChat(notif)}
                                   className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-white font-bold text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer border border-zinc-700"
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" />
@@ -411,9 +477,63 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                                   </button>
                                 </>
                               )}
+                              {notif.remitenteUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerFicha(notif.remitenteUid)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <User className="w-3.5 h-3.5 text-amber-400" />
+                                  Ver Rival
+                                </button>
+                              )}
                             </>
                           )}
 
+                          {/* Jugador que aceptó el desafío / se anotó como refuerzo */}
+                          {tipo === 'desafio_aceptado' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={procesandoId === notif.id}
+                                onClick={() => handleAceptarRefuerzo(notif)}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
+                              >
+                                {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                Aceptar Refuerzo
+                              </button>
+                              <button
+                                type="button"
+                                disabled={procesandoId === notif.id}
+                                onClick={() => handleRechazarRefuerzo(notif)}
+                                className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition cursor-pointer"
+                              >
+                                Rechazar
+                              </button>
+                              {notif.remitenteUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerFicha(notif.remitenteUid)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-amber-400 font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <User className="w-3.5 h-3.5" />
+                                  Ver Ficha
+                                </button>
+                              )}
+                              {onAbrirChatDesafio && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAbrirChat(notif)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                                  Chat
+                                </button>
+                              )}
+                            </>
+                          )}
+
+                          {/* Postulación a partido / Alerta Falta 1 */}
                           {tipo === 'postulacion_partido' && (
                             <>
                               <button
@@ -423,7 +543,7 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                                 className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
                               >
                                 {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                Confirmar
+                                Confirmar Suplente
                               </button>
                               <button
                                 type="button"
@@ -433,7 +553,53 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                               >
                                 Rechazar
                               </button>
+                              {notif.remitenteUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerFicha(notif.remitenteUid)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-amber-400 font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <User className="w-3.5 h-3.5" />
+                                  Ver Ficha
+                                </button>
+                              )}
+                              {onAbrirChatDesafio && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAbrirChat(notif)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                                  Chat
+                                </button>
+                              )}
                             </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Botones secundarios para notificaciones ya resueltas */}
+                      {!esPendiente && (notif.remitenteUid || onAbrirChatDesafio) && (
+                        <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-zinc-800/60">
+                          {notif.remitenteUid && (
+                            <button
+                              type="button"
+                              onClick={() => handleVerFicha(notif.remitenteUid)}
+                              className="px-2.5 py-1 rounded-lg bg-zinc-800/70 hover:bg-zinc-700 text-amber-400 text-xs font-bold flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                            >
+                              <User className="w-3 h-3" />
+                              Ver Ficha de Jugador
+                            </button>
+                          )}
+                          {onAbrirChatDesafio && (tipo === 'desafio_equipo' || tipo === 'desafio_aviso_miembro' || tipo === 'desafio_aceptado' || tipo === 'postulacion_partido') && (
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirChat(notif)}
+                              className="px-2.5 py-1 rounded-lg bg-zinc-800/70 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold flex items-center gap-1 transition cursor-pointer border border-zinc-700/60"
+                            >
+                              <MessageSquare className="w-3 h-3 text-amber-400" />
+                              Abrir Conversación
+                            </button>
                           )}
                         </div>
                       )}
