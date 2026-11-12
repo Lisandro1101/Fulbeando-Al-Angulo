@@ -124,3 +124,93 @@ TRAZABILIDAD PASO A PASO (DE PRINCIPIO A FIN):
 ================================================================================
 FIN DEL DESGLOSE DE FUNCIÓN 1
 ================================================================================
+
+================================================================================
+DESGLOSE EN PROFUNDIDAD: FUNCIÓN 2
+"GESTIÓN DE EQUIPO, PLANTEL Y CONVOCATORIA INTERNA"
+================================================================================
+
+REGLA DE ORO DE ESTA FUNCIÓN:
+El Equipo es la base social y competitiva de Fulbeando. Cada usuario puede pertenecer 
+a un máximo de 2 equipos simultáneamente. La pertenencia es de autoservicio o por 
+invitación con link/alerta push. El Capitán administra el club, convoca a los partidos 
+y califica al rival; los Jugadores confirman asistencia o se bajan con un toque.
+
+--------------------------------------------------------------------------------
+TRAZABILIDAD PASO A PASO (DE PRINCIPIO A FIN):
+--------------------------------------------------------------------------------
+
+1. CREACIÓN DEL EQUIPO
+   - ¿Dónde?: En la sección `/equipo` (botón [CREAR EQUIPO] o [+] en pestañas).
+   - ¿Quién?: Cualquier usuario registrado (que no supere el límite de 2 equipos).
+   - Parámetros requeridos:
+     * Nombre del equipo (hasta 60 caracteres).
+     * Modalidad Base: F5 (Fútbol 5), F7 (Fútbol 7) o F11 (Fútbol 11).
+     * Categoría: Masculino, Femenino o Mixto.
+     * Escudo/Emoji: Emoji predefinido (🛡️, ⚔️, 🦅, 🦁, ⭐) o imagen personalizada subida por el usuario.
+   - Resultado en Firestore:
+     * Documento creado en `teams/{equipoId}` con el creador como `captainId` y miembro rol 'CAPITAN'.
+     * Actualización atómica en `usuarios/{uid}.perfilDeportivo.teamIds` mediante `arrayUnion(equipoId)`.
+
+2. GESTIÓN DEL PLANTEL Y ROLES
+   - Plantel permanente: hasta 20 jugadores (`MAX_MEMBROS_EQUIPO = 20`).
+   - Diferenciación de roles:
+     * CAPITÁN (👑): Único con permisos para armar convocatorias, editar escudo/nombre, invitar integrantes, delegar capitanía, liberar jugadores, mandar al Radar o disolver el equipo.
+     * JUGADOR (🏃‍♂️): Puede ver la información del club, responder "Voy" / "Me bajo" en la convocatoria, votar MVP en el Tercer Tiempo y salir voluntariamente del equipo.
+     * REFUERZO TEMPORAL (⚡): Jugador externo incorporado solo para el partido activo. No gasta cupo de equipo permanente salvo que el capitán presione [+ Sumar al Plantel].
+
+3. INCORPORACIÓN DE JUGADORES AL EQUIPO (2 VÍAS)
+   - Vía A: Link de Invitación Directo (`/unirse/:equipoId`):
+     * El capitán toca [Compartir Link de Invitación] (copia al portapapeles o abre Web Share API de WhatsApp).
+     * El destinatario abre el link; si no está logueado se registra/inicia sesión, y en la pantalla le sale el banner superior: "Te invitaron a [Nombre Equipo] [Unirse]".
+     * Al tocar [Unirse], una transacción de Firestore valida el cupo del equipo y el límite personal del jugador, sumándolo al plantel.
+   - Vía B: Búsqueda por @username o Nombre en la App:
+     * El capitán busca en el modal [Invitar Jugador] escribiendo el apodo o `@usuario`.
+     * El buscador filtra excluyendo a los que ya son miembros del equipo.
+     * Al presionar [Enviar invitación], se crea un documento en `invitaciones` con `tipo: 'invitacion_equipo'` y se despacha una notificación push al celular del invitado.
+
+4. ACCIONES ADMINISTRATIVAS DEL CAPITÁN SOBRE EL PLANTEL
+   - Delegar Capitanía:
+     * El capitán toca [Hacer Capitán] sobre un compañero.
+     * Se actualiza `teams/{id}.captainId` y se intercambian los roles `role: 'CAPITAN'` / `role: 'PLAYER'`.
+   - Liberar Miembro:
+     * El capitán toca [Liberar]. En una sola transacción se remueve al jugador de `members` y se limpia su `teamIds` para liberar su ficha.
+   - Salir del Equipo:
+     * Un jugador regular puede tocar [Salir]. El capitán NO puede salir sin delegar previamente la capitanía.
+   - Zona de Peligro (Disolver Equipo):
+     * Si el capitán decide [Eliminar este equipo], el sistema desvincula el equipo de todos los miembros del plantel y borra el documento de Firestore.
+
+5. CICLO DE VIDA DE LA CONVOCATORIA INTERNA DE PARTIDO
+   - Apertura:
+     * El capitán presiona [+ Armar Nueva Convocatoria] e ingresa fecha/horario y predio/cancha si ya está confirmada.
+     * El capitán queda automáticamente registrado en la lista de `confirmados` iniciales.
+   - Votación del Plantel:
+     * Todos los miembros ven el próximo partido en tiempo real en `/equipo`.
+     * Botón [✓ VOY]: Suma el UID a `convocatoria.confirmados` y lo quita de `convocatoria.bajas`.
+     * Botón [✕ ME BAJO]: Suma el UID a `convocatoria.bajas` y lo quita de `convocatoria.confirmados`.
+     * Contador en vivo: Muestra el número total de Confirmados vs Bajas.
+   - Pestañas de Plantel:
+     * Subpestaña [✓ Confirmados (X)]: Muestra exclusivamente las tarjetas de los jugadores que van a jugar (miembros que pusieron "Voy" + refuerzos temporales que se sumaron).
+     * Subpestaña [Plantel (X)]: Muestra la totalidad de integrantes fijos del club para su gestión.
+
+6. CIERRE, CANCELACIÓN Y DERIVACIÓN
+   - Si se completa el cupo del partido:
+     * El capitán puede presionar [🔒 Cerrar Convocatoria]. El plantel queda confirmado y se bloquean las respuestas. Si había un pin en el Radar, se apaga.
+     * Si lo desea, el capitán puede presionar [Reabrir Convocatoria] en cualquier momento.
+   - Si faltan jugadores para el partido:
+     * El capitán presiona [Al Radar], pasando directamente al flujo de la FUNCIÓN 1 ("Falta un jugador").
+   - Si el partido se suspende:
+     * El capitán presiona [🗑️ Cancelar Convocatoria]. Se elimina la convocatoria activa y se resetea el estado del equipo.
+
+7. ESTADÍSTICAS DEL CLUB, DIVISIONES Y MEDIA COLECTIVA
+   - División de Fútbol y Estrellas:
+     * Se calcula dinámicamente según el promedio de Media (OVR) de todos los integrantes del plantel + su récord W/D/L + su índice de Fair Play.
+     * Muestra insignias: División Oro, Plata, Bronce, Promesa o Leyenda.
+   - Historial de Partidos:
+     * Se acumulan partidos ganados (PG), empatados (PE) y perdidos (PP).
+     * La tarjeta del Último Partido finalizado muestra marcador oficial, predio y si fue Victoria, Empate o Derrota.
+
+===============================================================================
+FIN DEL DESGLOSE DE FUNCIÓN 2
+===============================================================================
+
