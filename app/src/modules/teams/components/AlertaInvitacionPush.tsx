@@ -112,6 +112,9 @@ export const AlertaInvitacionPush: React.FC = () => {
         } else if (inv.tipo === 'postulacion_rechazada') {
           tituloNotif = 'Aviso de postulación ⚽';
           cuerpoNotif = inv.mensaje || `El organizador de ${inv.equipoNombre} completó los cupos para este partido.`;
+        } else if (inv.tipo === 'convocatoria_partido') {
+          tituloNotif = '¡Nueva Convocatoria de Partido! ⚽';
+          cuerpoNotif = inv.mensaje || `${inv.equipoNombre} abrió la convocatoria para el próximo partido. ¡Confirmá si vas!`;
         } else {
           tituloNotif = '¡Te invitaron a un equipo en Fulbeando!';
           cuerpoNotif = `${nombreEmisor} te invitó a unirte a ${inv.equipoNombre}. ¡Entrá a responder!`;
@@ -249,6 +252,12 @@ export const AlertaInvitacionPush: React.FC = () => {
         await responderInvitacion(invitacionActual.id, 'aceptada');
         handleCerrar();
         navigate('/radar');
+      } else if (tipo === 'convocatoria_partido') {
+        await responderInvitacion(invitacionActual.id, 'aceptada').catch(() => {});
+        setToastExito('Abriendo convocatoria...');
+        setTimeout(() => setToastExito(null), 2500);
+        handleCerrar();
+        navigate('/equipo');
       }
     } catch (err: any) {
       console.error('Error al responder alerta:', err);
@@ -572,6 +581,8 @@ export const AlertaInvitacionPush: React.FC = () => {
                       ? '¡Excelente, voy a jugar! ⚽'
                       : tipo === 'postulacion_rechazada'
                       ? 'Buscar otro partido ⚽'
+                      : tipo === 'convocatoria_partido'
+                      ? 'Ver Convocatoria y Confirmar ⚽'
                       : 'Confirmar Jugador'}
                   </>
                 )}

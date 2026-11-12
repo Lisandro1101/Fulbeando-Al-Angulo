@@ -446,6 +446,8 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                             ? '🎉 ¡Confirmado en Partido!'
                             : tipo === 'postulacion_rechazada'
                             ? '⚠️ Cupo Completo'
+                            : tipo === 'convocatoria_partido'
+                            ? '⚽ Nueva Convocatoria'
                             : '🛡️ Invitación a Plantel'}
                         </span>
                         <span
@@ -689,6 +691,27 @@ export const PanelNotificaciones: React.FC<PanelNotificacionesProps> = ({
                                 className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs flex items-center gap-1 transition cursor-pointer shadow-sm"
                               >
                                 Buscar otro partido ⚽
+                              </button>
+                            </>
+                          )}
+
+                          {/* Nueva Convocatoria de Partido */}
+                          {tipo === 'convocatoria_partido' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={procesandoId === notif.id}
+                                onClick={async () => {
+                                  setProcesandoId(notif.id);
+                                  await responderInvitacion(notif.id, 'aceptada');
+                                  setNotificaciones((prev) => prev.filter((n) => n.id !== notif.id));
+                                  setProcesandoId(null);
+                                  onCerrar();
+                                  navigate('/equipo');
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs flex items-center gap-1 active:scale-95 transition cursor-pointer shadow-sm"
+                              >
+                                {procesandoId === notif.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>⚽ Ver Convocatoria y Votar</span>}
                               </button>
                             </>
                           )}

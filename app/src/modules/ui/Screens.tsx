@@ -10,7 +10,7 @@ import { toast } from '@/components/ui/sonner';
 import { MONTO_SENA_DEFAULT, COLECCIONES } from '@/core/config';
 import { requestNotificationPermission } from '@/modules/notifications/pushService';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, eliminarEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp, proponerResultadoPartido, confirmarResultadoMutuo, rechazarResultadoPropuesto } from '@/modules/teams/teamService';
+import { obtenerEquiposDeUsuario, escucharEquiposDeUsuario, obtenerEquipoPorId, actualizarEquipo, buscarJugadores, crearEquipo, delegarCapitania, liberarMiembro, salirDelEquipo, eliminarEquipo, unirseAEquipo, enviarInvitacionAEquipo, actualizarConvocatoriaEquipo, alternarCierreConvocatoria, cancelarConvocatoriaEquipo, finalizarTercerTiempoYPartido, emitirVotoMvp, proponerResultadoPartido, confirmarResultadoMutuo, rechazarResultadoPropuesto, notificarConvocatoriaPlantel } from '@/modules/teams/teamService';
 import { doc, updateDoc, serverTimestamp, collection, setDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/core/firebase';
 import { MAX_MEMBROS_EQUIPO, MAX_EQUIPOS_POR_JUGADOR, nombreCompleto, PERFIL_DEPORTIVO_VACIO, type PerfilDeportivo, type Posicion, type PlayerRole, type Turno, calcularMediaJugador, calcularDivisionEquipo, calcularRutaDestino } from '@/domain';
@@ -1696,6 +1696,8 @@ export const Screen7MyTeam = () => {
   const [golesFavor, setGolesFavor] = useState<number>(0);
   const [golesContra, setGolesContra] = useState<number>(0);
   const [convFecha, setConvFecha] = useState('Jueves 21:00hs');
+  const [convPredio, setConvPredio] = useState('');
+  const [convTieneCancha, setConvTieneCancha] = useState(false);
   const [inviteUsername, setInviteUsername] = useState('');
   const [toastMessage, setToastMessageRaw] = useState('');
   const setToastMessage = (msg: string) => {
@@ -2156,18 +2158,27 @@ export const Screen7MyTeam = () => {
       });
   };
 
-  const handleCreateConvocatoria = () => {
+  const handleCreateConvocatoria = async () => {
     if (!equipo) return;
     const formatoNum = parseInt((equipo.modalidadBase || equipo.formato || 'F5').replace(/\D/g, '')) || 5;
     const confirmadosIniciales = currentUid ? [currentUid] : [];
     const faltantesIniciales = Math.max(1, formatoNum - confirmadosIniciales.length);
+    const predioLimpio = convPredio.trim();
+    const tieneCancha = convTieneCancha && Boolean(predioLimpio) && predioLimpio.toLowerCase() !== 'a definir';
+    const predioNombreFinal = tieneCancha ? predioLimpio : 'A definir';
+
     const nuevaConv = {
       fecha: convFecha,
+      predioNombre: predioNombreFinal,
+      conCancha: tieneCancha,
+      estadoCancha: tieneCancha ? 'CON_CANCHA' : 'SIN_CANCHA',
       confirmados: confirmadosIniciales,
       bajas: [],
       jugadoresFaltantes: faltantesIniciales,
     };
+
     actualizarConvocatoriaEquipo(equipo.id, nuevaConv).catch(console.error);
+
     const nuevosEquipos = [...equipos];
     nuevosEquipos[equipoActivo] = {
       ...equipo,
@@ -2175,7 +2186,25 @@ export const Screen7MyTeam = () => {
     };
     setEquipos(nuevosEquipos);
     setMostrarModalConvocatoria(false);
-    setToastMessage('Convocatoria creada');
+
+    // Notificar a todo el plantel en tiempo real
+    if (sesion.user) {
+      const nombreCap = sesion.usuario?.nombre
+        ? `${sesion.usuario.nombre} ${sesion.usuario.apellido ?? ''}`.trim()
+        : (sesion.user.displayName || 'El Capitán');
+
+      notificarConvocatoriaPlantel(
+        equipo.id,
+        equipo.nombre,
+        equipo.emoji?.startsWith('http') ? equipo.emoji : null,
+        sesion.user.uid,
+        nombreCap,
+        equipo.plantel || [],
+        { fecha: convFecha, predioNombre: predioNombreFinal, conCancha: tieneCancha }
+      ).catch(console.warn);
+    }
+
+    setToastMessage('¡Convocatoria creada y notificada al plantel! ⚽');
     setTimeout(() => setToastMessage(''), 3000);
   };
 
@@ -3800,14 +3829,59 @@ export const Screen7MyTeam = () => {
                 type="text" 
                 value={convFecha}
                 onChange={(e) => setConvFecha(e.target.value)}
-                className="w-full bg-canvas border border-zinc-800 p-4 rounded-xl text-white font-bold mb-6 mt-2 outline-none focus:border-amber-500"
+                placeholder="Ej: Viernes 20:00 hs"
+                className="w-full bg-canvas border border-zinc-800 p-3.5 rounded-xl text-white font-bold mb-4 mt-1 outline-none focus:border-amber-500"
              />
+
+             <label className="text-xs font-bold text-zinc-500 uppercase block mb-1.5">Lugar / Cancha</label>
+             <div className="grid grid-cols-2 gap-2 mb-3">
+               <button
+                 type="button"
+                 onClick={() => setConvTieneCancha(true)}
+                 className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                   convTieneCancha 
+                     ? "bg-amber-500/10 border-amber-500 text-amber-400" 
+                     : "bg-zinc-800/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                 }`}
+               >
+                 <span>🏟️</span> Con Cancha
+               </button>
+               <button
+                 type="button"
+                 onClick={() => setConvTieneCancha(false)}
+                 className={`py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
+                   !convTieneCancha 
+                     ? "bg-amber-500/10 border-amber-500 text-amber-400" 
+                     : "bg-zinc-800/50 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                 }`}
+               >
+                 <span>⏳</span> A Definir
+               </button>
+             </div>
+
+             {convTieneCancha ? (
+               <div className="mb-5 animate-in fade-in duration-150">
+                 <label htmlFor="conv-predio" className="text-[11px] font-semibold text-zinc-400 block mb-1">Nombre del predio / complejo</label>
+                 <input
+                   id="conv-predio"
+                   type="text"
+                   value={convPredio}
+                   onChange={(e) => setConvPredio(e.target.value)}
+                   placeholder="Ej: Complejo Los Andes, Cancha 3"
+                   className="w-full bg-canvas border border-zinc-800 p-3 rounded-xl text-white text-sm font-semibold outline-none focus:border-amber-500"
+                 />
+               </div>
+             ) : (
+               <p className="text-[11px] text-zinc-500 italic mb-5 bg-zinc-800/30 p-2.5 rounded-xl border border-zinc-800/50">
+                 💡 Podrán coordinar o pactar la cancha más tarde según la disponibilidad de los convocados.
+               </p>
+             )}
 
              <button 
                onClick={handleCreateConvocatoria} 
-               className="w-full bg-amber-500 text-zinc-950 font-black py-4 rounded-xl active:scale-95 transition-transform"
+               className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black py-3.5 rounded-xl active:scale-95 transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
              >
-               Abrir Convocatoria
+               <span>⚽</span> Abrir y Notificar al Plantel
              </button>
           </div>
         </div>

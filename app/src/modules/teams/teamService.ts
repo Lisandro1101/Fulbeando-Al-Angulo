@@ -715,6 +715,7 @@ export type TipoInvitacion =
   | 'desafio_aviso_miembro'
   | 'postulacion_aceptada'
   | 'postulacion_rechazada'
+  | 'convocatoria_partido'
 
 export interface InvitacionEquipo {
   id: string
@@ -737,6 +738,8 @@ export interface InvitacionEquipo {
   pactoPartido?: PropuestaPactoPartido
   esAvisoMiembro?: boolean
   ultimoEmisorUid?: string
+  fechaPartido?: string
+  predioNombre?: string | null
 }
 
 /**
@@ -809,6 +812,62 @@ export const notificarAceptacionDesafio = async (
   }
   await setDoc(invRef, invData)
   return invRef.id
+}
+
+/**
+ * Notifica a todos los integrantes del plantel (excepto al capitán emisor)
+ * que se ha abierto una nueva convocatoria de partido en el equipo.
+ */
+export const notificarConvocatoriaPlantel = async (
+  equipoId: string,
+  equipoNombre: string,
+  equipoEscudoUrl: string | null,
+  capitanUid: string,
+  capitanNombre: string,
+  miembros: { uid: string; name?: string; role?: string }[],
+  convocatoria: {
+    fecha: string
+    predioNombre?: string | null
+    conCancha?: boolean
+  },
+): Promise<void> => {
+  const batch = writeBatch(db)
+  let count = 0
+
+  for (const m of miembros) {
+    const mUid = (m.uid || '').trim()
+    if (!mUid || mUid === capitanUid) continue
+
+    const invRef = doc(collection(db, COLECCIONES.invitaciones))
+    const tieneCancha = Boolean(convocatoria.predioNombre) && convocatoria.predioNombre !== 'A definir'
+    const lugarTexto = tieneCancha ? ` en ${convocatoria.predioNombre}` : ' (Cancha a definir)'
+
+    const notifData: InvitacionEquipo = {
+      id: invRef.id,
+      tipo: 'convocatoria_partido',
+      equipoId,
+      equipoNombre,
+      equipoEscudoUrl: equipoEscudoUrl ?? null,
+      remitenteUid: capitanUid,
+      remitenteNombre: capitanNombre,
+      capitanNombre,
+      destinatarioUid: mUid,
+      destinatarioNombre: m.name || 'Jugador',
+      mensaje: `¡Nueva convocatoria en ${equipoNombre}! Para el ${convocatoria.fecha}${lugarTexto}. ¡Entrá a confirmar si vas! ⚽`,
+      fechaPartido: convocatoria.fecha,
+      predioNombre: convocatoria.predioNombre || null,
+      estado: 'pendiente',
+      creadaEn: serverTimestamp(),
+      leida: false,
+    }
+
+    batch.set(invRef, notifData)
+    count++
+  }
+
+  if (count > 0) {
+    await batch.commit().catch((err) => console.warn('Error enviando notificaciones de convocatoria al plantel:', err))
+  }
 }
 
 /**
